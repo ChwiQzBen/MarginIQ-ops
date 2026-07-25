@@ -12,6 +12,37 @@ No Streamlit, no DB calls.
 from typing import List, Optional
 import pandas as pd
 
+# Tier 1: stable per-SKU identifiers. Always prefer these for GROUPING and
+# JOINING, since free-text description fields can vary slightly for the
+# same physical item (a typo, an extra space, "3.5Kg" vs "3.5kg") -- using
+# one of those as a group key would silently split one item into several.
+ITEM_CODE_KEYWORDS = ['item_serial', 'item serial', 'sku', 'item_code', 'item code', 'serial']
+
+# Tier 2: human-readable label. Used only when no code column exists, or
+# explicitly requested for a display column (see supplier_utils.py, which
+# pulls this alongside the code rather than instead of it).
+ITEM_LABEL_KEYWORDS = ['item_description', 'item description', 'item_name', 'item name',
+                        'product_name', 'product name', 'description', 'name']
+
+# Combined, code-first: the default for "the item identifier column" when a
+# caller just needs one consistent grouping key and doesn't care whether
+# it's a code or a name -- e.g. compute_daily_demand_for_item, where
+# grouping by a stable SKU matters more than what it's called on screen.
+ITEM_NAME_KEYWORDS = ITEM_CODE_KEYWORDS + ITEM_LABEL_KEYWORDS + ['item', 'product']
+
+# Values that show up in Google Sheets exports as formula errors or blanks,
+# not real data -- filtered out anywhere item/supplier/etc. values are
+# grouped or displayed, same spirit as the existing 'nan'/'' checks already
+# used elsewhere in this codebase (e.g. all_items_ui.py's top-items filters).
+_JUNK_VALUES = {'', 'nan', 'none', 'nat', '#n/a', '#ref!', '#value!', '#div/0!', '#null!', '#name?', 'n/a'}
+
+
+def is_junk_value(value) -> bool:
+    """True for blanks, NaN, and common spreadsheet formula-error strings
+    (#N/A, #REF!, etc.) that shouldn't be treated as real category/item/
+    supplier values."""
+    return str(value).strip().lower() in _JUNK_VALUES
+
 
 def parse_date_safe(date_str) -> Optional[pd.Timestamp]:
     """Best-effort date parse across the handful of formats that show up in
@@ -27,14 +58,19 @@ def parse_date_safe(date_str) -> Optional[pd.Timestamp]:
 
 
 def detect_column(df: pd.DataFrame, keywords: List[str]) -> Optional[str]:
-    """First column whose lowercased name contains any of the given
-    keywords -- same heuristic already used throughout all_items_ui.py to
-    find 'the item column' / 'the date column' / 'the quantity column'
-    across Google Sheets exports with inconsistent headers."""
-    for col in df.columns:
-        col_lower = col.lower()
-        if any(k in col_lower for k in keywords):
-            return col
+    """First column matching the highest-priority keyword in the list.
+    Checks keywords in order -- every column is checked against keywords[0]
+    before falling through to keywords[1], etc. -- so put the most specific
+    keyword first when a looser one could also match an unwanted column
+    (e.g. 'item_name' before the bare 'item', which would otherwise just as
+    happily match ITEM_SERIAL or ITEM_CATEGORY). Same underlying heuristic
+    already used throughout all_items_ui.py to find 'the item column' /
+    'the date column' / 'the quantity column' across Google Sheets exports
+    with inconsistent headers -- just keyword-priority-aware now."""
+    for keyword in keywords:
+        for col in df.columns:
+            if keyword in col.lower():
+                return col
     return None
 
 
@@ -54,7 +90,7 @@ def compute_daily_demand_for_item(check_out_df: pd.DataFrame, item_name: str,
     if check_out_df is None or check_out_df.empty:
         return empty
 
-    item_col = item_col or detect_column(check_out_df, ['item', 'product', 'name'])
+    item_col = item_col or detect_column(check_out_df, ITEM_NAME_KEYWORDS)
     qty_col = qty_col or detect_column(check_out_df, ['quantity', 'qty'])
     date_col = date_col or detect_column(check_out_df, ['date'])
     if not (item_col and qty_col and date_col):
@@ -104,5 +140,29 @@ if __name__ == "__main__":
     print("\nTest 4: missing columns returns empty, not a KeyError")
     bad_df = pd.DataFrame([{'foo': 1, 'bar': 2}])
     assert compute_daily_demand_for_item(bad_df, 'anything').empty
+
+    print("\nTest 5: detect_column prefers the stable code column over a text label")
+    trap_df = pd.DataFrame(columns=['ITEM_SERIAL', 'ITEM_NAME', 'QUANTITY_OUT', 'CHECKOUT_DATE'])
+    assert detect_column(trap_df, ITEM_NAME_KEYWORDS) == 'ITEM_SERIAL', \
+        f"got {detect_column(trap_df, ITEM_NAME_KEYWORDS)} -- grouping key should be the code, not the label"
+
+    print("\nTest 5b: falls back to a label column when no code column exists")
+    label_only_df = pd.DataFrame(columns=['ITEM_DESCRIPTION', 'QUANTITY', 'Date'])
+    assert detect_column(label_only_df, ITEM_NAME_KEYWORDS) == 'ITEM_DESCRIPTION'
+
+    print("\nTest 5c: real CHECK_IN column set (ITEM_SERIAL + ITEM_DESCRIPTION, no ITEM_NAME)")
+    real_check_in_cols = pd.DataFrame(columns=[
+        'Date', 'ITEM_SERIAL', 'ITEM_DESCRIPTION', 'QUANTITY', 'UoM',
+        'UNIT_PRICE Excl Vat', 'Total Value (EXCL TAX)', 'SUPPLIER', 'ITEM_CATEGORY',
+    ])
+    assert detect_column(real_check_in_cols, ITEM_NAME_KEYWORDS) == 'ITEM_SERIAL'
+    assert detect_column(real_check_in_cols, ITEM_LABEL_KEYWORDS) == 'ITEM_DESCRIPTION'
+
+    print("\nTest 6: is_junk_value catches spreadsheet formula errors")
+    assert is_junk_value('#N/A')
+    assert is_junk_value('#REF!')
+    assert is_junk_value('')
+    assert is_junk_value(None)
+    assert not is_junk_value('Mozzarella')
 
     print("\nAll demand_utils checks passed.")
