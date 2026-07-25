@@ -5,6 +5,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
 
+from app.core.supplier_utils import derive_item_supplier_links_from_check_in
+
 class GoogleSheetReader:
     def __init__(self):
         self.sheet_url = st.secrets.get("GOOGLE_SHEET_URL", "")
@@ -77,7 +79,27 @@ class GoogleSheetReader:
     def get_check_out(self):
         """Read CHECK_OUT"""
         return self.read_worksheet("CHECK_OUT")
-    
+
+    def get_suppliers(self):
+        """Read SUPPLIERS -- item/supplier reference data for JIT purchasing
+        (lead time, MOQ, unit cost, reliability, preferred flag). This tab
+        doesn't exist yet; create it with columns ITEM_NAME, SUPPLIER_NAME,
+        LEAD_TIME_DAYS, MIN_ORDER_QTY, UNIT_COST, RELIABILITY_SCORE,
+        PREFERRED -- one row per item/supplier pair. Use
+        get_item_supplier_links_from_check_in() to see which pairs already
+        show up in delivery history, so you're not typing the item/supplier
+        columns from memory."""
+        return self.read_worksheet("SUPPLIERS")
+
+    def get_item_supplier_links_from_check_in(self):
+        """Item/supplier pairs already implied by CHECK_IN history --
+        delivery count and first/last delivery date only, NOT lead time
+        (CHECK_IN has no order date, only delivery date). A starting list
+        for populating the new SUPPLIERS tab; lead time, MOQ, cost, and
+        reliability still need to be filled in by hand."""
+        check_in_df = self.get_check_in()
+        return derive_item_supplier_links_from_check_in(check_in_df)
+
     def get_unit_pricing(self):
         """Read UNIT PRICING"""
         return self.read_worksheet("UNIT PRICING")
