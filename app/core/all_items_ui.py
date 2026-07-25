@@ -52,6 +52,7 @@ from app.core.visual_inventory import (
     show_replenishment_suggestions,
 )
 from app.core.stock_take import stock_take_interface
+from app.core.jit_purchasing_ui import render_jit_purchasing_tab
 
 ALL_ITEMS_TAB_REQUIREMENTS = {
     "📦 Inventory": "view_stock",
@@ -59,6 +60,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "📈 All Items Analytics": "view_analytics",
     "🖼️ Visual Inventory": "view_analytics",
     "🤖 Advanced Analytics": "view_analytics",
+    "🔄 JIT Purchasing": "manage_purchasing",
 }
 
 
@@ -108,6 +110,9 @@ def render_all_items_mode(ctx: AllItemsContext,
     if "🤖 Advanced Analytics" in tab_lookup:
         with tab_lookup["🤖 Advanced Analytics"]:
             _render_advanced_analytics_tab(ctx)
+    if "🔄 JIT Purchasing" in tab_lookup:
+        with tab_lookup["🔄 JIT Purchasing"]:
+            render_jit_purchasing_tab(ctx.constants)
 
 
 # ============================================================

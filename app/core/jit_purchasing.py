@@ -134,6 +134,106 @@ def calculate_jit_order_quantity(annual_demand: float, order_cost: float, holdin
     return OrderQuantityResult(order_quantity=eoq, eoq=eoq, moq_applied=False)
 
 
+STATUS_ORDER_NOW = "🔴 Order Now"
+STATUS_ORDER_SOON = "🟡 Order Soon"
+STATUS_OK = "🟢 OK"
+STATUS_NO_SUPPLIER = "⚫ No supplier data yet"
+STATUS_NOT_ENOUGH_HISTORY = "⚪ Not enough demand history"
+
+# Display/sort priority -- most actionable first. Used by the dashboard to
+# sort its table without re-deriving this ordering in the UI layer.
+STATUS_SORT_ORDER = {
+    STATUS_ORDER_NOW: 0,
+    STATUS_ORDER_SOON: 1,
+    STATUS_NO_SUPPLIER: 2,
+    STATUS_NOT_ENOUGH_HISTORY: 3,
+    STATUS_OK: 4,
+}
+
+
+@dataclass
+class JITItemStatus:
+    item_code: str
+    item_label: str
+    current_stock: float
+    avg_daily_demand: Optional[float]
+    reorder_point: Optional[float]
+    suggested_order_qty: Optional[float]
+    supplier_name: Optional[str]
+    lead_time_days: Optional[int]
+    status: str
+
+
+def compute_jit_status(item_code: str, item_label: str, current_stock: float,
+                        daily_demand_kg: List[float], supplier: Optional[Supplier],
+                        order_cost: float, holding_rate: float, unit_price_fallback: float = 0.0,
+                        service_level: float = 0.95, reorder_soon_buffer: float = 1.15) -> JITItemStatus:
+    """One item's full JIT read: reorder point, suggested order quantity,
+    and a status badge -- the single source of truth both the dashboard UI
+    and its tests call, so the two can't drift apart.
+
+    Degrades gracefully in the two ways an early-stage rollout actually
+    hits: not enough check-out history yet (STATUS_NOT_ENOUGH_HISTORY), or
+    no SUPPLIERS row for this item yet (STATUS_NO_SUPPLIER) -- both return
+    a real status instead of raising, so the dashboard can show every item
+    and let coverage fill in over time rather than hiding incomplete rows.
+
+    reorder_soon_buffer=1.15 means "flag as Order Soon once stock is within
+    15% of the reorder point" -- a heads-up window before it's actually
+    urgent. A UX choice, not a formula; tune freely.
+    """
+    if len(daily_demand_kg) < 2:
+        return JITItemStatus(
+            item_code=item_code, item_label=item_label, current_stock=current_stock,
+            avg_daily_demand=None, reorder_point=None, suggested_order_qty=None,
+            supplier_name=supplier.name if supplier else None,
+            lead_time_days=supplier.lead_time_days if supplier else None,
+            status=STATUS_NOT_ENOUGH_HISTORY,
+        )
+
+    avg_daily = statistics.mean(daily_demand_kg)
+
+    if supplier is None:
+        return JITItemStatus(
+            item_code=item_code, item_label=item_label, current_stock=current_stock,
+            avg_daily_demand=avg_daily, reorder_point=None, suggested_order_qty=None,
+            supplier_name=None, lead_time_days=None, status=STATUS_NO_SUPPLIER,
+        )
+
+    rp_result = calculate_jit_reorder_point(daily_demand_kg, supplier.lead_time_days, service_level)
+    if rp_result is None:
+        return JITItemStatus(
+            item_code=item_code, item_label=item_label, current_stock=current_stock,
+            avg_daily_demand=avg_daily, reorder_point=None, suggested_order_qty=None,
+            supplier_name=supplier.name, lead_time_days=supplier.lead_time_days,
+            status=STATUS_NOT_ENOUGH_HISTORY,
+        )
+
+    reorder_point = rp_result.reorder_point
+    if current_stock <= reorder_point:
+        status = STATUS_ORDER_NOW
+    elif current_stock <= reorder_point * reorder_soon_buffer:
+        status = STATUS_ORDER_SOON
+    else:
+        status = STATUS_OK
+
+    order_qty = None
+    if avg_daily > 0:
+        unit_price = supplier.unit_cost or unit_price_fallback
+        oq_result = calculate_jit_order_quantity(
+            annual_demand=avg_daily * 365, order_cost=order_cost,
+            holding_rate=holding_rate, unit_price=unit_price, supplier=supplier,
+        )
+        if oq_result is not None:
+            order_qty = oq_result.order_quantity
+
+    return JITItemStatus(
+        item_code=item_code, item_label=item_label, current_stock=current_stock,
+        avg_daily_demand=avg_daily, reorder_point=reorder_point, suggested_order_qty=order_qty,
+        supplier_name=supplier.name, lead_time_days=supplier.lead_time_days, status=status,
+    )
+
+
 def default_service_level_for_abc_class(abc_class: str) -> float:
     """Maps an ABC class label to its default service level target. Accepts
     either a bare letter ('A') or the full label used elsewhere in the app
@@ -185,5 +285,39 @@ if __name__ == "__main__":
     assert default_service_level_for_abc_class("🔴 A (70% value)") == 0.95
     assert default_service_level_for_abc_class("🟡 B (20% value)") == 0.90
     assert default_service_level_for_abc_class("unknown") == 0.80
+
+    print("\nTest 7: compute_jit_status -- not enough history")
+    status = compute_jit_status("CHEM-001", "Rennet", current_stock=50, daily_demand_kg=[10],
+                                 supplier=supplier, order_cost=500, holding_rate=0.2)
+    print(f"  {status.status}")
+    assert status.status == STATUS_NOT_ENOUGH_HISTORY
+    assert status.reorder_point is None
+
+    print("\nTest 8: compute_jit_status -- no supplier data")
+    status = compute_jit_status("CHEM-001", "Rennet", current_stock=50, daily_demand_kg=demand,
+                                 supplier=None, order_cost=500, holding_rate=0.2)
+    print(f"  {status.status}, avg_daily={status.avg_daily_demand:.1f}")
+    assert status.status == STATUS_NO_SUPPLIER
+    assert status.avg_daily_demand is not None, "demand stats should still compute even without a supplier"
+
+    print("\nTest 9: compute_jit_status -- Order Now (stock below reorder point)")
+    status = compute_jit_status("CHEM-001", "Rennet", current_stock=5, daily_demand_kg=demand,
+                                 supplier=supplier, order_cost=500, holding_rate=0.2, unit_price_fallback=50)
+    print(f"  {status.status}, ROP={status.reorder_point:.1f}, order_qty={status.suggested_order_qty}")
+    assert status.status == STATUS_ORDER_NOW
+
+    print("\nTest 10: compute_jit_status -- OK (stock well above reorder point)")
+    status = compute_jit_status("CHEM-001", "Rennet", current_stock=500, daily_demand_kg=demand,
+                                 supplier=supplier, order_cost=500, holding_rate=0.2, unit_price_fallback=50)
+    print(f"  {status.status}, ROP={status.reorder_point:.1f}")
+    assert status.status == STATUS_OK
+
+    print("\nTest 11: compute_jit_status -- Order Soon (stock just above reorder point)")
+    rp_probe = calculate_jit_reorder_point(demand, lead_time_days=5, service_level=0.95)
+    status = compute_jit_status("CHEM-001", "Rennet", current_stock=rp_probe.reorder_point * 1.05,
+                                 daily_demand_kg=demand, supplier=supplier, order_cost=500,
+                                 holding_rate=0.2, unit_price_fallback=50)
+    print(f"  {status.status}, ROP={status.reorder_point:.1f}, stock={rp_probe.reorder_point * 1.05:.1f}")
+    assert status.status == STATUS_ORDER_SOON
 
     print("\nAll jit_purchasing checks passed.")

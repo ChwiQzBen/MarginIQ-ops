@@ -64,6 +64,7 @@ class Permission(str, Enum):
     MANAGE_CUSTOMERS = "manage_customers"
     VIEW_COMMERCIAL_REPORTS = "view_commercial_reports"
     VIEW_CUSTOMER_ANALYTICS = "view_customer_analytics"
+    MANAGE_PURCHASING = "manage_purchasing"
 
 
 ROLE_PERMISSIONS = {
@@ -72,7 +73,7 @@ ROLE_PERMISSIONS = {
         Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
         Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
         Permission.VIEW_ANALYTICS, Permission.VIEW_FORECASTS, Permission.VIEW_COST_DATA,
-        Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE,
+        Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE, Permission.MANAGE_PURCHASING,
         Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS,
         # --- cheese: full operational access ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
@@ -103,6 +104,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "📈 All Items Analytics": Permission.VIEW_ANALYTICS,
     "🖼️ Visual Inventory": Permission.VIEW_ANALYTICS,
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
+    "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
 }
 
 DRY_ICE_TAB_REQUIREMENTS = {
