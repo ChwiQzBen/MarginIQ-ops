@@ -27,7 +27,6 @@ circular-import issues — same story as the forecasting extraction
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 from datetime import datetime
-import math
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -38,6 +37,8 @@ from core.error_handling import logger
 from app.core.google_sheet_reader import GoogleSheetReader
 from app.core.advanced_analytics import create_advanced_analytics_tab
 from app.core.forecasting import create_ensemble_forecast
+from app.core.eoq import calculate_eoq_costs
+from app.core.demand_utils import compute_daily_demand_for_item
 from app.core.visual_inventory import (
     ai_powered_recommendations,
     inventory_status_dashboard,
@@ -1224,16 +1225,12 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
 
                             if not item_history.empty and 'DATE' in item_history.columns and qty_col:
                                 try:
-                                    item_history[qty_col] = pd.to_numeric(item_history[qty_col], errors='coerce')
-                                    item_history = item_history.dropna(subset=[qty_col])
+                                    daily_demand = compute_daily_demand_for_item(
+                                        check_out_df, selected_item,
+                                        item_col=item_col, qty_col=qty_col, date_col=date_col_out,
+                                    )
 
-                                    if not item_history.empty:
-                                        daily_demand = item_history.groupby('DATE')[qty_col].sum().reset_index()
-                                        daily_demand.columns = ['Date', 'Order_Quantity_kg']
-
-                                        daily_demand['Order_Quantity_kg'] = pd.to_numeric(daily_demand['Order_Quantity_kg'], errors='coerce')
-                                        daily_demand = daily_demand.dropna()
-
+                                    if not daily_demand.empty:
                                         if len(daily_demand) >= 5 and daily_demand['Order_Quantity_kg'].sum() > 0:
                                             with st.spinner(f"Generating forecast for {selected_item}..."):
                                                 fig_forecast, forecast_values, model_forecasts, accuracy = create_ensemble_forecast(
@@ -1310,24 +1307,25 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                         cost_results = []
                         for _, row in cost_df.iterrows():
                             try:
-                                if row['UNIT PRICE'] > 0 and row['QUANTITY'] > 0 and row['ANNUAL_DEMAND'] > 0:
-                                    eoq = math.sqrt((2 * row['ANNUAL_DEMAND'] * order_cost) / (holding_rate * row['UNIT PRICE']))
-
-                                    if row['QUANTITY'] > 0 and eoq > 0:
-                                        current_total_cost = (row['ANNUAL_DEMAND'] / row['QUANTITY']) * order_cost + (row['QUANTITY'] / 2) * holding_rate * row['UNIT PRICE']
-                                        optimal_total_cost = (row['ANNUAL_DEMAND'] / eoq) * order_cost + (eoq / 2) * holding_rate * row['UNIT PRICE']
-
-                                        cost_results.append({
-                                            'Item': row.get('ITEM_NAME', 'Unknown'),
-                                            'Category': row.get('ITEM_CATEGORY', 'Uncategorized'),
-                                            'Current Stock': row['QUANTITY'],
-                                            'Unit Price': row['UNIT PRICE'],
-                                            'Annual Demand': row['ANNUAL_DEMAND'],
-                                            'EOQ': eoq,
-                                            'Current Cost': current_total_cost,
-                                            'Optimal Cost': optimal_total_cost,
-                                            'Potential Savings': current_total_cost - optimal_total_cost if current_total_cost > optimal_total_cost else 0
-                                        })
+                                eoq_result = calculate_eoq_costs(
+                                    current_qty=row['QUANTITY'],
+                                    annual_demand=row['ANNUAL_DEMAND'],
+                                    order_cost=order_cost,
+                                    holding_rate=holding_rate,
+                                    unit_price=row['UNIT PRICE'],
+                                )
+                                if eoq_result is not None:
+                                    cost_results.append({
+                                        'Item': row.get('ITEM_NAME', 'Unknown'),
+                                        'Category': row.get('ITEM_CATEGORY', 'Uncategorized'),
+                                        'Current Stock': row['QUANTITY'],
+                                        'Unit Price': row['UNIT PRICE'],
+                                        'Annual Demand': row['ANNUAL_DEMAND'],
+                                        'EOQ': eoq_result.eoq,
+                                        'Current Cost': eoq_result.current_total_cost,
+                                        'Optimal Cost': eoq_result.optimal_total_cost,
+                                        'Potential Savings': eoq_result.potential_savings,
+                                    })
                             except:
                                 pass
 
