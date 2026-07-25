@@ -17,6 +17,10 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 import statistics
 
+# Fallback expected order cadence (days) for customers with fewer than 2
+# linked orders, who therefore have no personal avg_days_between_orders yet.
+# Used only by compute_churn_risk.
+DEFAULT_CADENCE_DAYS = 30
 
 @dataclass
 class CustomerOrderingPattern:
@@ -38,12 +42,74 @@ class CustomerProductMix:
     by_cheese_kg: Dict[str, float] = field(default_factory=dict)
     top_cheese: Optional[str] = None
 
+@dataclass
+class CustomerRFM:
+    customer_id: int
+    customer_name: str
+    recency_days: int
+    frequency: int
+    monetary: float
+    recency_score: int      # 1 (long ago) - 5 (very recent)
+    frequency_score: int    # 1 (rare) - 5 (frequent)
+    monetary_score: int     # 1 (low spend) - 5 (high spend)
+    rfm_segment: str
+
+
+@dataclass
+class CustomerCLV:
+    customer_id: int
+    customer_name: str
+    historical_revenue: float
+    avg_order_value: float
+    orders_per_year_est: Optional[float]     # None if fewer than 2 orders (no cadence yet)
+    projected_annual_value: Optional[float]  # None if orders_per_year_est is None
+
+
+@dataclass
+class CustomerChurnRisk:
+    customer_id: int
+    customer_name: str
+    days_since_last_order: int
+    expected_gap_days: float
+    used_default_cadence: bool  # True when <2 orders forced the DEFAULT_CADENCE_DAYS fallback
+    risk_ratio: float           # days_since_last_order / expected_gap_days
+    risk_level: str             # "Low" / "Medium" / "High"
+
 
 def _linked_sales(sales: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sales rows with a real customer_id — the only rows these functions
     can group reliably. Call cheese_data_access.reconcile_customers_from_history
     first if this excludes most of your history."""
     return [s for s in sales if s.get("customer_id") is not None]
+
+def _score_1_to_5(sorted_values: List[float], value: float, reverse: bool = False) -> int:
+    """Rank `value` within `sorted_values` (ascending) into a 1-5 bucket,
+    relative to the other values in this dataset. Works for any N, including
+    N<=1 (returns 3, neutral) — fixed quintile cuts blow up on the small,
+    duplicate-heavy datasets typical of an early customer book, and would
+    need re-tuning as volume grows anyway. This rescales itself every call.
+    """
+    n = len(sorted_values)
+    if n <= 1:
+        return 3
+    rank = sorted_values.index(value)
+    percentile = rank / (n - 1)
+    if reverse:
+        percentile = 1 - percentile
+    return min(5, max(1, round(1 + percentile * 4)))
+
+
+def _rfm_segment(r_score: int, f_score: int, m_score: int) -> str:
+    total = r_score + f_score + m_score
+    if total >= 13:
+        return "Champion"
+    if total >= 10:
+        return "Loyal"
+    if r_score <= 2 and (f_score >= 3 or m_score >= 3):
+        return "At Risk"  # used to buy well, gone quiet
+    if total >= 7:
+        return "Needs Attention"
+    return "Lost"
 
 
 def compute_ordering_patterns(sales: List[Dict[str, Any]],
@@ -105,13 +171,117 @@ def compute_product_mix(sales: List[Dict[str, Any]],
     return mixes
 
 
+def compute_rfm(sales: List[Dict[str, Any]], customers: List[Dict[str, Any]],
+                 as_of_date: Optional[str] = None) -> List[CustomerRFM]:
+    """Recency/Frequency/Monetary, each scored 1-5 relative to the other
+    customers in this dataset (self-calibrating, not fixed thresholds — see
+    _score_1_to_5). Segments are a simplified classic RFM rubric; revisit the
+    cutoffs once there's enough customers for them to matter statistically.
+    """
+    patterns = compute_ordering_patterns(sales, customers)
+    if not patterns:
+        return []
+
+    today = datetime.fromisoformat(as_of_date).date() if as_of_date else datetime.now().date()
+    recencies = [(today - datetime.fromisoformat(p.last_order_date).date()).days for p in patterns]
+
+    recency_rank = sorted(recencies)
+    frequency_rank = sorted(p.total_orders for p in patterns)
+    monetary_rank = sorted(p.total_revenue for p in patterns)
+
+    results = []
+    for p, recency_days in zip(patterns, recencies):
+        r_score = _score_1_to_5(recency_rank, recency_days, reverse=True)  # fewer days = better
+        f_score = _score_1_to_5(frequency_rank, p.total_orders)
+        m_score = _score_1_to_5(monetary_rank, p.total_revenue)
+        results.append(CustomerRFM(
+            customer_id=p.customer_id,
+            customer_name=p.customer_name,
+            recency_days=recency_days,
+            frequency=p.total_orders,
+            monetary=p.total_revenue,
+            recency_score=r_score,
+            frequency_score=f_score,
+            monetary_score=m_score,
+            rfm_segment=_rfm_segment(r_score, f_score, m_score),
+        ))
+
+    results.sort(key=lambda r: (r.recency_score + r.frequency_score + r.monetary_score), reverse=True)
+    return results
+
+
+def compute_clv(sales: List[Dict[str, Any]], customers: List[Dict[str, Any]]) -> List[CustomerCLV]:
+    """Historical revenue plus a cadence-projected annual value. This is a
+    simple heuristic (avg order value x estimated orders/year), not a
+    predictive model — good enough to rank customers by value with the
+    order counts an early-stage book will have. Revisit with something like
+    BG/NBD once there's enough volume to fit one properly.
+    """
+    patterns = compute_ordering_patterns(sales, customers)
+    results = []
+    for p in patterns:
+        avg_order_value = p.total_revenue / p.total_orders if p.total_orders else 0.0
+        orders_per_year = (365.0 / p.avg_days_between_orders) if p.avg_days_between_orders else None
+        projected_annual = (avg_order_value * orders_per_year) if orders_per_year else None
+        results.append(CustomerCLV(
+            customer_id=p.customer_id,
+            customer_name=p.customer_name,
+            historical_revenue=p.total_revenue,
+            avg_order_value=round(avg_order_value, 2),
+            orders_per_year_est=round(orders_per_year, 1) if orders_per_year else None,
+            projected_annual_value=round(projected_annual, 2) if projected_annual else None,
+        ))
+    results.sort(key=lambda c: c.projected_annual_value or c.historical_revenue, reverse=True)
+    return results
+
+
+def compute_churn_risk(sales: List[Dict[str, Any]], customers: List[Dict[str, Any]],
+                        as_of_date: Optional[str] = None) -> List[CustomerChurnRisk]:
+    """Flags customers overdue relative to their own ordering cadence.
+    Customers with fewer than 2 linked orders have no personal cadence yet,
+    so this falls back to DEFAULT_CADENCE_DAYS and marks used_default_cadence
+    so the UI can caveat those rows rather than showing them with the same
+    confidence as a cadence-based read.
+    """
+    patterns = compute_ordering_patterns(sales, customers)
+    today = datetime.fromisoformat(as_of_date).date() if as_of_date else datetime.now().date()
+
+    results = []
+    for p in patterns:
+        days_since = (today - datetime.fromisoformat(p.last_order_date).date()).days
+        used_default = p.avg_days_between_orders is None
+        expected_gap = p.avg_days_between_orders if p.avg_days_between_orders else DEFAULT_CADENCE_DAYS
+        ratio = days_since / expected_gap if expected_gap else 0.0
+
+        if ratio < 1.0:
+            level = "Low"
+        elif ratio < 2.0:
+            level = "Medium"
+        else:
+            level = "High"
+
+        results.append(CustomerChurnRisk(
+            customer_id=p.customer_id,
+            customer_name=p.customer_name,
+            days_since_last_order=days_since,
+            expected_gap_days=round(expected_gap, 1),
+            used_default_cadence=used_default,
+            risk_ratio=round(ratio, 2),
+            risk_level=level,
+        ))
+
+    results.sort(key=lambda c: c.risk_ratio, reverse=True)
+    return results
+
+
 if __name__ == "__main__":
-    customers = [{"id": 1, "name": "Java House"}, {"id": 2, "name": "Carrefour"}]
+    customers = [{"id": 1, "name": "Java House"}, {"id": 2, "name": "Carrefour"}, {"id": 3, "name": "Naivas"}]
     sales = [
         {"date": "2026-06-01", "cheese_name": "Mozzarella", "quantity_kg": 10.0, "revenue": 6500.0, "customer_id": 1},
         {"date": "2026-06-08", "cheese_name": "Mozzarella", "quantity_kg": 12.0, "revenue": 7800.0, "customer_id": 1},
         {"date": "2026-06-15", "cheese_name": "Halloumi", "quantity_kg": 5.0, "revenue": 4000.0, "customer_id": 1},
         {"date": "2026-06-03", "cheese_name": "Cheddar", "quantity_kg": 20.0, "revenue": 15000.0, "customer_id": 2},
+        {"date": "2026-01-05", "cheese_name": "Gouda", "quantity_kg": 8.0, "revenue": 5200.0, "customer_id": 3},
         {"date": "2026-06-01", "cheese_name": "Gouda", "quantity_kg": 3.0, "revenue": 2400.0, "customer_id": None},  # unlinked
     ]
 
@@ -127,7 +297,7 @@ if __name__ == "__main__":
     assert java.avg_days_between_orders == 7.0, f"got {java.avg_days_between_orders}"
     carrefour = next(p for p in patterns if p.customer_name == "Carrefour")
     assert carrefour.avg_days_between_orders is None, "single order should have no gap"
-    assert len(patterns) == 2, "unlinked sale (customer_id=None) must be excluded"
+    assert len(patterns) == 3, "unlinked sale (customer_id=None) must be excluded"
 
     print("\nTest 2: product mix")
     mixes = compute_product_mix(sales, customers)
@@ -135,5 +305,38 @@ if __name__ == "__main__":
     print(f"  Java House mix: {java_mix.by_cheese_kg}, top={java_mix.top_cheese}")
     assert java_mix.top_cheese == "Mozzarella"
     assert java_mix.by_cheese_kg["Mozzarella"] == 22.0
+
+    print("\nTest 3: RFM")
+    as_of = "2026-06-20"
+    rfm = compute_rfm(sales, customers, as_of_date=as_of)
+    for r in rfm:
+        print(f"  {r.customer_name}: R={r.recency_score} F={r.frequency_score} M={r.monetary_score} "
+              f"-> {r.rfm_segment} (recency_days={r.recency_days})")
+    java_rfm = next(r for r in rfm if r.customer_name == "Java House")
+    naivas_rfm = next(r for r in rfm if r.customer_name == "Naivas")
+    assert java_rfm.recency_score == 5, "most recent order of the 3 should score best recency"
+    assert naivas_rfm.recency_score == 1, "Naivas ordered in January, should score worst recency"
+    assert len(rfm) == 3
+
+    print("\nTest 4: CLV")
+    clv = compute_clv(sales, customers)
+    for c in clv:
+        print(f"  {c.customer_name}: hist_rev={c.historical_revenue}, aov={c.avg_order_value}, "
+              f"orders/yr={c.orders_per_year_est}, projected_annual={c.projected_annual_value}")
+    java_clv = next(c for c in clv if c.customer_name == "Java House")
+    assert java_clv.orders_per_year_est == round(365.0 / 7.0, 1)
+    carrefour_clv = next(c for c in clv if c.customer_name == "Carrefour")
+    assert carrefour_clv.orders_per_year_est is None, "single order should have no cadence-based projection"
+    assert carrefour_clv.projected_annual_value is None
+
+    print("\nTest 5: churn risk")
+    churn = compute_churn_risk(sales, customers, as_of_date=as_of)
+    for c in churn:
+        print(f"  {c.customer_name}: days_since={c.days_since_last_order}, expected_gap={c.expected_gap_days}, "
+              f"ratio={c.risk_ratio}, level={c.risk_level}, used_default={c.used_default_cadence}")
+    naivas_churn = next(c for c in churn if c.customer_name == "Naivas")
+    assert naivas_churn.risk_level == "High", "Naivas hasn't ordered since January, should be High risk"
+    carrefour_churn = next(c for c in churn if c.customer_name == "Carrefour")
+    assert carrefour_churn.used_default_cadence is True, "single-order customer should use the fallback cadence"
 
     print("\nAll customer_analytics checks passed.")

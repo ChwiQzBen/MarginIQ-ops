@@ -14,13 +14,14 @@ from app.core.cheese_data_access import (
     get_sales_history, save_customer, get_customers, delete_customer,
     reconcile_customers_from_history,
 )
-from app.core.customer_analytics import compute_ordering_patterns, compute_product_mix
-# Find:
+from app.core.customer_analytics import (
+    compute_ordering_patterns, compute_product_mix, compute_rfm, compute_clv, compute_churn_risk,
+)
+
 from app.core.commercial_reports import (
     build_commercial_report_data, summarize_commercial_report_data, generate_commercial_report,
 )
 
-# Replace:
 from app.core.commercial_reports import (
     build_commercial_report_data, summarize_commercial_report_data, generate_commercial_report,
 )
@@ -386,9 +387,10 @@ def _render_customers_tab(supabase_client) -> None:
 def _render_customer_analytics_tab(supabase_client) -> None:
     st.markdown("### 📊 Customer Analytics")
     st.caption(
-        "Product Preferences and Ordering Patterns — the foundational views "
-        "RFM, CLV, and churn detection will build on next. Only customer_id-"
-        "linked sales count here."
+        "Ordering Patterns, Product Preferences, RFM segmentation, CLV, and "
+        "churn risk. Only customer_id-linked sales count here — scores are "
+        "most meaningful once there's a real book of customers and order "
+        "history, so treat early numbers as directional."
     )
 
     customers = get_customers(supabase_client=supabase_client)
@@ -447,6 +449,65 @@ def _render_customer_analytics_tab(supabase_client) -> None:
             st.caption(f"Top product: **{mix.top_cheese}**")
         else:
             st.caption("No purchase history for this customer.")
+
+    st.markdown("---")
+    st.markdown("#### RFM Segments")
+    st.caption("Recency / Frequency / Monetary, scored 1-5 relative to your other customers.")
+    rfm = compute_rfm(sales, customers)
+    if rfm:
+        rfm_df = pd.DataFrame([{
+            "Customer": r.customer_name,
+            "Segment": r.rfm_segment,
+            "Recency (days)": r.recency_days,
+            "R": r.recency_score, "F": r.frequency_score, "M": r.monetary_score,
+        } for r in rfm])
+        st.dataframe(rfm_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No customer-linked orders yet.")
+
+    st.markdown("---")
+    st.markdown("#### Customer Lifetime Value (CLV)")
+    st.caption(
+        "Historical revenue plus a cadence-projected annual value. Projection "
+        "needs at least 2 orders to estimate a cadence — shows '—' until then."
+    )
+    clv = compute_clv(sales, customers)
+    if clv:
+        clv_df = pd.DataFrame([{
+            "Customer": c.customer_name,
+            "Historical Revenue": f"KSh {c.historical_revenue:,.0f}",
+            "Avg Order Value": f"KSh {c.avg_order_value:,.0f}",
+            "Est. Orders/Year": c.orders_per_year_est if c.orders_per_year_est else "—",
+            "Projected Annual Value": f"KSh {c.projected_annual_value:,.0f}" if c.projected_annual_value else "—",
+        } for c in clv])
+        st.dataframe(clv_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No customer-linked orders yet.")
+
+    st.markdown("---")
+    st.markdown("#### Churn Risk")
+    st.caption(
+        "Flags customers overdue relative to their own ordering cadence. "
+        "Customers with under 2 orders don't have a personal cadence yet, "
+        "so a 30-day default is used instead (marked with *)."
+    )
+    churn = compute_churn_risk(sales, customers)
+    if churn:
+        risk_order = {"High": 0, "Medium": 1, "Low": 2}
+        churn_sorted = sorted(churn, key=lambda c: risk_order.get(c.risk_level, 3))
+        churn_df = pd.DataFrame([{
+            "Customer": c.customer_name + (" *" if c.used_default_cadence else ""),
+            "Days Since Last Order": c.days_since_last_order,
+            "Expected Gap (days)": c.expected_gap_days,
+            "Risk": c.risk_level,
+        } for c in churn_sorted])
+        st.dataframe(churn_df, use_container_width=True, hide_index=True)
+        high_risk = [c for c in churn if c.risk_level == "High"]
+        if high_risk:
+            names = ", ".join(c.customer_name for c in high_risk)
+            st.warning(f"⚠️ High churn risk: {names}")
+    else:
+        st.caption("No customer-linked orders yet.")
 
 
 # ============================================================
