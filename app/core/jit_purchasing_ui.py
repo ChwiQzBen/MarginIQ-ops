@@ -4,26 +4,35 @@ app/core/jit_purchasing_ui.py
 🔄 JIT Purchasing tab -- reorder point / order quantity dashboard. All the
 actual decision logic (reorder point, status badge, suggested order
 quantity) lives in jit_purchasing.compute_jit_status(); this file is just
-glue: load stock/demand from Google Sheets, load suppliers from a local
-CSV, detect columns, build Supplier objects per item, and render results.
+glue: load stock/demand from Google Sheets, load suppliers from BOTH a
+local CSV and (if present) a Google Sheets SUPPLIERS tab, detect columns,
+build Supplier objects per item, and render results.
 
-Suppliers are read from app/data/suppliers.csv, NOT a Google Sheets tab --
-view-only access to the shared operational sheet means that data lives in
-the repo instead, where it's fully editable. See
-app/core/suppliers_data_access.py for the loader and expected schema.
+Suppliers come from TWO sources that are merged together:
+  1. app/data/suppliers.csv -- always editable locally, no sharing needed.
+  2. The Google Sheets SUPPLIERS tab, via GoogleSheetReader.get_suppliers()
+     -- for teammates who DO have edit rights on the shared sheet and would
+     rather maintain supplier data there. Returns empty if that tab
+     doesn't exist; nothing breaks either way.
+Rows from both are normalized to the same column names before merging
+(see _normalize_suppliers_df) so they combine cleanly even if the two
+sources don't use identical headers. _pick_supplier() already handles
+multiple candidate rows per item (PREFERRED flag, then shortest lead
+time), so no separate conflict-resolution logic is needed here -- having
+a row in two places just gives it two candidates to choose from.
 
-Designed to work with an EMPTY or PARTIAL suppliers.csv -- items without a
-supplier row show "No supplier data yet" rather than being hidden, so the
-dashboard is useful before every item has been filled in. Same
-"degrade gracefully with sparse data" principle used in Customer
-Analytics' RFM/CLV/churn.
+Designed to work with EMPTY or PARTIAL data in either source -- items
+without a supplier row anywhere show "No supplier data yet" rather than
+being hidden, so the dashboard is useful before every item has been
+filled in. Same "degrade gracefully with sparse data" principle used in
+Customer Analytics' RFM/CLV/churn.
 
 Does NOT yet include Purchase Order generation or Supplier Performance
 tracking (Phase 3+ in the original JIT plan) -- those need PO state
 persistence, which hasn't been designed yet. This is the Dashboard piece
 only.
 
-Expected app/data/suppliers.csv schema (one row per item/supplier pair):
+Expected schema, in either source (one row per item/supplier pair):
     ITEM_SERIAL,SUPPLIER_NAME,LEAD_TIME_DAYS,MIN_ORDER_QTY,UNIT_COST,RELIABILITY_SCORE,PREFERRED
 ITEM_SERIAL must match the same codes used in STOCK_LISTING/CHECK_IN (e.g.
 CHEM-001) -- use GoogleSheetReader.get_item_supplier_links_from_check_in()
@@ -35,9 +44,45 @@ import streamlit as st
 import pandas as pd
 
 from app.core.google_sheet_reader import GoogleSheetReader
-from app.core.suppliers_data_access import load_suppliers_csv
+from app.core.suppliers_data_access import load_suppliers_csv, SUPPLIERS_COLUMNS
 from app.core.demand_utils import compute_daily_demand_for_item, detect_column, ITEM_NAME_KEYWORDS, is_junk_value
 from app.core.jit_purchasing import Supplier, compute_jit_status, STATUS_SORT_ORDER
+
+# Keyword detectors for each canonical suppliers column, reused to
+# normalize whichever headers each source actually has (see
+# _normalize_suppliers_df).
+_SUPPLIER_COLUMN_DETECTORS = {
+    'ITEM_SERIAL': ITEM_NAME_KEYWORDS,
+    'SUPPLIER_NAME': ['supplier_name', 'supplier', 'vendor'],
+    'LEAD_TIME_DAYS': ['lead_time', 'lead time'],
+    'MIN_ORDER_QTY': ['min_order_qty', 'min order qty', 'moq'],
+    'UNIT_COST': ['unit_cost', 'unit cost'],
+    'RELIABILITY_SCORE': ['reliability'],
+    'PREFERRED': ['preferred'],
+}
+
+
+def _normalize_suppliers_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename a suppliers DataFrame's columns to the canonical schema
+    (SUPPLIERS_COLUMNS) via the same keyword detection used everywhere
+    else in this file, so the CSV and a Google Sheets SUPPLIERS tab merge
+    cleanly even if whoever maintains the sheet uses slightly different
+    headers (e.g. 'Item Serial' vs 'ITEM_SERIAL'). Columns that don't
+    match any detector are dropped; already-canonical input passes
+    through unchanged.
+    """
+    if df.empty:
+        return df
+
+    rename_map = {}
+    for canonical, keywords in _SUPPLIER_COLUMN_DETECTORS.items():
+        found = detect_column(df, keywords)
+        if found:
+            rename_map[found] = canonical
+
+    renamed = df.rename(columns=rename_map)
+    keep_cols = [c for c in SUPPLIERS_COLUMNS if c in renamed.columns]
+    return renamed[keep_cols]
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -52,7 +97,23 @@ def _load_jit_data():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_suppliers():
-    return load_suppliers_csv()
+    """Suppliers from both sources, merged. Neither source being present
+    is a normal state (empty DataFrame, not an error) -- see module
+    docstring."""
+    csv_df = _normalize_suppliers_df(load_suppliers_csv())
+
+    gsheet = GoogleSheetReader()
+    sheet_df = pd.DataFrame()
+    if gsheet.authenticate():
+        sheet_df = _normalize_suppliers_df(gsheet.get_suppliers())
+
+    if csv_df.empty and sheet_df.empty:
+        return pd.DataFrame(columns=SUPPLIERS_COLUMNS)
+    if csv_df.empty:
+        return sheet_df
+    if sheet_df.empty:
+        return csv_df
+    return pd.concat([csv_df, sheet_df], ignore_index=True)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -115,7 +176,8 @@ def render_jit_purchasing_tab(constants=None) -> None:
     st.caption(
         "Reorder points and suggested order quantities from real demand history and "
         "lead times. Items without a supplier row yet show up as 'No supplier data' "
-        "instead of being hidden -- add a row to app/data/suppliers.csv and they join "
+        "instead of being hidden -- add a row to app/data/suppliers.csv, or to the "
+        "Google Sheets SUPPLIERS tab if you have edit rights there, and they join "
         "the rest automatically on next refresh."
     )
 
@@ -124,7 +186,7 @@ def render_jit_purchasing_tab(constants=None) -> None:
         if st.button("🔄 Refresh", use_container_width=True, key="jit_refresh"):
             st.cache_data.clear()
     with col2:
-        st.caption(f"Stock/demand: Google Sheets | Suppliers: app/data/suppliers.csv | "
+        st.caption(f"Stock/demand: Google Sheets | Suppliers: suppliers.csv + Sheets SUPPLIERS tab | "
                    f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     with st.spinner("Loading stock and demand data..."):
@@ -162,10 +224,11 @@ def render_jit_purchasing_tab(constants=None) -> None:
 
     if suppliers_df.empty:
         st.warning(
-            "⚠️ app/data/suppliers.csv is empty or not found. Every item below will "
-            "show demand stats, but none can be flagged 'Order Now' vs 'OK' without "
-            "a lead time. See the 'Item/Supplier Links' expander below for a "
-            "starting list of which item/supplier rows to add."
+            "⚠️ No supplier data found yet, in either app/data/suppliers.csv or the "
+            "Google Sheets SUPPLIERS tab. Every item below will show demand stats, "
+            "but none can be flagged 'Order Now' vs 'OK' without a lead time. See "
+            "the 'Item/Supplier Links' expander below for a starting list of which "
+            "item/supplier rows to add."
         )
 
     item_code_col = detect_column(stock_df, ITEM_NAME_KEYWORDS)

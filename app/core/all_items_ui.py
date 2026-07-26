@@ -38,7 +38,10 @@ from app.core.google_sheet_reader import GoogleSheetReader
 from app.core.advanced_analytics import create_advanced_analytics_tab
 from app.core.forecasting import create_ensemble_forecast
 from app.core.eoq import calculate_eoq_costs
-from app.core.demand_utils import compute_daily_demand_for_item
+from app.core.demand_utils import (
+    compute_daily_demand_for_item, detect_column, is_junk_value,
+    build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS,
+)
 from app.core.visual_inventory import (
     ai_powered_recommendations,
     inventory_status_dashboard,
@@ -53,16 +56,7 @@ from app.core.visual_inventory import (
 )
 from app.core.stock_take import stock_take_interface
 from app.core.jit_purchasing_ui import render_jit_purchasing_tab
-
-ALL_ITEMS_TAB_REQUIREMENTS = {
-    "📦 Inventory": "view_stock",
-    "📊 Stock Movements": "run_stock_take",
-    "📈 All Items Analytics": "view_analytics",
-    "🖼️ Visual Inventory": "view_analytics",
-    "🤖 Advanced Analytics": "view_analytics",
-    "🔄 JIT Purchasing": "manage_purchasing",
-}
-
+from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS
 
 @dataclass
 class AllItemsContext:
@@ -1010,12 +1004,13 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                         date_col_in = col
                         break
 
-                # Find item column
-                item_col_in = None
-                for col in check_in_df.columns:
-                    if 'item' in col.lower() or 'product' in col.lower() or 'name' in col.lower():
-                        item_col_in = col
-                        break
+                # Find item column -- code-first (see demand_utils.ITEM_NAME_KEYWORDS)
+                # so grouping/counting stays keyed on the stable SKU even when a
+                # free-text description column is also present in the sheet.
+                item_col_in = detect_column(check_in_df, ITEM_NAME_KEYWORDS)
+                # Separate label column (e.g. ITEM_DESCRIPTION) used only to make
+                # the "Top Received Items" chart readable -- see below.
+                item_label_col_in = detect_column(check_in_df, ITEM_LABEL_KEYWORDS)
 
                 if date_col_in:
                     try:
@@ -1050,16 +1045,25 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                             with col2:
                                 st.markdown("##### 🏆 Top Received Items")
                                 if item_col_in:
-                                    # Get value counts and clean data
+                                    # Count by the stable code first (avoids fragmenting
+                                    # counts across minor description text variants for
+                                    # the same physical item), then resolve each code to
+                                    # its most common description purely for display.
                                     top_checkins = check_in_df[item_col_in].value_counts().head(10)
-                                    top_checkins = top_checkins[top_checkins.index.notna()]
-                                    top_checkins = top_checkins[top_checkins.index != '']
-                                    top_checkins = top_checkins[top_checkins.index != 'nan']
+                                    top_checkins = top_checkins[~top_checkins.index.to_series().apply(is_junk_value)]
 
                                     if not top_checkins.empty:
+                                        if item_label_col_in:
+                                            code_to_label = build_code_to_label_map(
+                                                check_in_df, item_col_in, item_label_col_in
+                                            )
+                                            display_labels = [code_to_label.get(code, code) for code in top_checkins.index]
+                                        else:
+                                            display_labels = top_checkins.index.tolist()
+
                                         fig_top_in = px.bar(
                                             x=top_checkins.values,
-                                            y=top_checkins.index,
+                                            y=display_labels,
                                             title='Top 10 Most Received Items',
                                             labels={'x': 'Receipt Count', 'y': 'Item Name'},
                                             orientation='h'
@@ -1086,11 +1090,8 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                         date_col_out = col
                         break
 
-                item_col_out = None
-                for col in check_out_df.columns:
-                    if 'item' in col.lower() or 'product' in col.lower() or 'name' in col.lower():
-                        item_col_out = col
-                        break
+                item_col_out = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+                item_label_col_out = detect_column(check_out_df, ITEM_LABEL_KEYWORDS)
 
                 if date_col_out:
                     try:
@@ -1127,14 +1128,20 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                                 st.markdown("##### 🏆 Top Used Items")
                                 if item_col_out:
                                     top_checkouts = check_out_df[item_col_out].value_counts().head(10)
-                                    top_checkouts = top_checkouts[top_checkouts.index.notna()]
-                                    top_checkouts = top_checkouts[top_checkouts.index != '']
-                                    top_checkouts = top_checkouts[top_checkouts.index != 'nan']
+                                    top_checkouts = top_checkouts[~top_checkouts.index.to_series().apply(is_junk_value)]
 
                                     if not top_checkouts.empty:
+                                        if item_label_col_out:
+                                            code_to_label = build_code_to_label_map(
+                                                check_out_df, item_col_out, item_label_col_out
+                                            )
+                                            display_labels = [code_to_label.get(code, code) for code in top_checkouts.index]
+                                        else:
+                                            display_labels = top_checkouts.index.tolist()
+
                                         fig_top_out = px.bar(
                                             x=top_checkouts.values,
-                                            y=top_checkouts.index,
+                                            y=display_labels,
                                             title='Top 10 Most Used Items',
                                             labels={'x': 'Usage Count', 'y': 'Item Name'},
                                             orientation='h'

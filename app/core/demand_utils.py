@@ -111,6 +111,33 @@ def compute_daily_demand_for_item(check_out_df: pd.DataFrame, item_name: str,
     return daily_demand.sort_values('Date').reset_index(drop=True)
 
 
+def build_code_to_label_map(df: pd.DataFrame, code_col: str, label_col: str) -> dict:
+    """Map each unique value in code_col to its most common non-junk value
+    in label_col -- e.g. ITEM_SERIAL -> ITEM_DESCRIPTION, for display once
+    something has been grouped/counted by the stable code. Same "most
+    common variant wins" rule already used in supplier_utils.py's
+    derive_item_supplier_links_from_check_in, factored out here so any
+    chart or table that counts by code can resolve a readable label
+    without duplicating the logic.
+
+    Returns {} (not an error) if either column is missing or df is empty --
+    callers should fall back to displaying the raw code via
+    `label_map.get(code, code)`.
+    """
+    if df.empty or code_col not in df.columns or label_col not in df.columns:
+        return {}
+
+    mapping = {}
+    for code, group in df.groupby(code_col):
+        if is_junk_value(code):
+            continue
+        clean_labels = group[label_col].dropna()
+        clean_labels = clean_labels[~clean_labels.apply(is_junk_value)]
+        if not clean_labels.empty:
+            mapping[code] = clean_labels.mode().iloc[0]
+    return mapping
+
+
 if __name__ == "__main__":
     print("Test 1: detect_column")
     df = pd.DataFrame(columns=['ITEM_NAME', 'QUANTITY_OUT', 'CHECKOUT_DATE'])
@@ -164,5 +191,23 @@ if __name__ == "__main__":
     assert is_junk_value('')
     assert is_junk_value(None)
     assert not is_junk_value('Mozzarella')
+
+    print("\nTest 7: build_code_to_label_map -- basic case + description drift")
+    check_in_like = pd.DataFrame([
+        {'ITEM_SERIAL': 'INGR-072', 'ITEM_DESCRIPTION': 'Rennet Solution'},
+        {'ITEM_SERIAL': 'INGR-072', 'ITEM_DESCRIPTION': 'Rennet Solution'},
+        {'ITEM_SERIAL': 'INGR-072', 'ITEM_DESCRIPTION': 'Rennet solution '},  # minor variant, should lose to the majority
+        {'ITEM_SERIAL': 'PCKG-117', 'ITEM_DESCRIPTION': 'Limuru Reserve cheddar'},
+        {'ITEM_SERIAL': '#N/A', 'ITEM_DESCRIPTION': '#N/A'},  # junk code, must be excluded entirely
+    ])
+    label_map = build_code_to_label_map(check_in_like, 'ITEM_SERIAL', 'ITEM_DESCRIPTION')
+    print(label_map)
+    assert label_map['INGR-072'] == 'Rennet Solution'
+    assert label_map['PCKG-117'] == 'Limuru Reserve cheddar'
+    assert '#N/A' not in label_map
+
+    print("\nTest 8: build_code_to_label_map -- missing columns / empty df returns {}, not an error")
+    assert build_code_to_label_map(pd.DataFrame(), 'ITEM_SERIAL', 'ITEM_DESCRIPTION') == {}
+    assert build_code_to_label_map(pd.DataFrame([{'foo': 1}]), 'ITEM_SERIAL', 'ITEM_DESCRIPTION') == {}
 
     print("\nAll demand_utils checks passed.")
