@@ -83,12 +83,30 @@ class GoogleSheetReader:
     def get_suppliers(self):
         """Read SUPPLIERS -- item/supplier reference data for JIT purchasing
         (lead time, MOQ, unit cost, reliability, preferred flag). This tab
-        doesn't exist yet; create it with columns ITEM_NAME, SUPPLIER_NAME,
-        LEAD_TIME_DAYS, MIN_ORDER_QTY, UNIT_COST, RELIABILITY_SCORE,
-        PREFERRED -- one row per item/supplier pair. Use
-        get_item_supplier_links_from_check_in() to see which pairs already
-        show up in delivery history, so you're not typing the item/supplier
-        columns from memory."""
+        is OPTIONAL: most deployments won't have it, since suppliers live in
+        app/data/suppliers.csv instead (see app/core/suppliers_data_access.py
+        and jit_purchasing_ui.py, which merge both sources). A missing tab
+        is a normal state here, so this checks the workbook's worksheet
+        list first rather than going through read_worksheet(), whose
+        generic st.error() would otherwise show a confusing "Error reading
+        'SUPPLIERS': SUPPLIERS" banner for what's simply "not created yet".
+
+        If you have edit rights and want to maintain supplier data in
+        Sheets instead of/alongside the CSV, create this tab with columns
+        ITEM_SERIAL, SUPPLIER_NAME, LEAD_TIME_DAYS, MIN_ORDER_QTY,
+        UNIT_COST, RELIABILITY_SCORE, PREFERRED -- one row per item/supplier
+        pair. Use get_item_supplier_links_from_check_in() to see which
+        pairs already show up in delivery history.
+        """
+        if not self.authenticated:
+            if not self.authenticate():
+                return pd.DataFrame()
+        try:
+            titles = [ws.title for ws in self.sheet.worksheets()]
+        except Exception:
+            return pd.DataFrame()
+        if "SUPPLIERS" not in titles:
+            return pd.DataFrame()
         return self.read_worksheet("SUPPLIERS")
 
     def get_item_supplier_links_from_check_in(self):
