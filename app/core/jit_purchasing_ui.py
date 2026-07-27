@@ -173,19 +173,13 @@ def _pick_supplier(item_suppliers: pd.DataFrame, name_col: str, lead_time_col: O
 
 def render_jit_purchasing_tab(constants=None) -> None:
     st.markdown("## 🔄 JIT Purchasing")
-    st.caption(
-    "📊 Reorder recommendations based on current stock, historical demand, "
-    "and supplier lead times. Add supplier data (lead time, MOQ, cost) to "
-    "get full ordering recommendations."
-    )
 
     col1, col2 = st.columns([1, 4])
     with col1:
         if st.button("🔄 Refresh", use_container_width=True, key="jit_refresh"):
             st.cache_data.clear()
     with col2:
-        st.caption(f"Stock/demand: Google Sheets | Suppliers: suppliers.csv + Sheets SUPPLIERS tab | "
-                   f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        st.caption(f"📊 Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     with st.spinner("Loading stock and demand data..."):
         stock_df, check_out_df = _load_jit_data()
@@ -222,11 +216,8 @@ def render_jit_purchasing_tab(constants=None) -> None:
 
     if suppliers_df.empty:
         st.warning(
-            "⚠️ No supplier data found yet, in either app/data/suppliers.csv or the "
-            "Google Sheets SUPPLIERS tab. Every item below will show demand stats, "
-            "but none can be flagged 'Order Now' vs 'OK' without a lead time. See "
-            "the 'Item/Supplier Links' expander below for a starting list of which "
-            "item/supplier rows to add."
+            "⚠️ No supplier data found yet. Add supplier information (lead time, "
+            "MOQ, cost) to get full ordering recommendations."
         )
 
     item_code_col = detect_column(stock_df, ITEM_NAME_KEYWORDS)
@@ -337,11 +328,11 @@ def render_jit_purchasing_tab(constants=None) -> None:
             key="jit_status_download",
         )
 
-    with st.expander("🔗 Item/Supplier Links from Check-In History (seed data for suppliers.csv)", expanded=False):
+    with st.expander("🔗 Item/Supplier Links (Historical Deliveries)", expanded=False):
         st.caption(
-            "Who has actually delivered what, per CHECK_IN records -- not lead time "
-            "(CHECK_IN has no order date). Use this to see which item/supplier rows "
-            "still need lead time, MOQ, cost, and reliability filled in."
+            "Shows which suppliers have delivered each item historically. "
+            "Use this to identify which supplier relationships need lead time, MOQ, "
+            "cost, and reliability data added."
         )
         links = _load_supplier_links()
         if not links.empty:
