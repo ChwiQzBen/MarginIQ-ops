@@ -1303,17 +1303,21 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                     with col1:
                         order_cost = st.number_input(
                             "Ordering Cost (KSh)",
-                            value=float(constants.TRANSPORT_COST),
+                            value=float(constants.ALL_ITEMS_ORDER_COST),
                             step=100.0,
                             key="cost_analysis_order_cost"
                         )
                     with col2:
                         holding_rate = st.number_input(
                             "Holding Rate (%)",
-                            value=float(constants.HOLDING_RATE * 100),
+                            value=float(constants.ALL_ITEMS_HOLDING_RATE * 100),
                             step=0.5,
                             key="cost_analysis_holding_rate"
                         ) / 100
+                    st.caption(
+                        "Defaults are general-inventory assumptions, independent of the "
+                        "Dry Ice tier's transport cost / holding rate — adjust freely."
+                    )
 
                     if st.button("📊 Run Cost Analysis", key="run_cost_analysis"):
                         cost_results = []

@@ -207,12 +207,12 @@ def render_jit_purchasing_tab(constants=None) -> None:
         with c2:
             order_cost = st.number_input(
                 "Ordering Cost (KSh)", min_value=0.0,
-                value=float(constants.TRANSPORT_COST) if constants else 500.0,
+                value=float(constants.ALL_ITEMS_ORDER_COST) if constants else 500.0,
                 step=100.0, key="jit_order_cost",
             )
         holding_rate = st.number_input(
             "Holding Rate (%)", min_value=0.1,
-            value=float(constants.HOLDING_RATE * 100) if constants else 20.0,
+            value=float(constants.ALL_ITEMS_HOLDING_RATE * 100) if constants else 20.0,
             step=0.5, key="jit_holding_rate",
         ) / 100
         st.caption(

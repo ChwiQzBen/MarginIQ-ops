@@ -172,6 +172,8 @@ class Constants:
     IMPLEMENTATION_COST = 25700  # training + SOP + signage + supervision + 20% contingency — adjustable in sidebar
     ALL_ITEMS_IMPLEMENTATION_COST = 70000  # baseline count + data cleanup + training + first-cycle supervision — adjustable in sidebar
     SYNERGY_DISCOUNT = 0.12  # combined rollout shares training/supervision overhead
+    ALL_ITEMS_ORDER_COST = 500.0   # KSh per purchase order — placeholder, tune to real admin/processing cost
+    ALL_ITEMS_HOLDING_RATE = 0.20  # 20%/year — typical general-inventory holding cost, not dry ice's 3%
 
 constants = Constants()
 
