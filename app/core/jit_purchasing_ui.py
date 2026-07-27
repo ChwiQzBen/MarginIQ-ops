@@ -202,17 +202,12 @@ def render_jit_purchasing_tab(constants=None) -> None:
                 value=float(constants.ALL_ITEMS_ORDER_COST) if constants else 500.0,
                 step=100.0, key="jit_order_cost",
             )
-        holding_rate = st.number_input(
-            "Holding Rate (%)", min_value=0.1,
-            value=float(constants.ALL_ITEMS_HOLDING_RATE * 100) if constants else 20.0,
-            step=0.5, key="jit_holding_rate",
-        ) / 100
-        st.caption(
-            "Applied the same way to every item for now -- ABC-class-specific "
-            "service levels (95%+ for A items, lower for C) are a planned "
-            "refinement once ABC classification is pulled out of the Inventory "
-            "tab into a reusable function (it's currently inline there)."
-        )
+            holding_rate = st.number_input(
+                "Holding Rate (%)", min_value=0.1,
+                value=float(constants.ALL_ITEMS_HOLDING_RATE * 100) if constants else 20.0,
+                step=0.5, key="jit_holding_rate",
+                help="Annual cost to hold inventory (storage, insurance, obsolescence, etc.)"
+            ) / 100
 
     if suppliers_df.empty:
         st.warning(
