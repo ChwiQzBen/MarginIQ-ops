@@ -556,6 +556,12 @@ def main():
         help="Switch between general inventory management, Cheese Production Optimization, or Dry Ice analysis",
         key="inventory_mode"
     )
+    # Captured early (not just right before the mode branch at the bottom, where
+    # it's still also read) so everything below -- the 8-model forecast, EOQ/
+    # safety stock, the Dry-Ice sidebar widgets, and Dashboard Home -- can be
+    # gated on it instead of running unconditionally on every rerun regardless
+    # of which mode is selected.
+    mode = st.session_state.get('inventory_mode', '📦 All Items Mode')
 
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
     
@@ -859,135 +865,166 @@ def main():
             st.warning(f"⚠️ Forecast generation failed: {str(e)}")
             return None, np.array([0]), {}, 0, 0, 0
     
-    # Check if we have data before generating forecast
-    if not df.empty and len(df) >= 5:
-        with st.spinner("🔄 Generating forecast with auto-tuned models..."):
-            fig_ensemble, ensemble_forecast_values, model_forecasts, backtest_accuracy, total_forecasted_demand, forecast_std_dev = get_forecast_data(df)
+    if mode == "❄️ Dry Ice Mode":
+        # Check if we have data before generating forecast
+        if not df.empty and len(df) >= 5:
+            with st.spinner("🔄 Generating forecast with auto-tuned models..."):
+                fig_ensemble, ensemble_forecast_values, model_forecasts, backtest_accuracy, total_forecasted_demand, forecast_std_dev = get_forecast_data(df)
             
-            # Update model forecasts with proper names
-            if model_forecasts:
-                # Add backtest accuracy to model forecasts
-                model_forecasts['Backtest Accuracy'] = f"{backtest_accuracy*100:.1f}%"
+                # Update model forecasts with proper names
+                if model_forecasts:
+                    # Add backtest accuracy to model forecasts
+                    model_forecasts['Backtest Accuracy'] = f"{backtest_accuracy*100:.1f}%"
             
-            # Log success
-            logger.info(f"Forecast generated: {len(ensemble_forecast_values)} days, models: {len(model_forecasts)-1}")
+                # Log success
+                logger.info(f"Forecast generated: {len(ensemble_forecast_values)} days, models: {len(model_forecasts)-1}")
             
+        else:
+            # No data or insufficient data for forecasting
+            fig_ensemble = None
+            ensemble_forecast_values = np.array([0])
+            model_forecasts = {}
+            backtest_accuracy = 0
+            total_forecasted_demand = 0
+            forecast_std_dev = 0
+        
+            if df.empty:
+                st.info("📊 No order data found for this period. Record a receipt to begin analysis.")
+            else:
+                st.warning(f"⚠️ Insufficient data ({len(df)} orders). Need at least 5 orders for reliable forecasting.")
+
+    
+        if total_forecasted_demand <= 0:
+            st.warning("⚠️ Forecast resulted in zero/negative demand. Using intelligent fallback.")
+            # Use historical KPIs as fallback
+            fallback_monthly_demand = max(
+                kpis.get('current_monthly_volume', 0),
+                kpis.get('avg_order_size', 300) * 4,  # Assume 4 orders per month minimum
+                1200  # Absolute minimum of 1200kg/month
+            )
+            total_forecasted_demand = fallback_monthly_demand
+            forecast_std_dev = total_forecasted_demand * 0.25  # 25% coefficient of variation
+            st.info(f"Using fallback monthly demand: {total_forecasted_demand:,.0f} kg")
+
+        # --- 2. Calculate Inventory Policy (Logic from former Tab 3) ---
+        # Use forecast demand if available, otherwise fallback to historical KPIs
+        monthly_demand_input = total_forecasted_demand if total_forecasted_demand > 0 else kpis.get('current_monthly_volume', 0)
+        demand_stddev_input = forecast_std_dev * np.sqrt(30) if forecast_std_dev > 0 else kpis.get('std_order_size', 0) * math.sqrt(4) #Approx 4 weeks in month
+
+        # Calculate policy parameters
+        avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
+        sublimation_factor = 1 + avg_sublimation
+        adjusted_demand = monthly_demand_input * sublimation_factor
+    
+        z_score = norm.ppf(constants.SERVICE_LEVEL)
+        eoq = math.sqrt((2 * adjusted_demand * constants.TRANSPORT_COST) / (constants.HOLDING_RATE * constants.PRICE_PER_KG)) if (constants.HOLDING_RATE * constants.PRICE_PER_KG) > 0 else 0
+        safety_stock = z_score * demand_stddev_input * math.sqrt(constants.LEAD_TIME_DAYS) * sublimation_factor
+        reorder_point = (adjusted_demand / 30 * constants.LEAD_TIME_DAYS) + safety_stock
+
+        # --- 3. Calculate the Definitive Annual Transport Savings ---
+        current_monthly_orders = kpis.get('order_frequency', 0)
+        eoq_monthly_orders = adjusted_demand / eoq if eoq > 0 else 0
+        annual_transport_savings = (current_monthly_orders - eoq_monthly_orders) * 12 * constants.TRANSPORT_COST
+
+        # Ensure savings cannot be negative
+        annual_transport_savings = max(0, annual_transport_savings)
+        monthly_savings = annual_transport_savings / 12 if annual_transport_savings else 0
+
+        # --- 4. Recalculate Total Annual Spending & Other Costs ---
+        annual_volume = kpis.get('total_volume', 0)
+        annual_product_cost = annual_volume * constants.PRICE_PER_KG
+        annual_transport_cost = kpis.get('total_orders', 0) * constants.TRANSPORT_COST
+        annual_sublimation_loss = annual_volume * constants.PRICE_PER_KG * avg_sublimation
+
+        # Corrected holding cost calculation
+        average_inventory_level = (kpis.get('avg_order_size', 0) / 2) + safety_stock
+        annual_holding_cost = average_inventory_level * constants.PRICE_PER_KG * constants.HOLDING_RATE
+    
+        total_annual_spending = annual_product_cost + annual_transport_cost + annual_holding_cost + annual_sublimation_loss
+
+        # --- 5. Generate Other Charts and Visualizations ---
+        # The original Prophet forecast_data object for chart in Tab 1
+        forecast_data = analyzer.forecast_demand()
+        fig_orders, fig_cost_overview, fig_forecast = create_enhanced_charts(
+            df=df, analyzer=analyzer, kpis=kpis, forecast_data=forecast_data, safety_stock=safety_stock
+        )
     else:
-        # No data or insufficient data for forecasting
         fig_ensemble = None
         ensemble_forecast_values = np.array([0])
         model_forecasts = {}
         backtest_accuracy = 0
-        total_forecasted_demand = 0
-        forecast_std_dev = 0
-        
-        if df.empty:
-            st.info("📊 No order data found for this period. Record a receipt to begin analysis.")
-        else:
-            st.warning(f"⚠️ Insufficient data ({len(df)} orders). Need at least 5 orders for reliable forecasting.")
-
+        eoq = 0
+        safety_stock = 0
+        reorder_point = 0
+        fig_orders = None
+        fig_cost_overview = None
+        fig_forecast = None
+        monthly_demand_input = 0
+        demand_stddev_input = 0
+        z_score = norm.ppf(constants.SERVICE_LEVEL)
+        avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
+        adjusted_demand = 0
+        current_monthly_orders = 0
+        eoq_monthly_orders = 0
+        annual_transport_savings = 0
+        monthly_savings = 0
+        annual_volume = 0
+        annual_product_cost = 0
+        annual_transport_cost = 0
+        annual_sublimation_loss = 0
+        annual_holding_cost = 0
+        total_annual_spending = 0
     
-    if total_forecasted_demand <= 0:
-        st.warning("⚠️ Forecast resulted in zero/negative demand. Using intelligent fallback.")
-        # Use historical KPIs as fallback
-        fallback_monthly_demand = max(
-            kpis.get('current_monthly_volume', 0),
-            kpis.get('avg_order_size', 300) * 4,  # Assume 4 orders per month minimum
-            1200  # Absolute minimum of 1200kg/month
+    if mode == "❄️ Dry Ice Mode":
+        # Get current stock from the database
+        current_stock = get_current_stock_from_db()
+
+        # If the database is empty, seed it with the smart, dynamically calculated value
+        if current_stock == 0:
+            target_days_coverage = 45
+            # average_daily_demand is now calculated based on forecast values if available
+            avg_daily_forecast = np.mean(ensemble_forecast_values) if total_forecasted_demand > 0 else (kpis.get('avg_order_size', 0) / 7)
+
+            # Use the final, forecast-driven eoq and safety_stock values
+            initial_stock = max(
+                eoq * 2,                                    # Ensure at least 2 order cycles
+                safety_stock * 4,                           # Ensure adequate safety buffer
+                avg_daily_forecast * target_days_coverage   # Meet strategic coverage goals
+            )
+            # Ensure initial stock is not zero if all calculations result in zero (e.g., no data)
+            if initial_stock <= 0:
+                initial_stock = 1000 # Fallback to a default value
+
+            current_stock = initial_stock
+            update_current_stock_in_db(current_stock, datetime.now())
+            print(f"Database was empty. Seeded initial stock with: {current_stock:.2f} kg")
+
+        # Initialize the inventory tracker with the definitive current_stock value
+        inventory_tracker = InventoryTracker(
+            initial_stock=current_stock,
+            analyzer=analyzer
         )
-        total_forecasted_demand = fallback_monthly_demand
-        forecast_std_dev = total_forecasted_demand * 0.25  # 25% coefficient of variation
-        st.info(f"Using fallback monthly demand: {total_forecasted_demand:,.0f} kg")
-
-    # --- 2. Calculate Inventory Policy (Logic from former Tab 3) ---
-    # Use forecast demand if available, otherwise fallback to historical KPIs
-    monthly_demand_input = total_forecasted_demand if total_forecasted_demand > 0 else kpis.get('current_monthly_volume', 0)
-    demand_stddev_input = forecast_std_dev * np.sqrt(30) if forecast_std_dev > 0 else kpis.get('std_order_size', 0) * math.sqrt(4) #Approx 4 weeks in month
-
-    # Calculate policy parameters
-    avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
-    sublimation_factor = 1 + avg_sublimation
-    adjusted_demand = monthly_demand_input * sublimation_factor
-    
-    z_score = norm.ppf(constants.SERVICE_LEVEL)
-    eoq = math.sqrt((2 * adjusted_demand * constants.TRANSPORT_COST) / (constants.HOLDING_RATE * constants.PRICE_PER_KG)) if (constants.HOLDING_RATE * constants.PRICE_PER_KG) > 0 else 0
-    safety_stock = z_score * demand_stddev_input * math.sqrt(constants.LEAD_TIME_DAYS) * sublimation_factor
-    reorder_point = (adjusted_demand / 30 * constants.LEAD_TIME_DAYS) + safety_stock
-
-    # --- 3. Calculate the Definitive Annual Transport Savings ---
-    current_monthly_orders = kpis.get('order_frequency', 0)
-    eoq_monthly_orders = adjusted_demand / eoq if eoq > 0 else 0
-    annual_transport_savings = (current_monthly_orders - eoq_monthly_orders) * 12 * constants.TRANSPORT_COST
-
-    # Ensure savings cannot be negative
-    annual_transport_savings = max(0, annual_transport_savings)
-    monthly_savings = annual_transport_savings / 12 if annual_transport_savings else 0
-
-    # --- 4. Recalculate Total Annual Spending & Other Costs ---
-    annual_volume = kpis.get('total_volume', 0)
-    annual_product_cost = annual_volume * constants.PRICE_PER_KG
-    annual_transport_cost = kpis.get('total_orders', 0) * constants.TRANSPORT_COST
-    annual_sublimation_loss = annual_volume * constants.PRICE_PER_KG * avg_sublimation
-
-    # Corrected holding cost calculation
-    average_inventory_level = (kpis.get('avg_order_size', 0) / 2) + safety_stock
-    annual_holding_cost = average_inventory_level * constants.PRICE_PER_KG * constants.HOLDING_RATE
-    
-    total_annual_spending = annual_product_cost + annual_transport_cost + annual_holding_cost + annual_sublimation_loss
-
-    # --- 5. Generate Other Charts and Visualizations ---
-    # The original Prophet forecast_data object for chart in Tab 1
-    forecast_data = analyzer.forecast_demand()
-    fig_orders, fig_cost_overview, fig_forecast = create_enhanced_charts(
-        df=df, analyzer=analyzer, kpis=kpis, forecast_data=forecast_data, safety_stock=safety_stock
-    )
-    
-    # Get current stock from the database
-    current_stock = get_current_stock_from_db()
-
-    # If the database is empty, seed it with the smart, dynamically calculated value
-    if current_stock == 0:
-        target_days_coverage = 45
-        # average_daily_demand is now calculated based on forecast values if available
-        avg_daily_forecast = np.mean(ensemble_forecast_values) if total_forecasted_demand > 0 else (kpis.get('avg_order_size', 0) / 7)
-
-        # Use the final, forecast-driven eoq and safety_stock values
-        initial_stock = max(
-            eoq * 2,                                    # Ensure at least 2 order cycles
-            safety_stock * 4,                           # Ensure adequate safety buffer
-            avg_daily_forecast * target_days_coverage   # Meet strategic coverage goals
-        )
-        # Ensure initial stock is not zero if all calculations result in zero (e.g., no data)
-        if initial_stock <= 0:
-            initial_stock = 1000 # Fallback to a default value
-
-        current_stock = initial_stock
-        update_current_stock_in_db(current_stock, datetime.now())
-        print(f"Database was empty. Seeded initial stock with: {current_stock:.2f} kg")
-
-    # Initialize the inventory tracker with the definitive current_stock value
-    inventory_tracker = InventoryTracker(
-        initial_stock=current_stock,
-        analyzer=analyzer
-    )
+    else:
+        inventory_tracker = None
     # ============================================================
     # 🎯 DECISION ENGINE (stored in session_state so the sidebar,
     # which renders earlier in this function, can read it too)
     # ============================================================
-    snapshot = InventorySnapshot(
-        current_stock=inventory_tracker.current_stock,
-        eoq=eoq,
-        safety_stock=safety_stock,
-        reorder_point=reorder_point,
-        forecast_values=ensemble_forecast_values,
-        forecast_accuracy=backtest_accuracy * 100,
-        lead_time_days=constants.LEAD_TIME_DAYS,
-        transport_cost=constants.TRANSPORT_COST,
-        avg_order_size=kpis.get('avg_order_size', 300),
-        monthly_holding_cost=annual_holding_cost / 12,
-    )
-    decision_engine = InventoryDecisionEngine(snapshot)
-    st.session_state.decision = decision_engine.executive_summary()
+    if mode == "❄️ Dry Ice Mode":
+        snapshot = InventorySnapshot(
+            current_stock=inventory_tracker.current_stock,
+            eoq=eoq,
+            safety_stock=safety_stock,
+            reorder_point=reorder_point,
+            forecast_values=ensemble_forecast_values,
+            forecast_accuracy=backtest_accuracy * 100,
+            lead_time_days=constants.LEAD_TIME_DAYS,
+            transport_cost=constants.TRANSPORT_COST,
+            avg_order_size=kpis.get('avg_order_size', 300),
+            monthly_holding_cost=annual_holding_cost / 12,
+        )
+        decision_engine = InventoryDecisionEngine(snapshot)
+        st.session_state.decision = decision_engine.executive_summary()
 
     # Initialize other components
     mobile_ui = MobileInterface()
@@ -1728,28 +1765,29 @@ def main():
     # 🏠 DASHBOARD HOME (KPI grid, Decision Center, Insights &
     # Scenarios, ROI Summary) — see app/core/dashboard_home.py
     # ============================================================
-    dashboard_ctx = DashboardContext(
-        kpis=kpis,
-        eoq=eoq,
-        eoq_monthly_orders=eoq_monthly_orders,
-        safety_stock=safety_stock,
-        reorder_point=reorder_point,
-        backtest_accuracy=backtest_accuracy,
-        ensemble_forecast_values=ensemble_forecast_values,
-        monthly_demand_input=monthly_demand_input,
-        demand_stddev_input=demand_stddev_input,
-        sublimation_factor=sublimation_factor,
-        z_score=z_score,
-        annual_transport_savings=annual_transport_savings,
-        annual_holding_cost=annual_holding_cost,
-        total_annual_spending=total_annual_spending,
-        current_monthly_orders=current_monthly_orders,
-        inventory_tracker=inventory_tracker,
-        constants=constants,
-        decision=st.session_state.get('decision'),
-        stock_df=stock_df,
-    )
-    render_dashboard_home(dashboard_ctx)
+    if mode == "❄️ Dry Ice Mode":
+        dashboard_ctx = DashboardContext(
+            kpis=kpis,
+            eoq=eoq,
+            eoq_monthly_orders=eoq_monthly_orders,
+            safety_stock=safety_stock,
+            reorder_point=reorder_point,
+            backtest_accuracy=backtest_accuracy,
+            ensemble_forecast_values=ensemble_forecast_values,
+            monthly_demand_input=monthly_demand_input,
+            demand_stddev_input=demand_stddev_input,
+            sublimation_factor=sublimation_factor,
+            z_score=z_score,
+            annual_transport_savings=annual_transport_savings,
+            annual_holding_cost=annual_holding_cost,
+            total_annual_spending=total_annual_spending,
+            current_monthly_orders=current_monthly_orders,
+            inventory_tracker=inventory_tracker,
+            constants=constants,
+            decision=st.session_state.get('decision'),
+            stock_df=stock_df,
+        )
+        render_dashboard_home(dashboard_ctx)
 
     
     # ============================================================
