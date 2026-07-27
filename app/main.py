@@ -564,19 +564,26 @@ def main():
     mode = st.session_state.get('inventory_mode', '📦 All Items Mode')
 
     st.sidebar.markdown("</div>", unsafe_allow_html=True)
-    
-    st.sidebar.header("🗓️ Analysis Period")
-    analysis_periods = ['2024/2025', '2025/2026', '2026/2027', '2027/2028', '2028/2029']
 
-    if 'selected_period' not in st.session_state:
-        st.session_state.selected_period = '2024/2025'
+    # Analysis Period - only shown in Dry Ice Mode
+    if mode == "❄️ Dry Ice Mode":
+        st.sidebar.header("🗓️ Analysis Period")
+        analysis_periods = ['2024/2025', '2025/2026', '2026/2027', '2027/2028', '2028/2029']
 
-    selected_period = st.sidebar.selectbox(
-        "Choose a period to analyze or update:",
-        analysis_periods,
-        index=analysis_periods.index(st.session_state.selected_period)
-    )
-    st.session_state.selected_period = selected_period
+        if 'selected_period' not in st.session_state:
+            st.session_state.selected_period = '2024/2025'
+
+        selected_period = st.sidebar.selectbox(
+            "Choose a period to analyze or update:",
+            analysis_periods,
+            index=analysis_periods.index(st.session_state.selected_period)
+        )
+        st.session_state.selected_period = selected_period
+    else:
+        # Still need a default period for data loading, but hide the UI
+        if 'selected_period' not in st.session_state:
+            st.session_state.selected_period = '2024/2025'
+        selected_period = st.session_state.selected_period
 
     # Get today's date once
     today = datetime.today()
@@ -1686,53 +1693,54 @@ def main():
         st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
     # ============================================================
-    # SECTION 8: DATA SUMMARY (Container Style)
+    # SECTION 8: DATA SUMMARY (Container Style) - Dry Ice Only
     # ============================================================
-    st.sidebar.markdown("""
-    <div style="
-        border: 2px solid #4dd0e1;
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 15px;
-        background: rgba(77, 208, 225, 0.05);
-    ">
+    if mode == "❄️ Dry Ice Mode":
+        st.sidebar.markdown("""
         <div style="
-            background: #4dd0e1;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            display: inline-block;
-            font-size: 14px;
-            font-weight: 700;
+            border: 2px solid #4dd0e1;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(77, 208, 225, 0.05);
         ">
-            📊 Data Summary
-        </div>
-    """, unsafe_allow_html=True)
+            <div style="
+                background: #4dd0e1;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                display: inline-block;
+                font-size: 14px;
+                font-weight: 700;
+            ">
+                📊 Data Summary
+            </div>
+        """, unsafe_allow_html=True)
 
-    # --- OPTIMIZE DATA DISPLAY ---
-    # Show only summary stats, not full data
-    sidebar_start_str = display_start_date.strftime('%d/%m/%Y')
-    sidebar_end_str = display_end_date.strftime('%d/%m/%Y')
+        # --- OPTIMIZE DATA DISPLAY ---
+        # Show only summary stats, not full data
+        sidebar_start_str = display_start_date.strftime('%d/%m/%Y')
+        sidebar_end_str = display_end_date.strftime('%d/%m/%Y')
 
-    # Use len(df) efficiently
-    total_orders = len(df) if df is not None else 0
-    data_points = df.shape[0] if df is not None and hasattr(df, 'shape') else 0
+        # Use len(df) efficiently
+        total_orders = len(df) if df is not None else 0
+        data_points = df.shape[0] if df is not None and hasattr(df, 'shape') else 0
 
-    st.sidebar.write(f"**Analysis Period:** {sidebar_start_str} to {sidebar_end_str}")
-    st.sidebar.write(f"**Total Orders:** {total_orders:,}")
-    st.sidebar.write(f"**Data Points:** {data_points:,}")
+        st.sidebar.write(f"**Analysis Period:** {sidebar_start_str} to {sidebar_end_str}")
+        st.sidebar.write(f"**Total Orders:** {total_orders:,}")
+        st.sidebar.write(f"**Data Points:** {data_points:,}")
 
-    # ============================================================
-    # 🆕 SHOW MEMORY USAGE (Enterprise Monitoring)
-    # ============================================================
-    try:
-        memory_mb = get_memory_usage()
-        st.sidebar.caption(f"💾 Memory: {memory_mb:.0f} MB")
-    except:
-        pass
+        # ============================================================
+        # 🆕 SHOW MEMORY USAGE (Enterprise Monitoring)
+        # ============================================================
+        try:
+            memory_mb = get_memory_usage()
+            st.sidebar.caption(f"💾 Memory: {memory_mb:.0f} MB")
+        except:
+            pass
 
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
+        st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
     # ============================================================
     # 🔗 SERVICE STATUS (Compact Expander)
