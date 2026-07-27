@@ -1372,63 +1372,77 @@ def main():
     mobile_ui.optimize_for_mobile()
     mobile_ui.show_mobile_welcome()
 
-    # Header
+    # Header - Logo always visible, Date Range only in Dry Ice Mode
     start_date_str = display_start_date.strftime('%B %d, %Y')
     end_date_str = display_end_date.strftime('%B %d, %Y')
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # ============================================================
-        # 🎯 LOGO + TITLE + PERIOD IN ONE RECTANGULAR CONTAINER
-        # ============================================================
         logo_path = "assets/browns_logo.jpg"
-        start_date_str = display_start_date.strftime('%B %d, %Y')
-        end_date_str = display_end_date.strftime('%B %d, %Y')
-        
-        # Get base64 image
         logo_src = get_image_base64(logo_path) if os.path.exists(logo_path) else ""
         
-        # SINGLE HTML BLOCK - everything inside
-        st.markdown(f"""
-        <div style="
-            background: white;
-            border-radius: 20px;
-            padding: 30px 20px 25px 20px;
-            margin: 10px 0 20px 0;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(0, 0, 0, 0.06);
-            text-align: center;
-        ">
-            <div style="margin-bottom: 12px;">
-                <img src="{logo_src}" style="height: 80px; width: auto; object-fit: contain; border-radius: 8px;">
-            </div>
+        # ============================================================
+        # LOGO + TITLE (Always visible in ALL modes)
+        # ============================================================
+        st.markdown(
+            f"""
             <div style="
-                font-size: 28px;
-                font-weight: 700;
-                color: #1a237e;
-                letter-spacing: -0.3px;
-                margin-bottom: 8px;
+                background: white;
+                border-radius: 20px;
+                padding: 30px 20px 25px 20px;
+                margin: 10px 0 5px 0;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+                border: 1px solid rgba(0, 0, 0, 0.06);
+                text-align: center;
             ">
-                MarginIQ Ops Suite
+                <div style="margin-bottom: 12px;">
+                    <img src="{logo_src}" style="height: 80px; width: auto; object-fit: contain; border-radius: 8px;">
+                </div>
+                <div style="
+                    font-size: 28px;
+                    font-weight: 700;
+                    color: #1a237e;
+                    letter-spacing: -0.3px;
+                    margin-bottom: 8px;
+                ">
+                    MarginIQ Ops Suite
+                </div>
             </div>
-            <div style="
-                height: 2px;
-                background: linear-gradient(90deg, transparent, #1565c0, transparent);
-                margin: 10px auto 14px auto;
-                width: 60%;
-            "></div>
-            <div style="
-                display: inline-block;
-                font-size: 28px;
-                font-weight: 700;
-                color: #1a237e;
-                letter-spacing: -0.3px;
-                padding: 0;
-            ">
-                {start_date_str} – {end_date_str}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # ============================================================
+        # DATE RANGE (Only in Dry Ice Mode)
+        # ============================================================
+        if mode == "❄️ Dry Ice Mode":
+            st.markdown(
+                f"""
+                <div style="
+                    text-align: center;
+                    margin-top: -5px;
+                    margin-bottom: 15px;
+                ">
+                    <div style="
+                        height: 2px;
+                        background: linear-gradient(90deg, transparent, #1565c0, transparent);
+                        margin: 0 auto 14px auto;
+                        width: 60%;
+                    "></div>
+                    <div style="
+                        display: inline-block;
+                        font-size: 28px;
+                        font-weight: 700;
+                        color: #1a237e;
+                        letter-spacing: -0.3px;
+                        padding: 0;
+                    ">
+                        {start_date_str} – {end_date_str}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
     # ============================================================
     # SECTION 5: REPORT GENERATOR (Container Style)
