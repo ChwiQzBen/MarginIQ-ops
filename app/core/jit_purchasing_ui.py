@@ -174,11 +174,9 @@ def _pick_supplier(item_suppliers: pd.DataFrame, name_col: str, lead_time_col: O
 def render_jit_purchasing_tab(constants=None) -> None:
     st.markdown("## 🔄 JIT Purchasing")
     st.caption(
-        "Reorder points and suggested order quantities from real demand history and "
-        "lead times. Items without a supplier row yet show up as 'No supplier data' "
-        "instead of being hidden -- add a row to app/data/suppliers.csv, or to the "
-        "Google Sheets SUPPLIERS tab if you have edit rights there, and they join "
-        "the rest automatically on next refresh."
+    "📊 Reorder recommendations based on current stock, historical demand, "
+    "and supplier lead times. Add supplier data (lead time, MOQ, cost) to "
+    "get full ordering recommendations."
     )
 
     col1, col2 = st.columns([1, 4])
