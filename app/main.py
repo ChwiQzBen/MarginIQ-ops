@@ -1790,6 +1790,10 @@ def main():
     # ============================================================
     if mode == "📦 All Items Mode":
         # ============================================================
+        # 🖼️ BANNER IMAGE - RENDER FIRST
+        st.image("assets/all_items_dashboard.jpg", use_container_width=True)
+        
+        # ============================================================
         # 🎨 ALL ITEMS THEME + MODE BADGE
         st.markdown("""
         <style>
@@ -1844,9 +1848,12 @@ def main():
     # CONTAINER 2: BCPOS MODE (Cheese Production)
     # ============================================================
     elif mode == "🧀 BCPOS Mode":
+        # 🖼️ BANNER IMAGE - RENDER FIRST
+        st.image("assets/bcpos_dashboard.jpg", use_container_width=True)
+        
         from app.core.cheese_data_access import get_weighted_milk_cost_for_date
         todays_milk_cost = get_weighted_milk_cost_for_date(datetime.today().date())
-        render_bcpos_mode(  # ← Change to this
+        render_bcpos_mode(
             supabase_client=init_supabase(),
             has_permission=has_permission,
             milk_cost_per_liter=todays_milk_cost if todays_milk_cost > 0 else 45.0,

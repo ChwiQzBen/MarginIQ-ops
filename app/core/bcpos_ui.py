@@ -72,7 +72,7 @@ def render_bcpos_mode(supabase_client=None,
     
     <div class="mode-badge-bcpos">🧀 BCPOS MODE</div>
     """, unsafe_allow_html=True)
-    
+
     # Called unconditionally, before the sub-mode radio, so correctness
     # doesn't depend on Manufacturing happening to run first — belt and
     # suspenders alongside the idempotent init inside each sub-mode.
