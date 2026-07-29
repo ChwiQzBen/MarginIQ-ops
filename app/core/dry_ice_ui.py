@@ -33,6 +33,16 @@ from core.performance import paginate_dataframe, compress_dataframe
 from core.error_handling import logger
 from app.core.realtime_forecast import get_realtime_forecaster
 
+if hasattr(st, "fragment"):
+    fragment = st.fragment
+elif hasattr(st, "experimental_fragment"):
+    fragment = st.experimental_fragment
+else:
+    def fragment(func=None, **kwargs):
+        if func is None:
+            return lambda f: f
+        return func
+
 DRY_ICE_TAB_REQUIREMENTS = {
     "📊 Order Analysis": "view_analytics",
     "🔮 Demand Forecast": "view_forecasts",
@@ -294,7 +304,7 @@ def _render_order_analysis_tab(ctx: DryIceContext) -> None:
 # ============================================================
 # 🔮 DEMAND FORECAST
 # ============================================================
-@st.fragment
+@fragment
 def _render_model_selection_config() -> None:
     """Model checkbox grid + Select All / Deselect All / Update Models.
     Fragment-scoped so toggling a checkbox only reruns this expander, not
@@ -1003,7 +1013,7 @@ def _render_recommendations_tab(ctx: DryIceContext) -> None:
 # ============================================================
 # 🛠️ MAINTENANCE
 # ============================================================
-@st.fragment
+@fragment
 def _render_maintenance_tab(ctx: DryIceContext) -> None:
     mobile_ui = ctx.mobile_ui
 
@@ -1171,7 +1181,7 @@ def _render_maintenance_tab(ctx: DryIceContext) -> None:
 # ============================================================
 # 📜 TRANSACTION HISTORY
 # ============================================================
-@st.fragment
+@fragment
 def _render_transaction_history_tab(ctx: DryIceContext) -> None:
     mobile_ui, inventory_tracker = ctx.mobile_ui, ctx.inventory_tracker
 
