@@ -245,12 +245,18 @@ def _render_order_analysis_tab(ctx: DryIceContext) -> None:
             with st.container():
                 st.markdown("#### 📊 Order Pattern Analysis")
                 order_counts = df['Order_Quantity_kg'].value_counts().sort_index()
-                most_common_order = order_counts.idxmax()
-                st.metric("Most common order size", f"{most_common_order:.0f} kg", f"{order_counts.max()} orders")
+                if not order_counts.empty:
+                    most_common_order = order_counts.idxmax()
+                    st.metric("Most common order size", f"{most_common_order:.0f} kg", f"{order_counts.max()} orders")
+                else:
+                    st.metric("Most common order size", "N/A", "No orders")
 
                 df['Weekday'] = df['Date'].dt.day_name()
                 weekday_pattern = df.groupby('Weekday')['Order_Quantity_kg'].count().sort_values(ascending=False)
-                st.metric("Busiest day", weekday_pattern.index[0], f"{weekday_pattern.iloc[0]} orders")
+                if not weekday_pattern.empty:
+                    st.metric("Busiest day", weekday_pattern.index[0], f"{weekday_pattern.iloc[0]} orders")
+                else:
+                    st.metric("Busiest day", "N/A", "0 orders")
 
         with insights_cols[1]:
             with st.container():
