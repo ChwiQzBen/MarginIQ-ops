@@ -51,6 +51,31 @@ def _style_map(styler, func, subset=None):
     return styler.applymap(func, subset=subset)
 
 
+@st.cache_data(show_spinner=False, ttl=1800)
+def _cached_scenario_analysis(_scenario_fn, _df, _ensemble_forecast, fingerprint):
+    """Underscore-prefixed args are excluded from hashing (funcs/df/array are
+    expensive or impossible to hash meaningfully); `fingerprint` is the real key."""
+    return _scenario_fn(_ensemble_forecast, _df)
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _cached_monthly_cost_data(_df, fingerprint, _constants, avg_sublimation):
+    df_monthly = _df.copy()
+    df_monthly['Date'] = pd.to_datetime(df_monthly['Date'])
+    df_monthly['Month'] = df_monthly['Date'].dt.to_period('M').dt.strftime('%Y-%b')
+
+    monthly_data = df_monthly.groupby('Month').agg(
+        product_cost_ksh=('Total_Cost', 'sum'),
+        transport_cost_ksh=('Transport_Cost', 'sum'),
+        product_volume_kg=('Order_Quantity_kg', 'sum')
+    ).reset_index()
+
+    monthly_data['holding_cost_ksh'] = (monthly_data['product_volume_kg'] / 2) * _constants.HOLDING_RATE * _constants.PRICE_PER_KG
+    monthly_data['sublimation_loss_ksh'] = monthly_data['product_volume_kg'] * avg_sublimation * _constants.PRICE_PER_KG
+    monthly_data['sublimation_loss_kg'] = monthly_data['product_volume_kg'] * avg_sublimation
+
+    monthly_data['Month_dt'] = pd.to_datetime(monthly_data['Month'], format='%Y-%b')
+    return monthly_data.sort_values('Month_dt')
+
 @dataclass
 class DryIceContext:
     """Everything the tabs need, computed once in main() and passed in."""
@@ -81,11 +106,14 @@ class DryIceContext:
     annual_holding_cost: float
     annual_sublimation_loss: float
     total_annual_spending: float
-    # --- added for 🔮 Demand Forecast (cross-module functions from main.py) ---
     create_ensemble_forecast_fn: Optional[Callable] = None
     create_scenario_analysis_fn: Optional[Callable] = None
     render_scenario_analysis_fn: Optional[Callable] = None
     render_scenario_summary_fn: Optional[Callable] = None
+    fig_ensemble: Optional[Any] = None
+    ensemble_forecast_values: Optional[Any] = None
+    model_forecasts: Optional[dict] = None
+    backtest_accuracy: Optional[float] = None
     transactions: list = field(default_factory=list)
 
 def render_dry_ice_mode(ctx: DryIceContext,
@@ -266,6 +294,69 @@ def _render_order_analysis_tab(ctx: DryIceContext) -> None:
 # ============================================================
 # 🔮 DEMAND FORECAST
 # ============================================================
+@st.fragment
+def _render_model_selection_config() -> None:
+    """Model checkbox grid + Select All / Deselect All / Update Models.
+    Fragment-scoped so toggling a checkbox only reruns this expander, not
+    the rest of the Demand Forecast tab or the whole app. 'Update Models'
+    is the one action here that still needs a FULL app rerun — it changes
+    st.session_state.selected_models, which main.py's cached
+    get_forecast_data() depends on — so it explicitly escalates with
+    st.rerun() (default scope="app")."""
+    st.markdown("#### Select Active Models")
+    st.caption("Choose which models to use in the ensemble forecast")
+    st.caption("ℹ️ NeuralProphet is currently disabled (dependency unavailable)")
+
+    model_options = {
+        'Prophet': True,
+        'ARIMA': True,
+        'LSTM': True,
+        'Monte Carlo': True,
+        'XGBoost': True,
+        'LightGBM': True,
+        'RandomForest': True,
+    }
+
+    selected_models = []
+    cols = st.columns(4)
+
+    for idx, (model_name, default) in enumerate(model_options.items()):
+        with cols[idx % 4]:
+            if st.checkbox(
+                model_name,
+                value=default,
+                key=f"tab_model_{model_name}",
+                help=f"Enable/disable {model_name} model"
+            ):
+                internal_name = model_name.lower().replace(' ', '_')
+                selected_models.append(internal_name)
+
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("✅ Select All", use_container_width=True, key="select_all_models"):
+            for model in model_options.keys():
+                st.session_state[f"tab_model_{model}"] = True
+
+    with col2:
+        if st.button("❌ Deselect All", use_container_width=True, key="deselect_all_models"):
+            for model in model_options.keys():
+                st.session_state[f"tab_model_{model}"] = False
+
+    with col3:
+        if st.button("🔄 Update Models", use_container_width=True, type="primary", key="update_models_btn"):
+            st.session_state.selected_models = selected_models
+            st.session_state.selected_models_count = len(selected_models)
+            st.cache_data.clear()
+
+            if selected_models:
+                st.success(f"✅ Active models: {len(selected_models)}/7")
+                st.info(f"📋 {', '.join([m.replace('_', ' ').title() for m in selected_models])}")
+            else:
+                st.warning("⚠️ No models selected! Using all models as fallback.")
+
+            st.rerun()
+
+
 def _render_demand_forecast_tab(ctx: DryIceContext) -> None:
     df = ctx.df
 
@@ -284,60 +375,11 @@ def _render_demand_forecast_tab(ctx: DryIceContext) -> None:
     st.markdown("### 🔮 30-Day Demand Forecast")
 
     # ============================================================
-    # MODEL SELECTION CONTROLS
+    # MODEL SELECTION CONTROLS (fragment-scoped — see
+    # _render_model_selection_config, defined above this function)
     # ============================================================
     with st.expander("⚙️ Model Configuration", expanded=False):
-        st.markdown("#### Select Active Models")
-        st.caption("Choose which models to use in the ensemble forecast")
-        st.caption("ℹ️ NeuralProphet is currently disabled (dependency unavailable)")
-
-        model_options = {
-            'Prophet': True,
-            'ARIMA': True,
-            'LSTM': True,
-            'Monte Carlo': True,
-            'XGBoost': True,
-            'LightGBM': True,
-            'RandomForest': True,
-        }
-
-        selected_models = []
-        cols = st.columns(4)
-
-        for idx, (model_name, default) in enumerate(model_options.items()):
-            with cols[idx % 4]:
-                if st.checkbox(
-                    model_name,
-                    value=default,
-                    key=f"tab_model_{model_name}",
-                    help=f"Enable/disable {model_name} model"
-                ):
-                    internal_name = model_name.lower().replace(' ', '_')
-                    selected_models.append(internal_name)
-
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            if st.button("✅ Select All", use_container_width=True, key="select_all_models"):
-                for model in model_options.keys():
-                    st.session_state[f"tab_model_{model}"] = True
-                
-        with col2:
-            if st.button("❌ Deselect All", use_container_width=True, key="deselect_all_models"):
-                for model in model_options.keys():
-                    st.session_state[f"tab_model_{model}"] = False
-                
-        with col3:
-            if st.button("🔄 Update Models", use_container_width=True, type="primary", key="update_models_btn"):
-                st.session_state.selected_models = selected_models
-                st.session_state.selected_models_count = len(selected_models)
-                st.cache_data.clear()
-
-                if selected_models:
-                    st.success(f"✅ Active models: {len(selected_models)}/7")
-                    st.info(f"📋 {', '.join([m.replace('_', ' ').title() for m in selected_models])}")
-                else:
-                    st.warning("⚠️ No models selected! Using all models as fallback.")
-
+        _render_model_selection_config()
 
     st.markdown("---")
 
@@ -357,16 +399,21 @@ def _render_demand_forecast_tab(ctx: DryIceContext) -> None:
 
     st.markdown("---")
 
-    with st.spinner("Generating ensemble forecast with 7 models..."):
-        # Aggregate multi-invoice daily data before forecasting
+    with st.spinner("Loading forecast results..."):
+        # Aggregate multi-invoice daily data — still needed below for the backtest split
         daily_df_tab2 = df.set_index('Date').resample('D')['Order_Quantity_kg'].sum().reset_index()
 
         # Pull the model selection saved by the "Update Models" button
         selected_for_forecast = st.session_state.get('selected_models', None)
 
-        fig_ensemble, ensemble_forecast_values, model_forecasts, backtest_accuracy = ctx.create_ensemble_forecast_fn(
-            daily_df_tab2, 30, selected_models=selected_for_forecast
-        )
+        # main.py already ran this exact ensemble (same resampled df, same
+        # selected_models from session_state) inside its cached get_forecast_data().
+        # Reuse that result instead of recomputing all 7 models again here, uncached,
+        # on every rerun of this tab.
+        fig_ensemble = ctx.fig_ensemble
+        ensemble_forecast_values = ctx.ensemble_forecast_values
+        model_forecasts = ctx.model_forecasts
+        backtest_accuracy = ctx.backtest_accuracy
 
         ensemble_forecast = ensemble_forecast_values
 
@@ -482,7 +529,13 @@ def _render_demand_forecast_tab(ctx: DryIceContext) -> None:
         # ============================================================
         # Scenario Analysis
         # ============================================================
-        scenario_results = ctx.create_scenario_analysis_fn(ensemble_forecast, df)
+        scenario_fingerprint = (
+            len(df), df['Date'].max(),
+            tuple(round(float(v), 4) for v in ensemble_forecast) if ensemble_forecast is not None else None,
+        )
+        scenario_results = _cached_scenario_analysis(
+            ctx.create_scenario_analysis_fn, df, ensemble_forecast, scenario_fingerprint
+        )
 
         scenario_fig = ctx.render_scenario_analysis_fn(scenario_results, 30)
         st.plotly_chart(scenario_fig, use_container_width=True)
@@ -787,22 +840,11 @@ def _render_cost_optimization_tab(ctx: DryIceContext) -> None:
     st.markdown("---")
     st.markdown("#### 📈 Monthly Cost Trends (KSh)")
 
-    df_monthly = df.copy()
-    df_monthly['Date'] = pd.to_datetime(df_monthly['Date'])
-    df_monthly['Month'] = df_monthly['Date'].dt.to_period('M').dt.strftime('%Y-%b')
-
-    monthly_data = df_monthly.groupby('Month').agg(
-        product_cost_ksh=('Total_Cost', 'sum'),
-        transport_cost_ksh=('Transport_Cost', 'sum'),
-        product_volume_kg=('Order_Quantity_kg', 'sum')
-    ).reset_index()
-
-    monthly_data['holding_cost_ksh'] = (monthly_data['product_volume_kg'] / 2) * constants.HOLDING_RATE * constants.PRICE_PER_KG
-    monthly_data['sublimation_loss_ksh'] = monthly_data['product_volume_kg'] * ctx.avg_sublimation * constants.PRICE_PER_KG
-    monthly_data['sublimation_loss_kg'] = monthly_data['product_volume_kg'] * ctx.avg_sublimation
-
-    monthly_data['Month_dt'] = pd.to_datetime(monthly_data['Month'], format='%Y-%b')
-    monthly_data = monthly_data.sort_values('Month_dt')
+    cost_fingerprint = (
+        len(df), df['Date'].max(), round(float(df['Order_Quantity_kg'].sum()), 2),
+        constants.HOLDING_RATE, constants.PRICE_PER_KG, round(ctx.avg_sublimation, 6),
+    )
+    monthly_data = _cached_monthly_cost_data(df, cost_fingerprint, constants, ctx.avg_sublimation)
 
     cost_cols = ['product_cost_ksh', 'transport_cost_ksh', 'holding_cost_ksh', 'sublimation_loss_ksh']
     colors = ['#3498db', '#e74c3c', '#f39c12', '#2ecc71']
@@ -912,19 +954,6 @@ def _render_recommendations_tab(ctx: DryIceContext) -> None:
     for i, rec in enumerate(recommendations, 1):
         st.markdown(f"{i}. {rec}")
 
-    # Medium-term improvements
-    st.markdown("#### 🔄 Medium-term Improvements")
-
-    medium_term = [
-        "**Demand forecasting:** Implement automated forecasting for better demand planning",
-        "**Supplier negotiations:** Leverage consistent ordering patterns for better transport rates",
-        "**Container optimization:** Standardize orders to maximize container utilization",
-        "**Inventory tracking:** Implement real-time inventory monitoring system"
-    ]
-
-    for i, rec in enumerate(medium_term, 1):
-        st.markdown(f"{i}. {rec}")
-
     # Key metrics to monitor
     st.markdown("#### 📊 Key Metrics to Monitor")
 
@@ -970,169 +999,11 @@ def _render_recommendations_tab(ctx: DryIceContext) -> None:
 
     st.dataframe(metrics_to_track, use_container_width=True, height=250, hide_index=True)
 
-    # Implementation timeline
-    st.markdown("#### 📅 Implementation Timeline")
-
-    timeline_data = pd.DataFrame({
-        'Week': ['Week 1-2', 'Week 3-4', 'Month 2', 'Month 3', 'Ongoing'],
-        'Activities': [
-            'Calculate EOQ and safety stock, Set reorder points',
-            'Implement new ordering policy, Train staff',
-            'Monitor performance, Adjust parameters',
-            'Evaluate results, Optimize further',
-            'Regular review and adjustment'
-        ],
-        'Expected Outcome': [
-            'Clear inventory targets established',
-            'New system operational',
-            'Initial cost savings realized',
-            'Full optimization achieved',
-            'Continuous improvement'
-        ]
-    })
-
-    st.dataframe(timeline_data, use_container_width=True, height=220, hide_index=True)
-
-    st.markdown("#### 🌍 Long-term Improvements")
-    st.markdown("""
-    1. **Supply Chain Diversification**
-    - Develop relationships with multiple dry ice suppliers
-    - Establish backup transportation routes
-
-    2. **Sustainability Initiatives**
-    - Implement CO₂ capture system from fermentation processes
-    - Explore renewable energy-powered production
-
-    3. **Automated Replenishment System**
-    - IoT sensors with real-time inventory tracking
-    - AI-driven predictive ordering
-
-    4. **Carbon Credit Program**
-    - Monetize emission reductions from optimized logistics
-    - Achieve carbon-neutral certification by 2027
-    """)
-
-    # Key metrics dashboard
-    st.subheader("📊 Performance Targets")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Supplier Risk Reduction", "40%", "15% achieved")
-    with col2:
-        st.metric("Stockout Reduction", "30%", "8% improvement")
-    with col3:
-        st.metric("Carbon Footprint", "-15%", "-5% YoY")
-    with col4:
-        st.metric("Automation Level", "95%", "25% current")
-
-    # Interactive Plotly timeline
-    st.subheader("⏱️ Implementation Timeline")
-    fig_timeline = go.Figure()
-    fig_timeline.add_trace(go.Scatter(
-        x=[0, 1, 2, 3],
-        y=[1, 2, 3, 4],
-        mode='markers+lines+text',
-        marker=dict(size=16, color='#3498db'),
-        line=dict(color='#2c3e50', width=4),
-        text=['Supplier Program', 'IoT Pilot', 'CO₂ Study', 'Full Rollout'],
-        textposition='top center',
-        name='Milestones'
-    ))
-    fig_timeline.update_layout(
-        height=mobile_ui.get_chart_height(),
-        showlegend=False,
-        yaxis=dict(showticklabels=False, title=None),
-        xaxis=dict(
-            title='Implementation Quarters',
-            tickmode='array',
-            tickvals=[0, 1, 2, 3],
-            ticktext=['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026+']
-        ),
-        plot_bgcolor='rgba(0,0,0,0)'
-    )
-    fig_timeline = mobile_ui.optimize_chart_for_mobile(fig_timeline)
-    st.plotly_chart(fig_timeline, use_container_width=True,
-        config=mobile_ui.get_mobile_chart_config())
-
-    # Roadmap dataframe with original content
-    roadmap_data = {
-        'Timeline': ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026+'],
-        'Initiative': [
-            'Supplier diversification program',
-            'IoT sensor pilot in 2 facilities',
-            'CO₂ capture feasibility study',
-            'Full automation rollout'
-        ],
-        'Target': [
-            'Reduce supplier risk by 40%',
-            'Cut stockouts by 30%',
-            'Decrease carbon footprint by 15%',
-            'Achieve 95% automated ordering'
-        ]
-    }
-
-    roadmap = pd.DataFrame(roadmap_data)
-
-    # Styled dataframe with highlighting
-    styled_roadmap = _style_map(
-        roadmap.style, lambda x: 'font-weight: bold', subset=['Timeline']
-    ).set_properties(**{'background-color': '#f8f9fa', 'color': '#212529'})
-
-    st.dataframe(
-        styled_roadmap,
-        use_container_width=True,
-        height=200,
-        hide_index=True
-    )
-
-    # Expandable implementation details
-    with st.expander("🔍 Detailed Implementation Plans", expanded=False):
-        selected_quarter = st.selectbox(
-            "Select Quarter",
-            roadmap['Timeline'].tolist(),
-            key='quarter_selector'
-        )
-        filtered_info = roadmap[roadmap['Timeline'] == selected_quarter]
-
-        st.subheader(f"{selected_quarter} Implementation Plan")
-        st.markdown(f"**Initiative:** {filtered_info['Initiative'].values[0]}")
-        st.markdown(f"**Target:** {filtered_info['Target'].values[0]}")
-
-        # Quarter-specific details
-        if selected_quarter == 'Q3 2025':
-            st.markdown("""
-            - Identify 3 new dry ice suppliers
-            - Negotiate backup transportation contracts
-            - Develop risk assessment framework
-            """)
-            st.progress(30)
-        elif selected_quarter == 'Q4 2025':
-            st.markdown("""
-            - Install IoT sensors in Midwest facilities
-            - Develop predictive ordering algorithms
-            - Train operations team on new system
-            """)
-            st.progress(15)
-        elif selected_quarter == 'Q1 2026':
-            st.markdown("""
-            - Technical assessment of CO₂ capture systems
-            - Calculate ROI for sustainability investments
-            - Partner identification for implementation
-            """)
-            st.progress(5)
-        else:
-            st.markdown("""
-            - System-wide automation deployment
-            - Process optimization across all facilities
-            - Integration with finance systems
-            """)
-            st.progress(0)
-
-        st.caption(f"Current status of {selected_quarter} initiatives")
-
 
 # ============================================================
 # 🛠️ MAINTENANCE
 # ============================================================
+@st.fragment
 def _render_maintenance_tab(ctx: DryIceContext) -> None:
     mobile_ui = ctx.mobile_ui
 
@@ -1300,6 +1171,7 @@ def _render_maintenance_tab(ctx: DryIceContext) -> None:
 # ============================================================
 # 📜 TRANSACTION HISTORY
 # ============================================================
+@st.fragment
 def _render_transaction_history_tab(ctx: DryIceContext) -> None:
     mobile_ui, inventory_tracker = ctx.mobile_ui, ctx.inventory_tracker
 

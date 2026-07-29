@@ -1917,6 +1917,10 @@ def main():
             create_scenario_analysis_fn=create_scenario_analysis,
             render_scenario_analysis_fn=render_scenario_analysis,
             render_scenario_summary_fn=render_scenario_summary,
+            fig_ensemble=fig_ensemble,
+            ensemble_forecast_values=ensemble_forecast_values,
+            model_forecasts=model_forecasts,
+            backtest_accuracy=backtest_accuracy,
             transactions=st.session_state.transactions,
         )
         render_dry_ice_mode(dry_ice_ctx, has_permission=has_permission)
