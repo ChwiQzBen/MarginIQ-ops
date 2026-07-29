@@ -1,9 +1,6 @@
 from datetime import datetime
 import streamlit as st
 import traceback
-import uuid
-import json
-import gc
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -12,19 +9,8 @@ from plotly.subplots import make_subplots
 from scipy.stats import norm
 import sys
 import os
-import xgboost as xgb
-import lightgbm as lgb
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pathlib import Path
-import sqlite3
 import math
-from scipy import stats
-from statsmodels.tsa.arima.model import ARIMA
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_percentage_error
 from core.analyzer import DryIceAnalyzer
 from core.inventory_tracker import InventoryTracker
 from core.mobile_interface import MobileInterface
@@ -32,17 +18,13 @@ from core.smart_alerts import SmartAlerts
 from core.predictive_maintenance import PredictiveMaintenance
 from core.system_integrations import SystemIntegrations
 from core.report_generator import ReportGenerator
-from app.core.advanced_analytics import AdvancedAnalytics, create_advanced_analytics_tab
+from app.core.advanced_analytics import AdvancedAnalytics
 from app.core.google_sheet_reader import GoogleSheetReader
-from app.core.advanced_forecasting_v2 import AdvancedForecaster
-from app.core.external_factors import ExternalFactors
-from app.core.realtime_forecast import get_realtime_forecaster
-from app.core.decision_engine import InventorySnapshot, InventoryDecisionEngine, generate_ai_insights
+from app.core.decision_engine import InventorySnapshot, InventoryDecisionEngine
 from app.core.bcpos_ui import render_bcpos_mode
-from app.core.commercial_ui import render_commercial_mode
 from app.core.all_items_ui import render_all_items_mode, AllItemsContext
 from app.core.dry_ice_ui import render_dry_ice_mode, DryIceContext
-from app.core.theme import THEME, kpi_card, inject_global_css
+from app.core.theme import inject_global_css
 from app.core.dashboard_home import DashboardContext, render_dashboard_home
 from app.core.supabase_client import init_supabase
 from app.core.pdf_reports import generate_enhanced_pdf_report
@@ -54,10 +36,8 @@ from app.core.forecasting import (
       render_scenario_summary,
   )
 from app.core.dry_ice_data_access import (
-    USE_SUPABASE,
     fix_order_date,
     init_db,
-    clear_transactions_from_db,
     add_transaction_to_db,
     get_transactions_from_db,
     get_current_stock_from_db,
@@ -68,65 +48,34 @@ from app.core.dry_ice_data_access import (
 )
 from app.core.rbac import (
     Permission,
-    ROLE_PERMISSIONS,
-    ALL_ITEMS_TAB_REQUIREMENTS,
-    DRY_ICE_TAB_REQUIREMENTS,
-    get_current_role,
     has_permission,
-    filter_tabs,
-    get_user_email_safe,
     log_access_denied,
 )
-import warnings
-from supabase import create_client, Client
 from core.error_handling import (
     logger,
     safe_operation,
-    safe_db_operation,
-    validate_quantity,
     validate_date,
     validate_stock_sufficient,
     ServiceStatusManager,
     safe_number_input,
-    safe_text_input,
-    retry_on_failure,
-    log_performance,
     DatabaseError,
     ValidationError,
-    ServiceUnavailableError
 )
 # External imports for error handling
 from requests.exceptions import Timeout, ConnectionError
 from core.performance import (
-    Paginator,
-    paginate_dataframe,
-    LazyLoader,
     optimize_session_state,
     compress_dataframe,
-    optimize_table_display,
-    free_memory,
     get_memory_usage
 )
 # Add these to your existing imports
 from core.security import (
     AuthManager,
     AuditLogger,
-    DataEncryption,
-    SessionManager,
-    ApiKeyManager,
-    require_auth,
-    require_permission,
-    require_role,
-    secure_endpoint,
-    render_security_dashboard
 )
 from core.advanced_security import (
-    PasswordManager,
     TwoFactorAuth,
-    RateLimiter,
     rate_limited,
-    SSOAuth,
-    UserManager,
     PasswordReset
 )
 # 🔐 SECURITY AVAILABILITY FLAG
@@ -589,13 +538,11 @@ def main():
 
     # Get today's date once
     today = datetime.today()
-    try:
-        start_year = int(selected_period.split('/')[0])
-    except (ValueError, IndexError):
-        st.error("Invalid analysis period format. Using current year as fallback.")
-        start_year = today.year
 
-    # 1. Parse the start year from the selected period string (e.g., '2025/2026' -> 2025)
+    # Parse the start year from the selected period string (e.g., '2025/2026' -> 2025).
+    # (This used to run twice in a row with two different fallback behaviors — the
+    # first attempt's "use current year" fallback was always immediately
+    # overwritten or halted by the second, identical parse. Dead code.)
     try:
         start_year = int(selected_period.split('/')[0])
     except (ValueError, IndexError):
@@ -621,19 +568,24 @@ def main():
         get_historical_orders_from_db.clear()
         st.session_state.db_initialized = True
         print("✅ Database initialized")
+
     
-    # THIS LINE IS MODIFIED to use the selected period from the dropdown
-    df = get_historical_orders_from_db(st.session_state.selected_period)
+    def _load_dry_ice_analysis_data():
+        d = get_historical_orders_from_db(st.session_state.selected_period)
+        if d.empty:
+            st.info(f"No order data found for the {st.session_state.selected_period} period. Record a receipt in the sidebar to begin the analysis.")
+            d = pd.DataFrame(columns=['Date', 'Order_Quantity_kg', 'Containers_Used', 'Transport_Cost', 'Total_Cost'])
+        a = DryIceAnalyzer(d)
+        k = a.calculate_kpis(period=st.session_state.selected_period)
+        return d, a, k
 
-    # ADD THIS BLOCK to handle cases where a new period has no data yet
-    if df.empty:
-        st.info(f"No order data found for the {st.session_state.selected_period} period. Record a receipt in the sidebar to begin the analysis.")
-        # Create an empty df with correct columns to prevent errors downstream
+    if mode in ("📦 All Items Mode", "❄️ Dry Ice Mode"):
+        df, analyzer, kpis = _load_dry_ice_analysis_data()
+    else:
         df = pd.DataFrame(columns=['Date', 'Order_Quantity_kg', 'Containers_Used', 'Transport_Cost', 'Total_Cost'])
+        analyzer = None
+        kpis = {}
 
-    # The rest of your analysis code will now work on the period-specific 'df'
-    analyzer = DryIceAnalyzer(df)
-    kpis = analyzer.calculate_kpis(period=st.session_state.selected_period)
     # Initialize advanced analytics
     analytics = AdvancedAnalytics() 
 
@@ -804,7 +756,11 @@ def main():
             st.info("💡 Please check your Google Sheets configuration and try again.")
             return get_sample_inventory_data(), None
 
-    inventory_items, stock_df = load_inventory_data()
+    
+    if mode != "🧀 BCPOS Mode":
+        inventory_items, stock_df = load_inventory_data()
+    else:
+        inventory_items, stock_df = {}, None
     
     # Initialize session state for transactions
     if 'last_loaded_period' not in st.session_state or st.session_state.last_loaded_period != st.session_state.selected_period:
@@ -952,10 +908,9 @@ def main():
         total_annual_spending = annual_product_cost + annual_transport_cost + annual_holding_cost + annual_sublimation_loss
 
         # --- 5. Generate Other Charts and Visualizations ---
-        # The original Prophet forecast_data object for chart in Tab 1
-        forecast_data = analyzer.forecast_demand()
+        
         fig_orders, fig_cost_overview, fig_forecast = create_enhanced_charts(
-            df=df, analyzer=analyzer, kpis=kpis, forecast_data=forecast_data, safety_stock=safety_stock
+            df=df, analyzer=analyzer, kpis=kpis, forecast_data=None, safety_stock=safety_stock
         )
     else:
         fig_ensemble = None
@@ -1507,7 +1462,12 @@ def main():
                 )
                 
                 report_path = None
-                
+
+                if analyzer is None:
+                    df, analyzer, kpis = _load_dry_ice_analysis_data()
+                if not inventory_items:
+                    inventory_items, stock_df = load_inventory_data()
+
                 if report_type == "❄️ Dry Ice Report (Legacy)":
                     if df is not None and not df.empty:
                         report = ReportGenerator(analyzer=analyzer, df=df)
@@ -1828,10 +1788,6 @@ def main():
         st.stop()
 
     # ============================================================
-    # CONTAINER 1: ALL ITEMS MODE (5 TABS)
-    # Get the current mode
-    mode = st.session_state.get('inventory_mode', '📦 All Items Mode')
-
     if mode == "📦 All Items Mode":
         # ============================================================
         # 🎨 ALL ITEMS THEME + MODE BADGE
