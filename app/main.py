@@ -1751,31 +1751,20 @@ def main():
         """, unsafe_allow_html=True)
 
     
-# ============================================================
-    # 🏠 DASHBOARD HOME (KPI grid, Decision Center, Insights &
-    # Scenarios, ROI Summary) — see app/core/dashboard_home.py
     # ============================================================
+    # 🏠 DASHBOARD HOME (KPI grid + Decision Center)
     if mode == "❄️ Dry Ice Mode":
         dashboard_ctx = DashboardContext(
             kpis=kpis,
             eoq=eoq,
             eoq_monthly_orders=eoq_monthly_orders,
             safety_stock=safety_stock,
-            reorder_point=reorder_point,
-            backtest_accuracy=backtest_accuracy,
-            ensemble_forecast_values=ensemble_forecast_values,
-            monthly_demand_input=monthly_demand_input,
-            demand_stddev_input=demand_stddev_input,
-            sublimation_factor=sublimation_factor,
-            z_score=z_score,
             annual_transport_savings=annual_transport_savings,
-            annual_holding_cost=annual_holding_cost,
             total_annual_spending=total_annual_spending,
             current_monthly_orders=current_monthly_orders,
             inventory_tracker=inventory_tracker,
             constants=constants,
             decision=st.session_state.get('decision'),
-            stock_df=stock_df,
         )
         render_dashboard_home(dashboard_ctx)
 
