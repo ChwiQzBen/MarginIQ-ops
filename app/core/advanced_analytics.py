@@ -1464,15 +1464,15 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                     if results and results.get('items_df') is not None and not results['items_df'].empty:
                         st.success(f"✅ Analysis complete: {results['summary']['total_items']} items analyzed")
                         
-                        # Show summary metrics
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
+                        ## Show summary metrics
+                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+                        with res_col1:
                             st.metric("📦 Total Items", results['summary']['total_items'])
-                        with col2:
+                        with res_col2:
                             st.metric("💰 Total Value", f"KSh {results['summary']['total_value']:,.0f}")
-                        with col3:
+                        with res_col3:
                             st.metric("🔴 Critical", results['summary']['critical_items'])
-                        with col4:
+                        with res_col4:
                             st.metric("🟡 Low Stock", results['summary']['low_stock_items'])
                         
                         # Show inventory status distribution
