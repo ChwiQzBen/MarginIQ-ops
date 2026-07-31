@@ -44,7 +44,7 @@ import streamlit as st
 import pandas as pd
 
 from app.core.google_sheet_reader import GoogleSheetReader
-from app.core.suppliers_data_access import load_suppliers_csv, SUPPLIERS_COLUMNS
+from app.core.suppliers_data_access import load_suppliers_csv, SUPPLIERS_COLUMNS, DEFAULT_SUPPLIERS_CSV_PATH
 from app.core.demand_utils import compute_daily_demand_for_item, detect_column, ITEM_NAME_KEYWORDS, is_junk_value
 from app.core.jit_purchasing import Supplier, compute_jit_status, STATUS_SORT_ORDER
 
@@ -99,22 +99,39 @@ def _load_jit_data():
 def _load_suppliers():
     """Suppliers from both sources, merged. Neither source being present
     is a normal state (empty DataFrame, not an error) -- see module
-    docstring."""
-    csv_df = _normalize_suppliers_df(load_suppliers_csv())
+    docstring.
+
+    Also returns a diagnostics dict so render_jit_purchasing_tab() can show
+    *why* the result came back empty when it does -- load_suppliers_csv()
+    silently returns an empty DataFrame with no error if the CSV isn't at
+    DEFAULT_SUPPLIERS_CSV_PATH, which is indistinguishable in the UI from
+    genuinely having no supplier data yet.
+    """
+    raw_csv_df = load_suppliers_csv()
+    csv_df = _normalize_suppliers_df(raw_csv_df)
 
     gsheet = GoogleSheetReader()
-    sheet_df = pd.DataFrame()
-    if gsheet.authenticate():
-        sheet_df = _normalize_suppliers_df(gsheet.get_suppliers())
+    gsheet_authenticated = gsheet.authenticate()
+    raw_sheet_df = gsheet.get_suppliers() if gsheet_authenticated else pd.DataFrame()
+    sheet_df = _normalize_suppliers_df(raw_sheet_df)
+
+    diagnostics = {
+        'csv_path': str(DEFAULT_SUPPLIERS_CSV_PATH),
+        'csv_path_exists': DEFAULT_SUPPLIERS_CSV_PATH.exists(),
+        'csv_raw_rows': len(raw_csv_df),
+        'csv_raw_columns': list(raw_csv_df.columns),
+        'gsheet_authenticated': gsheet_authenticated,
+        'gsheet_raw_rows': len(raw_sheet_df),
+        'gsheet_raw_columns': list(raw_sheet_df.columns),
+    }
 
     if csv_df.empty and sheet_df.empty:
-        return pd.DataFrame(columns=SUPPLIERS_COLUMNS)
+        return pd.DataFrame(columns=SUPPLIERS_COLUMNS), diagnostics
     if csv_df.empty:
-        return sheet_df
+        return sheet_df, diagnostics
     if sheet_df.empty:
-        return csv_df
-    return pd.concat([csv_df, sheet_df], ignore_index=True)
-
+        return csv_df, diagnostics
+    return pd.concat([csv_df, sheet_df], ignore_index=True), diagnostics
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_supplier_links():
@@ -183,7 +200,7 @@ def render_jit_purchasing_tab(constants=None) -> None:
 
     with st.spinner("Loading stock and demand data..."):
         stock_df, check_out_df = _load_jit_data()
-    suppliers_df = _load_suppliers()
+    suppliers_df, supplier_diagnostics = _load_suppliers()
 
     if stock_df.empty:
         st.info("No stock data available. Check your Google Sheets connection.")
@@ -214,6 +231,18 @@ def render_jit_purchasing_tab(constants=None) -> None:
             "⚠️ No supplier data found yet. Add supplier information (lead time, "
             "MOQ, cost) to get full ordering recommendations."
         )
+        with st.expander("🔍 Why is this empty?", expanded=True):
+            d = supplier_diagnostics
+            st.markdown(f"**CSV** — expected at `{d['csv_path']}`")
+            st.caption(f"File exists at that path: {'✅ yes' if d['csv_path_exists'] else '❌ no'}")
+            if d['csv_path_exists']:
+                st.caption(f"Rows loaded: {d['csv_raw_rows']} · Columns: {d['csv_raw_columns']}")
+            else:
+                st.caption("This is the most common cause — the CSV exists somewhere in the repo, just not at this exact path.")
+            st.markdown("**Google Sheets**")
+            st.caption(f"Authenticated: {'✅ yes' if d['gsheet_authenticated'] else '❌ no'} · Rows loaded: {d['gsheet_raw_rows']}")
+            if d['gsheet_raw_rows'] > 0:
+                st.caption(f"Columns: {d['gsheet_raw_columns']}")
 
     item_code_col = detect_column(stock_df, ITEM_NAME_KEYWORDS)
     item_label_col = 'ITEM_NAME' if 'ITEM_NAME' in stock_df.columns else None

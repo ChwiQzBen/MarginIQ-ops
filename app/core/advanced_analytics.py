@@ -1510,14 +1510,13 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                     else:
                         st.warning("⚠️ No results generated. Please check your inventory data.")
     
+    selected_item = None
     with col2:
-        # Item selector - handle both DataFrame and dict
         item_list = []
         if inventory_items:
             if isinstance(inventory_items, dict):
                 item_list = list(inventory_items.keys())
             elif isinstance(inventory_items, pd.DataFrame):
-                # Try to find the item column
                 item_cols = ['ITEM_NAME', 'Item', 'item_name', 'Name', 'name', 'PRODUCT_NAME']
                 for col in item_cols:
                     if col in inventory_items.columns:
@@ -1525,40 +1524,40 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                         break
                 if not item_list:
                     item_list = inventory_items.iloc[:, 0].unique().tolist()
-        
+
         if item_list:
             selected_item = st.selectbox(
                 "Analyze Specific Item",
                 sorted(item_list)
             )
-            if selected_item:
-                st.info(f"📊 Analyzing: **{selected_item}**")
-                
-                if inventory_items and isinstance(inventory_items, dict):
-                    details = inventory_items.get(selected_item, {})
-                    if details:
-                        # FIX: Use HTML layout instead of nested columns
-                        stock = details.get('stock', 0)
-                        reorder = details.get('reorder', 0)
-                        price = details.get('price', 0)
-                        unit = details.get('unit', 'kg')
-                        
-                        st.markdown(f"""
-                        <div style="display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap;">
-                            <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-                                <div style="font-size: 12px; color: #888;">📦 Stock</div>
-                                <div style="font-size: 20px; font-weight: 600;">{stock} {unit}</div>
-                            </div>
-                            <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-                                <div style="font-size: 12px; color: #888;">📋 Reorder</div>
-                                <div style="font-size: 20px; font-weight: 600;">{reorder} {unit}</div>
-                            </div>
-                            <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-                                <div style="font-size: 12px; color: #888;">💰 Price</div>
-                                <div style="font-size: 20px; font-weight: 600;">KSh {price:.2f}</div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
         else:
             st.info("Select an item from the list to analyze")
+
+    if selected_item:
+        st.info(f"📊 Analyzing: **{selected_item}**")
+
+        if inventory_items and isinstance(inventory_items, dict):
+            details = inventory_items.get(selected_item, {})
+            if details:
+                stock = details.get('stock', 0)
+                reorder = details.get('reorder', 0)
+                price = details.get('price', 0)
+                unit = details.get('unit', 'kg')
+
+                st.markdown(f"""
+                <div style="display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size: 12px; color: #888;">📦 Stock</div>
+                        <div style="font-size: 20px; font-weight: 600;">{stock} {unit}</div>
+                    </div>
+                    <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size: 12px; color: #888;">📋 Reorder</div>
+                        <div style="font-size: 20px; font-weight: 600;">{reorder} {unit}</div>
+                    </div>
+                    <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size: 12px; color: #888;">💰 Price</div>
+                        <div style="font-size: 20px; font-weight: 600;">KSh {price:.2f}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
