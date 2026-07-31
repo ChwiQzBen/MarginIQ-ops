@@ -1207,12 +1207,8 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
             st.markdown("### 🔮 Demand Forecast for All Items")
 
             if not check_out_df.empty and 'DATE' in check_out_df.columns:
-                # Find item column
-                item_col = None
-                for col in check_out_df.columns:
-                    if 'item' in col.lower() or 'product' in col.lower() or 'name' in col.lower():
-                        item_col = col
-                        break
+                item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+                item_label_col = detect_column(check_out_df, ITEM_LABEL_KEYWORDS)
 
                 # Find quantity column
                 qty_col = None
@@ -1223,12 +1219,18 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
 
                 if item_col and qty_col:
                     items_with_history = check_out_df[item_col].dropna().unique().tolist()
-                    items_with_history = [x for x in items_with_history if x != '' and x != 'nan']
+                    items_with_history = [x for x in items_with_history if not is_junk_value(x)]
 
                     if items_with_history:
+                        code_to_label = (
+                            build_code_to_label_map(check_out_df, item_col, item_label_col)
+                            if item_label_col else {}
+                        )
+
                         selected_item = st.selectbox(
                             "Select Item for Demand Forecast",
                             sorted(items_with_history),
+                            format_func=lambda code: code_to_label.get(code, code),
                             key="forecast_item"
                         )
 
@@ -1264,8 +1266,9 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                                                         st.metric("🎯 Forecast Accuracy", f"{100-accuracy*100:.1f}%")
 
                                                     with st.expander("🔬 View Model Performance"):
-                                                        for model_name, daily_avg in model_forecasts.items():
-                                                            st.metric(model_name, f"{daily_avg:.1f} units/day")
+                                                        for model_name, stats in model_forecasts.items():
+                                                            if model_name != 'External Factors' and isinstance(stats, dict):
+                                                                st.metric(model_name, f"{stats['avg']:.1f} units/day")
                                                 else:
                                                     st.warning("Could not generate forecast for this item.")
                                         else:
