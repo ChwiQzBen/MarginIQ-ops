@@ -1253,6 +1253,23 @@ class AdvancedAnalytics:
 # ============================================================
 # STREAMLIT INTEGRATION
 # ============================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_detect_anomalies(_analytics, df: pd.DataFrame, target_col: str, confidence_threshold: float):
+    """Cached wrapper around AdvancedAnalytics.detect_anomalies. The leading
+    underscore on _analytics excludes it from Streamlit's cache-key hashing
+    (it holds an IsolationForest instance, which isn't hashable), so the
+    cache key is based on df content + target_col + threshold only.
+
+    Without this, both the anomaly-count check and the "View Anomaly
+    Details" expander below re-ran the Isolation Forest fit plus the O(n)
+    Python-loop pattern-break/spike detection from scratch on every single
+    script rerun of All Items mode -- not only when this tab was actually
+    visible, since Streamlit executes every st.tabs()/st.expander() body on
+    every rerun regardless of what's currently shown on screen.
+    """
+    return _analytics.detect_anomalies(df, target_col, confidence_threshold=confidence_threshold)
+
+
 def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame, 
                                   inventory_items: dict = None, stock_df: pd.DataFrame = None):
     """Create a Streamlit tab for advanced analytics"""
@@ -1280,8 +1297,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
         active_items = len(inventory_items)
     
     # ============================================================
-# FIX 2: CALCULATE FORECAST ACCURACY
-# ============================================================
+    # FIX 2: CALCULATE FORECAST ACCURACY
     forecast_accuracy = 0
     accuracy_message = "Needs analysis"
 
@@ -1332,11 +1348,12 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
     
     # ============================================================
     # FIX 3: DETECT ANOMALIES
-    # ============================================================
+
     anomaly_count = 0
+    anomalies = []
     if df is not None and not df.empty and len(df) >= 5:
         try:
-            anomalies = analytics.detect_anomalies(df, 'Order_Quantity_kg', confidence_threshold=0.90)
+            anomalies = _cached_detect_anomalies(analytics, df, 'Order_Quantity_kg', 0.90)
             anomaly_count = len(anomalies)
         except:
             anomaly_count = 0
@@ -1378,13 +1395,11 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
     
     # ============================================================
     # ANOMALY DETAILS - Show detailed breakdown
-    # ============================================================
     if anomaly_count > 0:
         with st.expander(f"🔍 View {anomaly_count} Anomaly Details", expanded=False):
-            # Get anomalies again to display details
+            # Reuse the (cached) anomalies list computed above instead of
+            # re-running the Isolation Forest fit a second time.
             try:
-                anomalies = analytics.detect_anomalies(df, 'Order_Quantity_kg', confidence_threshold=0.90)
-                
                 # Count by type
                 type_counts = {}
                 for anomaly in anomalies:
