@@ -1452,64 +1452,8 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
     # Analysis options
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🚀 Run Full Analysis", type="primary"):
-            if not inventory_items:
-                st.warning("⚠️ No inventory data available. Please load inventory from Google Sheets first.")
-            else:
-                with st.spinner("Analyzing all items..."):
-                    # Run full analysis
-                    results = analytics.analyze_all_items(inventory_items)
-                    
-                    # Display results
-                    if results and results.get('items_df') is not None and not results['items_df'].empty:
-                        st.success(f"✅ Analysis complete: {results['summary']['total_items']} items analyzed")
-                        
-                        ## Show summary metrics
-                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                        with res_col1:
-                            st.metric("📦 Total Items", results['summary']['total_items'])
-                        with res_col2:
-                            st.metric("💰 Total Value", f"KSh {results['summary']['total_value']:,.0f}")
-                        with res_col3:
-                            st.metric("🔴 Critical", results['summary']['critical_items'])
-                        with res_col4:
-                            st.metric("🟡 Low Stock", results['summary']['low_stock_items'])
-                        
-                        # Show inventory status distribution
-                        st.markdown("### 📊 Inventory Status Distribution")
-                        status_df = results['items_df']['Status'].value_counts().reset_index()
-                        status_df.columns = ['Status', 'Count']
-                        st.dataframe(status_df, use_container_width=True, hide_index=True)
-                        
-                        # Show all items with status
-                        st.markdown("### 📋 All Items Analysis")
-                        st.dataframe(
-                            results['items_df'],
-                            use_container_width=True,
-                            height=400,
-                            column_config={
-                                'Status': st.column_config.TextColumn('Status'),
-                                'Status Color': st.column_config.TextColumn(''),
-                                'Days of Supply': st.column_config.NumberColumn('Days of Supply', format="%.1f"),
-                                'Stock Value': st.column_config.NumberColumn('Stock Value', format="KSh %.0f")
-                            }
-                        )
-                        
-                        # Show recommendations
-                        if results['recommendations']:
-                            st.markdown("### 💡 Recommendations")
-                            for rec in results['recommendations']:
-                                if '✅' in rec:
-                                    st.success(rec)
-                                elif '⚠️' in rec or '🔴' in rec:
-                                    st.error(rec)
-                                elif '🟡' in rec or '🔵' in rec:
-                                    st.warning(rec)
-                                else:
-                                    st.info(rec)
-                    else:
-                        st.warning("⚠️ No results generated. Please check your inventory data.")
-    
+        run_analysis = st.button("🚀 Run Full Analysis", type="primary")
+
     selected_item = None
     with col2:
         item_list = []
@@ -1532,6 +1476,60 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
             )
         else:
             st.info("Select an item from the list to analyze")
+
+    if run_analysis:
+        if not inventory_items:
+            st.warning("⚠️ No inventory data available. Please load inventory from Google Sheets first.")
+        else:
+            with st.spinner("Analyzing all items..."):
+                st.session_state['all_items_analysis_results'] = analytics.analyze_all_items(inventory_items)
+
+    results = st.session_state.get('all_items_analysis_results')
+    if results and results.get('items_df') is not None and not results['items_df'].empty:
+        st.success(f"✅ Analysis complete: {results['summary']['total_items']} items analyzed")
+
+        # Full-width now — each metric has room for the whole KSh figure
+        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+        with res_col1:
+            st.metric("📦 Total Items", results['summary']['total_items'])
+        with res_col2:
+            st.metric("💰 Total Value", f"KSh {results['summary']['total_value']:,.0f}")
+        with res_col3:
+            st.metric("🔴 Critical", results['summary']['critical_items'])
+        with res_col4:
+            st.metric("🟡 Low Stock", results['summary']['low_stock_items'])
+
+        st.markdown("### 📊 Inventory Status Distribution")
+        status_df = results['items_df']['Status'].value_counts().reset_index()
+        status_df.columns = ['Status', 'Count']
+        st.dataframe(status_df, use_container_width=True, hide_index=True)
+
+        st.markdown("### 📋 All Items Analysis")
+        st.dataframe(
+            results['items_df'],
+            use_container_width=True,
+            height=400,
+            column_config={
+                'Status': st.column_config.TextColumn('Status'),
+                'Status Color': st.column_config.TextColumn(''),
+                'Days of Supply': st.column_config.NumberColumn('Days of Supply', format="%.1f"),
+                'Stock Value': st.column_config.NumberColumn('Stock Value', format="KSh %.0f")
+            }
+        )
+
+        if results['recommendations']:
+            st.markdown("### 💡 Recommendations")
+            for rec in results['recommendations']:
+                if '✅' in rec:
+                    st.success(rec)
+                elif '⚠️' in rec or '🔴' in rec:
+                    st.error(rec)
+                elif '🟡' in rec or '🔵' in rec:
+                    st.warning(rec)
+                else:
+                    st.info(rec)
+    elif run_analysis:
+        st.warning("⚠️ No results generated. Please check your inventory data.")
 
     if selected_item:
         st.info(f"📊 Analyzing: **{selected_item}**")
