@@ -182,8 +182,7 @@ def visual_inventory_grid(items, columns=3):
             </div>
             """
 
-            # Use st.html() instead of st.markdown()
-            st.components.v1.html(html_content)
+            st.markdown(html_content, unsafe_allow_html=True)
 
 
 def get_sample_inventory_data():
@@ -507,8 +506,9 @@ def inventory_heatmap(inventory_items, title="Inventory Heat Map", columns=6):
             </div>
             """
 
-            # Use st.html() instead of st.markdown()
-            st.components.v1.html(html_content)
+            # st.markdown() instead of st.components.v1.html() -- same
+            # per-item iframe cost issue as visual_inventory_grid() above.
+            st.markdown(html_content, unsafe_allow_html=True)
 
     # Display summary statistics
     st.markdown("---")
