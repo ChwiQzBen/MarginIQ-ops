@@ -1,0 +1,1594 @@
+ITEM_SERIAL,SUPPLIER_NAME,LEAD_TIME_DAYS,MIN_ORDER_QTY,UNIT_COST,RELIABILITY_SCORE,PREFERRED
+CHEM-001,Dairy Consulting Ltd,30,1,,0.9,True
+CHEM-001,Reliable Food & Logistics Ltd,5,1,,0.86,False
+CHEM-001,Wagtech Africa Ltd,30,1,,0.88,False
+CHEM-002,Neliz Chemicals Ltd,19,1,,0.94,True
+CHEM-003,Ecolab,30,1,,0.87,True
+CHEM-005,Abadare Chemical Ltd,21,1,,0.92,True
+CHEM-007,Abadare Chemical Ltd,27,1,,0.99,True
+CHEM-007,Neliz Chemicals Ltd,30,1,,0.87,False
+CHEM-008,Kobian Ltd,30,1,,0.94,True
+CHEM-009,Ecolab ,5,1,,0.86,True
+CHEM-010,Abadare Chemical Ltd,5,1,,0.86,True
+CHEM-012,Neliz Chemicals Ltd,5,1,,0.86,True
+CHEM-014,Kobian Ltd,5,1,,0.86,True
+CHEM-014,Zenco  System,5,1,,0.86,False
+CHEM-015,Global Slacker Enterprises Ltd,16,1,,0.99,True
+CHEM-017,Abadare Chemical Ltd,12,1,,0.99,True
+CHEM-017,PAC Experts Ltd.,30,1,,0.89,False
+CHEM-018,Ecolab,30,1,,0.92,True
+CHEM-018,Neliz Chemicals Ltd,5,1,,0.86,False
+CHEM-019,Naivas,5,1,,0.86,True
+CHEM-020,Odex Chemical Ltd,30,1,,0.88,True
+CHEM-022,Abadare Chemical Ltd,30,1,,0.89,True
+CHEM-022,PAC Experts Ltd.,5,1,,0.86,False
+CHEM-022,Science lab Ltd,5,1,,0.86,False
+CHEM-023,Naivas,5,1,,0.86,True
+CHEM-024,Abadare Chemical Ltd,5,1,,0.86,True
+CHEM-025,Blueflame Energy Ltd,5,1,,0.86,True
+CHEM-026,Nairobi Java House,5,1,,0.86,False
+CHEM-026,Naivas,22,1,,0.99,True
+CHEM-027,Blueflame Energy Ltd,5,1,,0.86,True
+CHEM-030,Chemoquip Ltd,5,1,,0.86,True
+CHEM-030,Dairy Consulting Ltd,5,1,,0.86,False
+CHEM-031,Dairy Consulting Ltd,30,1,,0.87,True
+CHEM-032,Dairy Consulting Ltd,5,1,,0.86,True
+CHEM-033,Dairy Consulting Ltd,5,1,,0.86,True
+CHEM-035,Ecolab,30,1,,0.89,True
+CHEM-036,Stephen Kiragu,5,1,,0.86,True
+CHEM-037,Rentokil Ltd,5,1,,0.86,True
+CHEM-039,Naivas,30,1,,0.93,True
+CHEM-040,Carrefour,5,1,,0.86,True
+CHEM-041,Neliz Chemicals Ltd,30,1,,0.94,True
+CHEM-045,Ecolab,30,1,,0.99,False
+CHEM-045,Ecolab ,5,1,,0.86,False
+CHEM-045,Neliz Chemicals Ltd,16,1,,0.99,True
+CHEM-049,Brandables Ltd,21,1,,0.99,True
+CHEM-051,Science lab Ltd,5,1,,0.86,True
+CHEM-053,Dairy Consulting Ltd,30,1,,0.99,True
+CHEM-055,Abadare Chemical Ltd,30,1,,0.94,True
+CHEM-055,PAC Experts Ltd.,28,1,,0.87,False
+CHEM-057,Abadare Chemical Ltd,5,1,,0.86,True
+CHEM-067,Abadare Chemical Ltd,30,1,,0.87,True
+CHEM-070,Global Slacker Enterprises Ltd,5,1,,0.86,False
+CHEM-070,Neliz Chemicals Ltd,30,1,,0.93,False
+CHEM-070,Nemchem,23,1,,0.96,True
+CHEM-071,IMCD Kenya Ltd,30,1,,0.88,True
+CHEM-072,Dairy Consulting Ltd,30,1,,0.93,True
+CHEM-073,Naivas,30,1,,0.89,True
+CHEM-075,Dairy Consulting Ltd,5,1,,0.86,True
+CHEM-076,Chemoquip Ltd,5,1,,0.86,True
+CHEM-079,Ecolab,30,1,,0.89,True
+CHEM-081,Rentokil Ltd,5,1,,0.86,True
+CHEM-082,Chandaria Industries Ltd,24,1,,0.93,False
+CHEM-082,Global Slacker Enterprises Ltd,14,1,,0.99,True
+CHEM-082,Nemchem,24,1,,0.96,False
+CHEM-085,Ecolab,5,1,,0.86,True
+CHEM-091,Kobian Ltd,30,1,,0.99,True
+CHEM-094,Neliz Chemicals Ltd,30,1,,0.87,False
+CHEM-094,Nemchem,19,1,,0.9,True
+CHEM-094,Rentokil Ltd,30,1,,0.9,False
+CHEM-097,Neliz Chemicals Ltd,21,1,,0.99,True
+CHEM-098,Neliz Chemicals Ltd,18,1,,0.99,True
+CHEM-100,Abadare Chemical Ltd,21,1,,0.92,True
+CHEM-101,254 Brewing ,5,1,,0.86,True
+CLTR-002,Promaco,30,1,,0.92,True
+CLTR-005,Promaco,30,1,,0.87,True
+CLTR-007,Promaco,21,1,,0.99,True
+CLTR-010,Promaco,5,1,,0.86,True
+CLTR-014,Promaco,18,1,,0.99,True
+CLTR-016,Promaco,30,1,,0.9,True
+CLTR-019,Promaco,16,1,,0.92,True
+CLTR-026,Promaco,23,1,,0.99,True
+CLTR-030,Dairy Consulting Ltd,14,1,,0.87,True
+CLTR-032,Dairy Consulting Ltd,14,1,,0.89,True
+CLTR-035,Decase Chemical Ltd,5,1,,0.86,True
+CLTR-037,Capel Food Ingredients Ltd,5,1,,0.86,False
+CLTR-037,Caremoli,5,1,,0.86,False
+CLTR-037,Dairy Consulting Ltd,30,1,,0.91,True
+CLTR-039,Promaco,30,1,,0.98,True
+CLTR-044,Promaco,22,1,,0.99,True
+CLTR-045,Promaco,28,1,,0.99,True
+CLTR-046,Promaco,21,1,,0.99,True
+CLTR-049,Promaco,30,1,,0.87,True
+CLTR-050,Promaco,8,1,,0.94,True
+CLTR-051,Promaco,30,1,,0.95,True
+CLTR-052,Promaco,30,1,,0.94,True
+CLTR-054,Promaco,30,1,,0.99,True
+CLTR-057,Promaco,30,1,,0.99,True
+CLTR-058,Promaco,16,1,,0.99,True
+CLTR-060,Promaco,30,1,,0.88,True
+CLTR-062,Dairy Consulting Ltd,24,1,,0.99,True
+CLTR-069,Promaco,5,1,,0.86,True
+CLTR-070,Promaco,21,1,,0.89,True
+CLTR-171,Decase Chemical Ltd,25,1,,0.92,True
+FARM-004,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-005,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-010,Sepros Ltd,5,1,,0.86,True
+FARM-012,Market,5,1,,0.86,True
+FARM-013,Limuru Agrovet,5,1,,0.86,False
+FARM-013,Limuru Agrovet Ltd,21,1,,0.87,True
+FARM-013,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-015,Limuru Agrovet,12,1,,0.87,False
+FARM-015,Limuru Agrovet Ltd,10,1,,0.95,True
+FARM-015,Tawa Nutrition Ltd,30,1,,0.87,False
+FARM-018,Limuru Agrovet Ltd,14,1,,0.93,True
+FARM-018,Limururu Agrovet Ltd,1,1,,0.87,False
+FARM-018,Tawa Nutrition Ltd,6,1,,0.87,False
+FARM-020,Limuru Agrovet,5,1,,0.86,True
+FARM-021,Limuru Agrovet,5,1,,0.86,False
+FARM-021,Limuru Agrovet Ltd,20,1,,0.89,True
+FARM-021,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-026,Limuru Agrovet,5,1,,0.86,False
+FARM-026,Limuru Agrovet Ltd,11,1,,0.94,True
+FARM-026,Limururu Agrovet Ltd,1,1,,0.87,False
+FARM-026,Tawa Nutrition Ltd,5,1,,0.86,False
+FARM-030,Joseph Mburu,26,1,,0.9,True
+FARM-036,Limuru Agrovet Ltd,15,1,,0.9,True
+FARM-036,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-037,Hygrotech Ltd,5,1,,0.86,True
+FARM-038,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-041,Limuru Agrovet Ltd,17,1,,0.9,True
+FARM-042,Limuru Agrovet,8,1,,0.87,False
+FARM-042,Limuru Agrovet Ltd,18,1,,0.9,True
+FARM-042,Limururu Agrovet Ltd,1,1,,0.87,False
+FARM-042,Tawa Nutrition Ltd,9,1,,0.87,False
+FARM-046,Limuru Agrovet Ltd,23,1,,0.9,True
+FARM-048,Tawa Nutrition Ltd,5,1,,0.86,True
+FARM-049,Limuru Agrovet,5,1,,0.86,False
+FARM-049,Limuru Agrovet Ltd,18,1,,0.89,True
+FARM-049,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-049,Tawa Nutrition Ltd,5,1,,0.86,False
+FARM-049,Uzuri Foods Ltd,5,1,,0.86,False
+FARM-055,Limuru Agrovet,12,1,,0.87,False
+FARM-055,Limuru Agrovet Ltd,9,1,,0.97,True
+FARM-055,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-055,Tawa Nutrition Ltd,5,1,,0.86,False
+FARM-057,Limuru Agrovet Ltd,13,1,,0.93,True
+FARM-057,Limururu Agrovet Ltd,1,1,,0.87,False
+FARM-057,Tawa Nutrition Ltd,26,1,,0.87,False
+FARM-059,Joseph Mburu,14,1,,0.94,True
+FARM-060,Limuru Agrovet,5,1,,0.86,False
+FARM-060,Limuru Agrovet Ltd,11,1,,0.89,True
+FARM-060,Limururu Agrovet Ltd,1,1,,0.87,False
+FARM-060,Tawa Nutrition Ltd,7,1,,0.88,False
+FARM-064,Tawa Nutrition Ltd,5,1,,0.86,True
+FARM-065,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-065,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-067,Limuru Agrovet,5,1,,0.86,False
+FARM-067,Limuru Agrovet Ltd,25,1,,0.89,True
+FARM-067,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-067,Tawa Nutrition Ltd,13,1,,0.88,False
+FARM-067,Uzuri Foods Ltd,19,1,,0.87,False
+FARM-068,Max Grains Ltd,5,1,,0.86,True
+FARM-084,Limco Ltd,9,1,,0.87,True
+FARM-087,Godson Organic Ltd,30,1,,0.88,True
+FARM-087,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-087,Reliable Food & Logistics Ltd,5,1,,0.86,False
+FARM-090,Ecstacy Ltd,5,1,,0.86,True
+FARM-093,"Everlyne Fresh Fruits, Vegetables & Cereals",4,1,,0.93,True
+FARM-093,Farm to Feed,30,1,,0.88,False
+FARM-093,Johana Greens,5,1,,0.86,False
+FARM-094,Limuru Agrovet Ltd,16,1,,0.9,True
+FARM-098,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-099,Limuru Agrovet Ltd,30,1,,0.87,True
+FARM-100,Limuru Agrovet Ltd,5,1,,0.86,True
+FARM-100,Tawa Nutrition Ltd,5,1,,0.86,False
+FARM-102,Limuru Agrovet Ltd,1,1,,0.87,True
+FARM-107,Limuru Agrovet,5,1,,0.86,False
+FARM-107,Limuru Agrovet Ltd,11,1,,0.88,True
+FARM-107,Limururu Agrovet Ltd,5,1,,0.86,False
+FARM-108,Limuru Agrovet,5,1,,0.86,True
+FARM-108,Limuru Agrovet Ltd,5,1,,0.86,False
+FARM-110,Limuru Agrovet Ltd,5,1,,0.86,True
+INGR-002,Alba nuts,5,1,,0.86,True
+INGR-003,Godson Organic Ltd,5,1,,0.86,True
+INGR-003,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-004,Godson Organic Ltd,5,1,,0.86,True
+INGR-004,Twajenga Ltd,5,1,,0.86,False
+INGR-005,Alvins Heritage Honey,5,1,,0.86,True
+INGR-006,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-006,Carrefour,5,1,,0.86,False
+INGR-007,Adamji Multi Supplies Ltd,30,1,,0.88,True
+INGR-007,Jumbo Spices Ltd,30,1,,0.87,False
+INGR-007,La Vente Enterprises,5,1,,0.86,False
+INGR-008,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-008,La Vente Enterprises,5,1,,0.86,False
+INGR-009,IMCD Kenya Ltd,30,1,,0.96,True
+INGR-009,Naivas,5,1,,0.86,False
+INGR-011,Reliable Food & Logistics Ltd,18,1,,0.99,True
+INGR-012,Chandarana Ltd,30,1,,0.88,False
+INGR-012,Freshtake Ltd,5,1,,0.86,False
+INGR-012,Reliable Food & Logistics Ltd,19,1,,0.99,True
+INGR-013,Reliable Food & Logistics Ltd,30,1,,0.99,True
+INGR-014,Chandaria Industries Ltd,17,1,,0.88,False
+INGR-014,Healthy U,13,1,,0.89,False
+INGR-014,Kentaste,30,1,,0.89,False
+INGR-014,Pristine ,24,1,,0.99,True
+INGR-014,Thermopak Ltd,5,1,,0.86,False
+INGR-016,Nairobi Java House,17,1,,0.91,True
+INGR-017,Puratos Ltd,29,1,,0.99,True
+INGR-017,Skypex Supplies Ltd,30,1,,0.92,False
+INGR-018,Puratos Ltd,16,1,,0.99,True
+INGR-018,Skypex Supplies Ltd,5,1,,0.86,False
+INGR-020,Jess Farm,8,1,,0.89,False
+INGR-020,Josca Farmers World,19,1,,0.87,False
+INGR-020,Juliah Njoki Njau,13,1,,0.99,True
+INGR-020,Limuru Folks,30,1,,0.9,False
+INGR-020,Wandu Farm,5,1,,0.86,False
+INGR-021,Promaco,5,1,,0.86,True
+INGR-022,Arichem Ltd,12,1,,0.91,False
+INGR-022,IMCD Kenya Ltd,22,1,,0.99,True
+INGR-022,Oshwal Flavors,30,1,,0.87,False
+INGR-022,Reucher Africa ,5,1,,0.86,False
+INGR-023,Oshwal Flavors,23,1,,0.99,True
+INGR-027,Brandables Ltd,5,1,,0.86,False
+INGR-027,Naivas,30,1,,0.87,False
+INGR-027,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-027,Tri clovers,30,1,,0.93,True
+INGR-028,Bubanks Ltd,30,1,,0.91,True
+INGR-028,Bubanks ltd,30,1,,0.87,False
+INGR-029,Promaco,5,1,,0.86,True
+INGR-031,IMCD Kenya Ltd,30,1,,0.87,True
+INGR-032,Promaco,27,1,,0.99,True
+INGR-033,Puratos Ltd,30,1,,0.93,True
+INGR-036,Gajroo Ltd,27,1,,0.88,False
+INGR-036,Musty Ltd,5,1,,0.86,False
+INGR-036,NKCC,17,1,,0.99,True
+INGR-036,Wairson Ltd,14,1,,0.87,False
+INGR-037,Decase Chemical Ltd,30,1,,0.87,True
+INGR-037,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-038,Brandables Ltd,30,1,,0.88,False
+INGR-038,Freshtake Ltd,17,1,,0.95,False
+INGR-038,La Vente Enterprises,16,1,,0.99,True
+INGR-038,Max Grains Ltd,5,1,,0.86,False
+INGR-038,Naivas,14,1,,0.9,False
+INGR-038,Reliable Food & Logistics Ltd,30,1,,0.9,False
+INGR-039,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-039,Tri clovers,30,1,,0.94,True
+INGR-040,Big five,5,1,,0.86,True
+INGR-042,Puratos Ltd,26,1,,0.99,True
+INGR-044,Promaco,30,1,,0.87,True
+INGR-046,Pradip Ltd,30,1,,0.99,True
+INGR-047,Kieru,5,1,,0.86,True
+INGR-047,Nutriafrik Foods,5,1,,0.86,False
+INGR-048,Onja Foods,30,1,,0.87,True
+INGR-048,Onja foods,30,1,,0.87,False
+INGR-049,Francis Muhoho,5,1,,0.86,False
+INGR-049,Godson Organic Ltd,30,1,,0.87,True
+INGR-053,Loiren Foods,28,1,,0.97,True
+INGR-055,Max Grains Ltd,13,1,,0.87,False
+INGR-055,Pembe Flour Ltd,8,1,,0.99,True
+INGR-055,Uzuri Foods Ltd,30,1,,0.88,False
+INGR-056,Naivas,5,1,,0.86,False
+INGR-056,Tri clovers,30,1,,0.92,True
+INGR-060,Tri clovers,30,1,,0.95,True
+INGR-065,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-065,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-066,Adamji Multi Supplies Ltd,29,1,,0.99,True
+INGR-067,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-067,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-067,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-068,Adamji Multi Supplies Ltd,30,1,,0.92,True
+INGR-068,Jumbo Spices Ltd,30,1,,0.88,False
+INGR-068,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-070,Adamji Multi Supplies Ltd,30,1,,0.95,True
+INGR-070,Jumbo Spices Ltd,30,1,,0.9,False
+INGR-070,Reliable Food & Logistics Ltd,30,1,,0.88,False
+INGR-072,Carrefour,5,1,,0.86,False
+INGR-072,Homa Lime Ltd,30,1,,0.99,True
+INGR-072,New Westlands Ltd,30,1,,0.9,False
+INGR-072,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-075,Twajenga Ltd,30,1,,0.9,True
+INGR-076,Carrefour,5,1,,0.86,True
+INGR-078,Adamji Multi Supplies Ltd,30,1,,0.88,True
+INGR-078,Pradip Ltd,5,1,,0.86,False
+INGR-079,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-079,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-080,Promaco,5,1,,0.86,True
+INGR-081,Alba nuts,30,1,,0.87,False
+INGR-081,Chome plants nursery,30,1,,0.88,False
+INGR-081,Mark Chome,24,1,,0.9,False
+INGR-081,Samkareange Ltd,27,1,,0.94,True
+INGR-081,Simon Gitau,30,1,,0.87,False
+INGR-081,Simon Kimani,5,1,,0.86,False
+INGR-083,Loiren Foods,30,1,,0.89,True
+INGR-083,Onja foods,5,1,,0.86,False
+INGR-085,Naivas,5,1,,0.86,False
+INGR-085,Tri clovers,25,1,,0.98,True
+INGR-086,Jumbo Spices Ltd,17,1,,0.87,True
+INGR-087,Godson Organic Ltd,30,1,,0.95,True
+INGR-087,Jumbo Spices Ltd,30,1,,0.87,False
+INGR-088,Agventure Ltd,5,1,,0.86,True
+INGR-089,Agventure Ltd,29,1,,0.97,True
+INGR-089,Johana Greens,5,1,,0.86,False
+INGR-090,Pradip Ltd,30,1,,0.88,True
+INGR-090,Topserve Ltd,30,1,,0.87,False
+INGR-093,Coomete Farm,11,1,,0.99,True
+INGR-093,Coomete farm,26,1,,0.91,False
+INGR-093,Farmers Choice,13,1,,0.99,False
+INGR-093,Farmers choice,30,1,,0.92,False
+INGR-093,Ololo Farm,30,1,,0.92,False
+INGR-093,Ramii & Son ,5,1,,0.86,False
+INGR-095,Adamji Multi Supplies Ltd,30,1,,0.96,True
+INGR-095,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-099,Jumbo Spices Ltd,5,1,,0.86,True
+INGR-100,Abadare Chemical Ltd,14,1,,0.99,True
+INGR-100,Neliz Chemicals Ltd,10,1,,0.88,False
+INGR-100,PAC Experts Ltd.,5,1,,0.86,False
+INGR-101,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-101,Jumbo Spices Ltd,30,1,,0.92,True
+INGR-101,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-103,Nairobi Java House,30,1,,0.91,True
+INGR-105,Naivas,5,1,,0.86,True
+INGR-105,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-106,Market,5,1,,0.86,True
+INGR-109,Adamji Multi Supplies Ltd,30,1,,0.87,False
+INGR-109,Reliable Food & Logistics Ltd,30,1,,0.9,True
+INGR-111,Reliable Food & Logistics Ltd,24,1,,0.88,False
+INGR-111,Tri clovers,29,1,,0.99,True
+INGR-112,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-112,Jumbo Spices Ltd,8,1,,0.87,False
+INGR-112,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-113,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-113,Jumbo Spices Ltd,30,1,,0.88,True
+INGR-114,Farm to Feed,5,1,,0.86,True
+INGR-116,Johana Greens,30,1,,0.89,True
+INGR-117,Adamji Multi Supplies Ltd,30,1,,0.89,False
+INGR-117,Jumbo Spices Ltd,16,1,,0.87,False
+INGR-117,Reliable Food & Logistics Ltd,30,1,,0.93,True
+INGR-118,Adamji Multi Supplies Ltd,28,1,,0.88,True
+INGR-118,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-118,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-119,Adamji Multi Supplies Ltd,30,1,,0.92,False
+INGR-119,La Vente Enterprises,5,1,,0.86,False
+INGR-119,Reliable Food & Logistics Ltd,30,1,,0.97,True
+INGR-120,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-120,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-121,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-121,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-121,La Vente Enterprises,5,1,,0.86,False
+INGR-121,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-123,Reliable Food & Logistics Ltd,5,1,,0.86,True
+INGR-124,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-124,Chome plants nursery,30,1,,0.87,False
+INGR-124,Duneve Fresh Farm,5,1,,0.86,False
+INGR-124,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-124,Mark Chome,30,1,,0.88,True
+INGR-126,Naivas,14,1,,0.99,True
+INGR-127,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-127,Bidco Africa,23,1,,0.89,False
+INGR-127,Brandables Ltd,20,1,,0.91,True
+INGR-127,Esolz Ltd,23,1,,0.87,False
+INGR-127,Naivas,5,1,,0.86,False
+INGR-128,Nagara Flour Mills,22,1,,0.99,True
+INGR-129,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-129,Brandables Ltd,5,1,,0.86,False
+INGR-129,Jumbo Spices Ltd,30,1,,0.87,False
+INGR-130,Jumbo Spices Ltd,5,1,,0.86,True
+INGR-131,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-131,Carrefour,5,1,,0.86,False
+INGR-131,Chandarana Ltd,5,1,,0.86,False
+INGR-132,Reliable Food & Logistics Ltd,5,1,,0.86,True
+INGR-134,Adamji Multi Supplies Ltd,30,1,,0.89,True
+INGR-134,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-134,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-136,La Vente Enterprises,5,1,,0.86,False
+INGR-136,Reliable Food & Logistics Ltd,30,1,,0.87,True
+INGR-137,Spice World Ltd,20,1,,0.99,True
+INGR-138,Adamji Multi Supplies Ltd,30,1,,0.96,True
+INGR-138,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-141,Godson Organic Ltd,5,1,,0.86,True
+INGR-142,Alvins Heritage Honey,11,1,,0.99,True
+INGR-142,Thermopak Ltd,5,1,,0.86,False
+INGR-144,Reliable Food & Logistics Ltd,30,1,,0.87,True
+INGR-145,Kapa oil refineries,5,1,,0.86,False
+INGR-145,Naivas,30,1,,0.89,True
+INGR-147,Naivas,26,1,,0.99,True
+INGR-148,Kalonji Online shop,5,1,,0.86,True
+INGR-150,Adamji Multi Supplies Ltd,6,1,,0.87,True
+INGR-150,Brandables Ltd,5,1,,0.86,False
+INGR-150,Carrefour,5,1,,0.86,False
+INGR-150,Naivas,5,1,,0.86,False
+INGR-150,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-151,Twajenga Ltd,5,1,,0.86,True
+INGR-154,Kakuzi Ltd,26,1,,0.97,True
+INGR-154,Orient Enterprises ltd,5,1,,0.86,False
+INGR-155,Max Grains Ltd,14,1,,0.99,True
+INGR-155,Naivas,30,1,,0.97,False
+INGR-155,Zenti Flour,5,1,,0.86,False
+INGR-156,Reliable Food & Logistics Ltd,5,1,,0.86,True
+INGR-157,Reliable Food & Logistics Ltd,5,1,,0.86,True
+INGR-158,Lucy Wambui,5,1,,0.86,True
+INGR-161,Reliable Food & Logistics Ltd,23,1,,0.93,True
+INGR-162,Agventure Ltd,23,1,,0.99,True
+INGR-162,Naivas,30,1,,0.87,False
+INGR-163,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-163,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-165,Dairy Consulting Ltd,30,1,,0.94,True
+INGR-166,Chandarana Ltd,5,1,,0.86,False
+INGR-166,Clean Shelf Supermarkets Ltd,5,1,,0.86,False
+INGR-166,Magunas,5,1,,0.86,False
+INGR-166,Naivas,30,1,,0.89,True
+INGR-167,IMCD Kenya Ltd,5,1,,0.86,False
+INGR-167,Kensalt Ltd,8,1,,0.99,True
+INGR-167,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-168,Jumbo Spices Ltd,30,1,,0.88,True
+INGR-168,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-169,Mjengo Ltd,30,1,,0.93,True
+INGR-169,Naivas,5,1,,0.86,False
+INGR-176,Freshtake Ltd,12,1,,0.87,False
+INGR-176,La Vente Enterprises,5,1,,0.86,False
+INGR-176,Naivas,7,1,,0.89,False
+INGR-176,Reliable Food & Logistics Ltd,18,1,,0.99,True
+INGR-177,Jumbo Spices Ltd,30,1,,0.88,True
+INGR-177,La Vente Enterprises,5,1,,0.86,False
+INGR-177,Reliable Food & Logistics Ltd,30,1,,0.88,False
+INGR-178,Coomete Farm,1,1,,0.87,False
+INGR-178,Farm to Feed,5,1,,0.86,False
+INGR-178,Jumbo Spices Ltd,30,1,,0.91,True
+INGR-178,Reliable Food & Logistics Ltd,30,1,,0.89,False
+INGR-180,Adamji Multi Supplies Ltd,30,1,,0.87,False
+INGR-180,Jumbo Spices Ltd,29,1,,0.87,False
+INGR-180,Reliable Food & Logistics Ltd,30,1,,0.91,True
+INGR-181,Coomete Farm,27,1,,0.88,True
+INGR-181,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-184,Alba nuts,30,1,,0.93,True
+INGR-184,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-187,Naivas,5,1,,0.86,True
+INGR-188,Abadare Chemical Ltd,30,1,,0.87,True
+INGR-188,PAC Experts Ltd.,5,1,,0.86,False
+INGR-193,Chandarana Ltd,5,1,,0.86,True
+INGR-194,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-194,Godson Organic Ltd,25,1,,0.99,True
+INGR-194,Jumbo Spices Ltd,28,1,,0.9,False
+INGR-194,Reliable Food & Logistics Ltd,3,1,,0.87,False
+INGR-195,Johana Greens,5,1,,0.86,True
+INGR-197,Karirana Ltd,5,1,,0.86,True
+INGR-197,Pembe Flour Ltd,5,1,,0.86,False
+INGR-198,Adamji Multi Supplies Ltd,30,1,,0.87,False
+INGR-198,Jumbo Spices Ltd,30,1,,0.87,False
+INGR-198,La Vente Enterprises,5,1,,0.86,False
+INGR-198,Paper House of Kenya,5,1,,0.86,False
+INGR-198,Reliable Food & Logistics Ltd,19,1,,0.99,True
+INGR-199,wajosam,5,1,,0.86,True
+INGR-201,Naivas,22,1,,0.99,True
+INGR-201,Quest Wine Agencies,19,1,,0.89,False
+INGR-201,Silvercity,5,1,,0.86,False
+INGR-202,Adamji Multi Supplies Ltd,15,1,,0.87,True
+INGR-203,Kapidhwaja Impex Ltd.,1,1,,0.87,False
+INGR-203,MRGM,30,1,,0.9,False
+INGR-203,Mwea Pishori,5,1,,0.86,False
+INGR-203,Naivas,21,1,,0.99,True
+INGR-204,Market,5,1,,0.86,True
+INGR-207,Twajenga Ltd,30,1,,0.87,True
+INGR-208,Healthy U,30,1,,0.87,True
+INGR-209,Spice World Ltd,29,1,,0.99,True
+INGR-211,Reliable Food & Logistics Ltd,5,1,,0.86,True
+INGR-212,Reliable Food & Logistics Ltd,19,1,,0.87,True
+INGR-213,Naivas,5,1,,0.86,True
+INGR-214,Wagtech Africa Ltd,30,1,,0.91,True
+INGR-217,Edwin Onyonka Ondari,5,1,,0.86,False
+INGR-217,Johana Greens,30,1,,0.91,True
+INGR-219,Upendo herbs and mineral,30,1,,0.87,True
+INGR-221,Spring Valley Coffee,30,1,,0.87,True
+INGR-223,Jumbo Spices Ltd,5,1,,0.86,True
+INGR-226,Adamji Multi Supplies Ltd,30,1,,0.87,False
+INGR-226,Godson Organic Ltd,30,1,,0.93,True
+INGR-226,Jumbo Spices Ltd,15,1,,0.92,False
+INGR-226,Paper House of Kenya,5,1,,0.86,False
+INGR-226,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-229,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-232,La Vente Enterprises,30,1,,0.9,True
+INGR-232,Naivas,30,1,,0.88,False
+INGR-232,Tri clovers,12,1,,0.87,False
+INGR-233,Adamji Multi Supplies Ltd,30,1,,0.94,False
+INGR-233,New Italycor Ltd,5,1,,0.86,False
+INGR-233,Reliable Food & Logistics Ltd,30,1,,0.98,True
+INGR-234,Adamji Multi Supplies Ltd,5,1,,0.86,False
+INGR-234,Jumbo Spices Ltd,8,1,,0.88,False
+INGR-234,Reliable Food & Logistics Ltd,30,1,,0.92,True
+INGR-238,Alba nuts,30,1,,0.93,True
+INGR-238,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-242,Johana Greens,30,1,,0.89,True
+INGR-244,Johana Greens,5,1,,0.86,True
+INGR-245,Jumbo Spices Ltd,12,1,,0.9,True
+INGR-245,La Vente Enterprises,23,1,,0.88,False
+INGR-245,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-247,Jumbo Spices Ltd,25,1,,0.87,True
+INGR-247,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-247,Twajenga Ltd,30,1,,0.87,False
+INGR-251,Adamji Multi Supplies Ltd,30,1,,0.88,True
+INGR-251,Carrefour,5,1,,0.86,False
+INGR-251,Reliable Food & Logistics Ltd,30,1,,0.87,False
+INGR-253,Adamji Multi Supplies Ltd,21,1,,0.87,False
+INGR-253,Naivas,30,1,,0.89,True
+INGR-253,Reliable Food & Logistics Ltd,30,1,,0.89,False
+INGR-254,Duneve Fresh Farm,5,1,,0.86,False
+INGR-254,Edwin Onyonka Ondari,5,1,,0.86,False
+INGR-254,Johana Greens,30,1,,0.92,True
+INGR-254,Lucy Wambui,5,1,,0.86,False
+INGR-254,Market,9,1,,0.87,False
+INGR-254,Nyamakima,5,1,,0.86,False
+INGR-255,Johana Greens,5,1,,0.86,True
+INGR-258,Brandables Ltd,5,1,,0.86,False
+INGR-258,Freshtake Ltd,5,1,,0.86,False
+INGR-258,La Vente Enterprises,18,1,,0.95,False
+INGR-258,Reliable Food & Logistics Ltd,27,1,,0.98,True
+INGR-259,Douglas Gichuru,5,1,,0.86,False
+INGR-259,Duneve Fresh Farm,11,1,,0.99,True
+INGR-259,"Everlyne Fresh Fruits, Vegetables & Cereals",28,1,,0.99,False
+INGR-259,Farm to Feed,30,1,,0.92,False
+INGR-259,Johana Greens,5,1,,0.86,False
+INGR-259,Lucy Wambui,4,1,,0.87,False
+INGR-259,Millicent Njoki Wanyoike,30,1,,0.92,False
+INGR-260,Duneve Fresh Farm,30,1,,0.89,False
+INGR-260,"Everlyne Fresh Fruits, Vegetables & Cereals",8,1,,0.87,False
+INGR-260,Farm to Feed,7,1,,0.99,True
+INGR-260,Farm to feed,15,1,,0.89,False
+INGR-260,Johana Greens,26,1,,0.93,False
+INGR-260,Market,5,1,,0.86,False
+INGR-261,Duneve Fresh Farm,16,1,,0.99,True
+INGR-261,Elizabeth Tabu,10,1,,0.91,False
+INGR-261,"Everlyne Fresh Fruits, Vegetables & Cereals",6,1,,0.95,False
+INGR-261,Farm to Feed,30,1,,0.89,False
+INGR-261,Johana Greens,12,1,,0.89,False
+INGR-261,Lucy Wambui,6,1,,0.88,False
+INGR-261,Morris Kirema Kinoti,13,1,,0.95,False
+INGR-261,Rehema Farm,5,1,,0.86,False
+INGR-262,Johana Greens,30,1,,0.89,True
+INGR-263,Annstella Njeri,27,1,,0.92,True
+INGR-263,Kakuzi Ltd,30,1,,0.88,False
+INGR-265,BSM Gloceries,5,1,,0.86,False
+INGR-265,Duneve Fresh Farm,5,1,,0.86,False
+INGR-265,Farm to Feed,30,1,,0.98,True
+INGR-265,Johana Greens,5,1,,0.86,False
+INGR-266,Duneve Fresh Farm,22,1,,0.93,False
+INGR-266,Evergreen,5,1,,0.86,False
+INGR-266,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-266,Farm to Feed,15,1,,0.99,True
+INGR-266,Farm to feed,5,1,,0.86,False
+INGR-266,Johana Greens,11,1,,0.93,False
+INGR-266,Joseph Mutuku Muthama,5,1,,0.87,False
+INGR-267,Duneve Fresh Farm,5,1,,0.86,False
+INGR-267,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-267,Farm to Feed,7,1,,0.99,True
+INGR-267,Farm to feed,30,1,,0.89,False
+INGR-267,Johana Greens,30,1,,0.89,False
+INGR-268,Duneve Fresh Farm,30,1,,0.89,False
+INGR-268,Evergreen,5,1,,0.86,False
+INGR-268,"Everlyne Fresh Fruits, Vegetables & Cereals",8,1,,0.87,False
+INGR-268,Farm to Feed,17,1,,0.99,True
+INGR-268,Farm to feed,15,1,,0.89,False
+INGR-268,Johana Greens,30,1,,0.87,False
+INGR-268,Limuru Agrovet Ltd,5,1,,0.86,False
+INGR-268,Lucy Wambui,23,1,,0.88,False
+INGR-268,Market,5,1,,0.88,False
+INGR-269,Duneve Fresh Farm,30,1,,0.87,False
+INGR-269,Farm to Feed,30,1,,0.87,False
+INGR-269,Johana Greens,20,1,,0.99,True
+INGR-270,Duneve Fresh Farm,10,1,,0.99,True
+INGR-270,"Everlyne Fresh Fruits, Vegetables & Cereals",18,1,,0.87,False
+INGR-270,Farm to Feed,18,1,,0.99,False
+INGR-270,Johana Greens,6,1,,0.87,False
+INGR-270,Lucy Wambui,5,1,,0.86,False
+INGR-270,Market,5,1,,0.86,False
+INGR-270,Rehema Farm,5,1,,0.86,False
+INGR-271,Coomete Farm,19,1,,0.88,True
+INGR-271,Duneve Fresh Farm,5,1,,0.86,False
+INGR-271,Market,5,1,,0.86,False
+INGR-272,715413316,5,1,,0.86,False
+INGR-272,Cash sale,5,1,,0.86,False
+INGR-272,Chome plants nursery,5,1,,0.86,False
+INGR-272,Duneve Fresh Farm,5,1,,0.86,False
+INGR-272,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-272,Mark Chome,26,1,,0.99,True
+INGR-272,Nancy Cherono Chebole,30,1,,0.87,False
+INGR-273,BSM Gloceries,8,1,,0.89,False
+INGR-273,Coomete Farm,5,1,,0.86,False
+INGR-273,Duneve Fresh Farm,12,1,,0.91,False
+INGR-273,Evergreen,3,1,,0.87,False
+INGR-273,Farm to Feed,10,1,,0.99,True
+INGR-273,Farm to feed,23,1,,0.88,False
+INGR-273,Johana Greens,30,1,,0.87,False
+INGR-273,Lucy Wambui,5,1,,0.86,False
+INGR-274,Farm to Feed,30,1,,0.88,False
+INGR-274,Johana Greens,21,1,,0.95,True
+INGR-275,Adamji Multi Supplies Ltd,5,1,,0.86,True
+INGR-276,Duneve Fresh Farm,30,1,,0.89,False
+INGR-276,"Everlyne Fresh Fruits, Vegetables & Cereals",30,1,,0.87,False
+INGR-276,Farm to Feed,22,1,,0.99,False
+INGR-276,Johana Greens,6,1,,0.99,True
+INGR-277,Duneve Fresh Farm,30,1,,0.9,False
+INGR-277,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-277,Farm to Feed,16,1,,0.99,False
+INGR-277,Johana Greens,9,1,,0.99,True
+INGR-277,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-277,Lucy Wambui,28,1,,0.87,False
+INGR-277,Market,5,1,,0.86,False
+INGR-278,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,True
+INGR-279,Basket Corner Grocery,5,1,,0.88,False
+INGR-279,Douglas Gichuru,9,1,,0.99,False
+INGR-279,Duneve Fresh Farm,9,1,,0.99,True
+INGR-279,Elizabeth Tabu,5,1,,0.86,False
+INGR-279,"Everlyne Fresh Fruits, Vegetables & Cereals",23,1,,0.99,False
+INGR-279,Johana Greens,12,1,,0.89,False
+INGR-279,Millicent Njoki Wanyoike,14,1,,0.99,False
+INGR-279,Nagara Flour Mills,5,1,,0.86,False
+INGR-280,Duneve Fresh Farm,30,1,,0.91,False
+INGR-280,"Everlyne Fresh Fruits, Vegetables & Cereals",6,1,,0.92,False
+INGR-280,Farm to Feed,15,1,,0.99,True
+INGR-280,Johana Greens,15,1,,0.99,False
+INGR-281,Kelvin Mucangi Njoki,5,1,,0.86,False
+INGR-281,Lamu Nuts,5,1,,0.86,False
+INGR-281,Orient Enterprises ltd,30,1,,0.88,True
+INGR-283,Farm to Feed,5,1,,0.86,True
+INGR-284,BSM Gloceries,5,1,,0.92,False
+INGR-284,Duneve Fresh Farm,12,1,,0.99,False
+INGR-284,Elizabeth Tabu,8,1,,0.96,False
+INGR-284,Farm to Feed,20,1,,0.99,True
+INGR-284,Farm to feed,5,1,,0.86,False
+INGR-284,Farmworks,5,1,,0.94,False
+INGR-284,Johana Greens,12,1,,0.99,False
+INGR-284,KHE,9,1,,0.91,False
+INGR-284,Lucy Wambui,4,1,,0.87,False
+INGR-285,Coomete Farm,30,1,,0.88,True
+INGR-285,Coomete farm,5,1,,0.86,False
+INGR-285,Farm to Feed,30,1,,0.87,False
+INGR-285,Farm to feed,5,1,,0.86,False
+INGR-285,Jumbo Spices Ltd,5,1,,0.86,False
+INGR-286,Duneve Fresh Farm,12,1,,0.98,False
+INGR-286,Johana Greens,5,1,,0.99,True
+INGR-286,Market,7,1,,0.87,False
+INGR-287,Duneve Fresh Farm,13,1,,0.99,False
+INGR-287,"Everlyne Fresh Fruits, Vegetables & Cereals",25,1,,0.99,False
+INGR-287,Farm to Feed,30,1,,0.94,False
+INGR-287,Johana Greens,12,1,,0.99,True
+INGR-288,Duneve Fresh Farm,5,1,,0.86,False
+INGR-288,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-288,Farm to Feed,5,1,,0.86,False
+INGR-288,Johana Greens,7,1,,0.99,True
+INGR-288,Lucy Wambui,6,1,,0.98,False
+INGR-288,Market,2,1,,0.88,False
+INGR-289,AnnStella Njeri,30,1,,0.87,False
+INGR-289,Annstella Njeri,14,1,,0.99,True
+INGR-289,Evergreen,30,1,,0.9,False
+INGR-289,KHE,30,1,,0.94,False
+INGR-289,Ruth Maina,5,1,,0.86,False
+INGR-289,Sphere Taste,30,1,,0.9,False
+INGR-289,Vegpro Kenya,5,1,,0.86,False
+INGR-291,Duneve Fresh Farm,30,1,,0.87,False
+INGR-291,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-291,Farm to Feed,30,1,,0.88,False
+INGR-291,Johana Greens,30,1,,0.9,True
+INGR-292,Duneve Fresh Farm,30,1,,0.89,False
+INGR-292,Farm to Feed,16,1,,0.95,True
+INGR-292,Johana Greens,30,1,,0.94,False
+INGR-293,BSM Gloceries,5,1,,0.86,False
+INGR-293,Duneve Fresh Farm,5,1,,0.86,False
+INGR-293,Evergreen,5,1,,0.86,False
+INGR-293,"Everlyne Fresh Fruits, Vegetables & Cereals",29,1,,0.88,False
+INGR-293,Farm to Feed,30,1,,0.88,False
+INGR-293,Johana Greens,9,1,,0.99,True
+INGR-294,Bamaray Enterprises,21,1,,0.91,False
+INGR-294,Coomete Farm,11,1,,0.99,True
+INGR-294,Coomete farm,30,1,,0.88,False
+INGR-294,Farm to Feed,5,1,,0.86,False
+INGR-294,Market,5,1,,0.86,False
+INGR-294,bamaray Enterprises,5,1,,0.86,False
+INGR-295,Duneve Fresh Farm,5,1,,0.86,False
+INGR-295,"Everlyne Fresh Fruits, Vegetables & Cereals",4,1,,0.87,True
+INGR-295,Johana Greens,5,1,,0.86,False
+INGR-295,Morris Kirema Kinoti,5,1,,0.86,False
+INGR-296,Duneve Fresh Farm,30,1,,0.87,False
+INGR-296,Johana Greens,12,1,,0.99,True
+INGR-296,Lucy Wambui,30,1,,0.88,False
+INGR-296,Market,3,1,,0.88,False
+INGR-297,Annstella Njeri,19,1,,0.99,True
+INGR-297,Evergreen,5,1,,0.86,False
+INGR-297,KHE,5,1,,0.86,False
+INGR-297,Ruth Maina,28,1,,0.87,False
+INGR-298,Evergreen,5,1,,0.86,True
+INGR-299,Johana Greens,30,1,,0.89,True
+INGR-301,Duneve Fresh Farm,30,1,,0.92,True
+INGR-301,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-301,Farm to Feed,5,1,,0.89,False
+INGR-301,Johana Greens,30,1,,0.88,False
+INGR-303,BSM Gloceries,7,1,,0.88,False
+INGR-303,Duneve Fresh Farm,30,1,,0.87,False
+INGR-303,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-303,Farm to Feed,7,1,,0.99,True
+INGR-303,Farm to feed,30,1,,0.87,False
+INGR-303,Farmworks,4,1,,0.95,False
+INGR-303,Johana Greens,13,1,,0.99,False
+INGR-303,Joseph Mutuku Muthama,6,1,,0.88,False
+INGR-303,Lucy Wambui,4,1,,0.87,False
+INGR-304,Duneve Fresh Farm,9,1,,0.96,False
+INGR-304,Irene Njaramba,5,1,,0.86,False
+INGR-304,Jeremy Manyara,14,1,,0.99,False
+INGR-304,Johana Greens,11,1,,0.99,True
+INGR-305,Duneve Fresh Farm,30,1,,0.87,False
+INGR-305,Johana Greens,26,1,,0.92,True
+INGR-306,Farm to Feed,5,1,,0.86,True
+INGR-306,Johana Greens,5,1,,0.86,False
+INGR-307,Duneve Fresh Farm,5,1,,0.86,True
+INGR-308,Duneve Fresh Farm,5,1,,0.86,True
+INGR-308,Evergreen,5,1,,0.86,False
+INGR-309,Duneve Fresh Farm,30,1,,0.96,True
+INGR-309,"Everlyne Fresh Fruits, Vegetables & Cereals",30,1,,0.91,False
+INGR-309,Johana Greens,30,1,,0.88,False
+INGR-311,Duneve Fresh Farm,5,1,,0.86,False
+INGR-311,Johana Greens,22,1,,0.99,True
+INGR-313,Chome plants nursery,30,1,,0.87,False
+INGR-313,Duneve Fresh Farm,5,1,,0.86,False
+INGR-313,Mark Chome,28,1,,0.94,True
+INGR-314,Duneve Fresh Farm,30,1,,0.89,True
+INGR-314,Elber Ventures Ltd,5,1,,0.86,False
+INGR-315,Douglas Gichuru,30,1,,0.87,False
+INGR-315,Duneve Fresh Farm,9,1,,0.99,True
+INGR-315,"Everlyne Fresh Fruits, Vegetables & Cereals",12,1,,0.91,False
+INGR-315,Farm to Feed,9,1,,0.92,False
+INGR-315,Johana Greens,30,1,,0.88,False
+INGR-315,Millicent Njoki Wanyoike,15,1,,0.91,False
+INGR-316,Duneve Fresh Farm,30,1,,0.89,False
+INGR-316,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-316,Farm to Feed,30,1,,0.95,False
+INGR-316,Farm to feed,5,1,,0.86,False
+INGR-316,Johana Greens,7,1,,0.99,True
+INGR-316,Lucy Wambui,5,1,,0.86,False
+INGR-317,Duneve Fresh Farm,5,1,,0.86,False
+INGR-317,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-317,Farm to Feed,30,1,,0.87,False
+INGR-317,Johana Greens,9,1,,0.99,True
+INGR-318,Farmers Choice,19,1,,0.99,True
+INGR-318,Farmers choice,30,1,,0.87,False
+INGR-319,Adamji Multi Supplies Ltd,30,1,,0.93,True
+INGR-319,Carrefour,5,1,,0.86,False
+INGR-320,Jumbo Spices Ltd,5,1,,0.86,True
+INGR-322,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-323,Formulators Haven,5,1,,0.86,False
+INGR-323,Healthy U,30,1,,0.89,True
+INGR-324,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,True
+INGR-324,Johana Greens,5,1,,0.86,False
+INGR-326,Carrefour,30,1,,0.87,True
+INGR-326,Crystal Frozen & Chilled Foods ,5,1,,0.86,False
+INGR-327,Carrefour,5,1,,0.86,True
+INGR-329,Puratos Ltd,30,1,,0.94,True
+INGR-330,Johana Greens,30,1,,0.91,True
+INGR-331,Naivas,5,1,,0.86,True
+INGR-332,MRGM,5,1,,0.86,True
+INGR-332,Regina Kaimenyi Munene,5,1,,0.86,False
+INGR-333,Johana Greens,30,1,,0.87,True
+INGR-334,Duneve Fresh Farm,3,1,,0.87,True
+INGR-335,Kapa oil refineries,30,1,,0.92,True
+INGR-335,Succeed In Africa Ltd,30,1,,0.88,False
+INGR-336,Duneve Fresh Farm,30,1,,0.87,False
+INGR-336,Johana Greens,4,1,,0.88,True
+INGR-337,Quest Wine Agencies,30,1,,0.87,True
+INGR-338,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-338,Farm to Feed,8,1,,0.87,False
+INGR-338,Johana Greens,12,1,,0.97,True
+INGR-339,Johana Greens,5,1,,0.86,True
+INGR-340,Johana Greens,5,1,,0.86,True
+INGR-341,Johana Greens,30,1,,0.87,True
+INGR-342,Johana Greens,30,1,,0.87,True
+INGR-345,Johana Greens,30,1,,0.87,True
+INGR-347,Johana Greens,10,1,,0.97,True
+INGR-348,Colour Labels Ltd,5,1,,0.86,True
+INGR-349,Colour Labels Ltd,5,1,,0.86,True
+INGR-350,Colour Labels Ltd,5,1,,0.86,True
+INGR-351,Colour Labels Ltd,5,1,,0.86,True
+INGR-352,Duneve Fresh Farm,5,1,,0.86,True
+INGR-353,Pressmaster Africa Ltd,5,1,,0.86,True
+INGR-354,Arichem Ltd,29,1,,0.87,True
+INGR-355,Arichem Ltd,5,1,,0.86,True
+INGR-356,Johana Greens,30,1,,0.88,True
+INGR-356,Kenblest,30,1,,0.87,False
+INGR-357,Farm to Feed,5,1,,0.86,False
+INGR-357,Johana Greens,21,1,,0.99,True
+INGR-358,Johana Greens,30,1,,0.9,True
+INGR-359,Duneve Fresh Farm,5,1,,0.86,True
+INGR-371,Farm to Feed,30,1,,0.87,False
+INGR-371,Johana Greens,6,1,,0.9,True
+INGR-376,Johana Greens,30,1,,0.88,True
+INGR-377,Johana Greens,9,1,,0.88,True
+INGR-378,Johana Greens,30,1,,0.87,True
+INGR-382,Evergreen,5,1,,0.86,False
+INGR-382,"Everlyne Fresh Fruits, Vegetables & Cereals",5,1,,0.86,False
+INGR-382,Johana Greens,6,1,,0.99,True
+INGR-382,Market,5,1,,0.86,False
+INGR-382,Nekoya organics,3,1,,0.89,False
+INGR-386,Sir Njenga,5,1,,0.86,True
+INGR-387,Duneve Fresh Farm,30,1,,0.87,True
+INGR-388,Divine Minimart,5,1,,0.86,False
+INGR-388,Topserve Ltd,30,1,,0.87,True
+INGR-389,Naivas,5,1,,0.86,False
+INGR-389,Spring Valley Coffee,30,1,,0.96,True
+INGR-390,Adamji Multi Supplies Ltd,30,1,,0.87,True
+INGR-390,Reliable Food & Logistics Ltd,5,1,,0.86,False
+INGR-397,Max Grains Ltd,5,1,,0.86,True
+INGR-398,Naivas,5,1,,0.86,True
+INGR-399,Ramii & Son ,2,1,,0.99,True
+INGR-400,Adamji Multi Supplies Ltd,30,1,,0.91,False
+INGR-400,Brandables Ltd,23,1,,0.92,False
+INGR-400,Reliable Food & Logistics Ltd,29,1,,0.96,True
+INGR-401,Duneve Fresh Farm,30,1,,0.87,False
+INGR-401,Farm to Feed,13,1,,0.99,True
+INGR-401,Farm to feed,25,1,,0.87,False
+INGR-401,Lucy Wambui,5,1,,0.87,False
+INGR-401,Market,5,1,,0.86,False
+INGR-402,Duneve Fresh Farm,11,1,,0.99,True
+INGR-402,"Everlyne Fresh Fruits, Vegetables & Cereals",10,1,,0.94,False
+INGR-402,Farm to Feed,30,1,,0.88,False
+INGR-402,Johana Greens,30,1,,0.88,False
+INGR-403,Uzuri Foods Ltd,5,1,,0.86,True
+INGR-404,Magunas,5,1,,0.86,False
+INGR-404,Naivas,30,1,,0.88,True
+INGR-405,Maisha Flour Ltd,13,1,,0.96,True
+INGR-406,Ramii & Son ,30,1,,0.88,True
+INGR-407,Duneve Fresh Farm,30,1,,0.88,False
+INGR-407,"Everlyne Fresh Fruits, Vegetables & Cereals",24,1,,0.87,False
+INGR-407,Farm to Feed,30,1,,0.91,False
+INGR-407,Johana Greens,18,1,,0.99,True
+INGR-407,Lucy Wambui,30,1,,0.87,False
+INGR-408,Chandaria Industries Ltd,30,1,,0.87,True
+INGR-409,Hekar Investments,4,1,,0.89,True
+INGR-410,Duneve Fresh Farm,16,1,,0.89,False
+INGR-410,"Everlyne Fresh Fruits, Vegetables & Cereals",30,1,,0.88,False
+INGR-410,Farm to Feed,30,1,,0.97,True
+INGR-410,Farm to feed,5,1,,0.86,False
+INGR-410,Johana Greens,17,1,,0.94,False
+INGR-410,Market,5,1,,0.86,False
+INGR-411,Johana Greens,30,1,,0.94,True
+INGR-411,Market,7,1,,0.87,False
+INGR-413,Duneve Fresh Farm,15,1,,0.99,True
+INGR-413,"Everlyne Fresh Fruits, Vegetables & Cereals",8,1,,0.96,False
+INGR-413,Farm to Feed,30,1,,0.92,False
+INGR-413,Johana Greens,22,1,,0.99,False
+INGR-413,Joseph Mutuku Muthama,5,1,,0.87,False
+INGR-414,Duneve Fresh Farm,5,1,,0.86,False
+INGR-414,"Everlyne Fresh Fruits, Vegetables & Cereals",30,1,,0.88,True
+INGR-414,Johana Greens,5,1,,0.86,False
+INGR-415,Duneve Fresh Farm,5,1,,0.86,False
+INGR-415,Johana Greens,24,1,,0.99,True
+INGR-415,Lucy Wambui,5,1,,0.86,False
+INGR-415,Market,5,1,,0.86,False
+LABS-001,Dairy Consulting Ltd,30,1,,0.87,True
+LABS-003,Dairy Consulting Ltd,5,1,,0.86,True
+LABS-006,Chemoquip Ltd,5,1,,0.86,True
+LABS-008,Wagtech Africa Ltd,5,1,,0.86,True
+LABS-009,Dairy Consulting Ltd,30,1,,0.87,True
+LABS-015,Dairy Consulting Ltd,5,1,,0.86,True
+LABS-017,Dairy Consulting Ltd,30,1,,0.91,True
+LABS-018,Chemoquip Ltd,5,1,,0.86,True
+LABS-018,Dairy Consulting Ltd,5,1,,0.86,False
+LABS-020,Dairy Consulting Ltd,30,1,,0.87,True
+LABS-021,Dairy Consulting Ltd,30,1,,0.87,True
+LABS-022,Science lab Ltd,5,1,,0.86,True
+LABS-023,Chemoquip Ltd,30,1,,0.88,True
+LABS-023,Wagtech Africa Ltd,30,1,,0.87,False
+LABS-025,Chemoquip Ltd,5,1,,0.86,True
+LABS-032,Dairy Consulting Ltd,30,1,,0.87,True
+LABS-033,Naivas,30,1,,0.87,True
+LABS-034,Dairy Consulting Ltd,1,1,,0.87,False
+LABS-034,Kobian Ltd,30,1,,0.89,True
+LABS-034,Office 2000 plus,21,1,,0.87,False
+OFFC-001,Lowyalty Branding and Printing,5,1,,0.86,True
+OFFC-002,Office 2000 plus,30,1,,0.87,True
+OFFC-003,Office 2000 plus,29,1,,0.99,True
+OFFC-004,Office 2000 plus,30,1,,0.9,True
+OFFC-005,Hill Converters Ltd,5,1,,0.86,False
+OFFC-005,Naivas,5,1,,0.86,False
+OFFC-005,Office 2000 plus,12,1,,0.99,True
+OFFC-006,Office 2000 plus,30,1,,0.9,True
+OFFC-009,Office 2000 plus,30,1,,0.98,True
+OFFC-010,Office 2000 plus,5,1,,0.86,True
+OFFC-011,Office 2000 plus,30,1,,0.95,True
+OFFC-012,Office 2000 plus,30,1,,0.92,True
+OFFC-015,Office 2000 plus,5,1,,0.86,True
+OFFC-016,Office 2000 plus,30,1,,0.93,True
+OFFC-021,Office 2000 plus,5,1,,0.86,True
+OFFC-023,Adpak International Ltd,30,1,,0.91,False
+OFFC-023,Skanem,30,1,,0.95,True
+OFFC-023,Skanem ,19,1,,0.93,False
+OFFC-024,Claire Africa Ltd,5,1,,0.86,True
+OFFC-025,Thames Ltd,5,1,,0.86,True
+OFFC-026,Office 2000 plus,5,1,,0.86,True
+OFFC-028,Office 2000 plus,22,1,,0.99,True
+OFFC-031,Office 2000 plus,30,1,,0.92,True
+OFFC-032,Office 2000 plus,30,1,,0.9,True
+OFFC-033,Office 2000 plus,30,1,,0.93,True
+OFFC-034,Office 2000 plus,30,1,,0.98,True
+OFFC-035,Office 2000 plus,5,1,,0.86,True
+OFFC-037,Lowyalty Branding and Printing,30,1,,0.91,True
+OFFC-038,Naivas,5,1,,0.86,False
+OFFC-038,Office 2000 plus,29,1,,0.99,True
+OFFC-040,Lowyalty Branding and Printing,5,1,,0.86,True
+OFFC-042,Lowyalty Branding and Printing,30,1,,0.88,True
+OFFC-045,Office 2000 plus,30,1,,0.92,True
+OFFC-046,Office 2000 plus,5,1,,0.86,True
+OFFC-047,Office 2000 plus,20,1,,0.99,True
+OFFC-048,Office 2000 plus,30,1,,0.9,True
+OFFC-050,Office 2000 plus,30,1,,0.93,True
+OFFC-051,Office 2000 plus,5,1,,0.86,True
+OFFC-053,Office 2000 plus,16,1,,0.87,True
+OFFC-054,Lowyalty Branding and Printing,5,1,,0.86,False
+OFFC-054,Office 2000 plus,30,1,,0.95,True
+OFFC-055,Office 2000 plus,24,1,,0.99,True
+OFFC-056,Office 2000 plus,30,1,,0.91,True
+OFFC-057,Office 2000 plus,26,1,,0.99,True
+OFFC-058,Office 2000 plus,30,1,,0.93,True
+OFFC-062,Lowyalty Branding and Printing,30,1,,0.99,True
+OFFC-063,Kep Service Ltd,21,1,,0.89,False
+OFFC-063,Molenaar Kenya,30,1,,0.94,True
+OFFC-066,Lowyalty Branding and Printing,5,1,,0.86,True
+OFFC-068,Lowyalty Branding and Printing,30,1,,0.92,True
+OFFC-069,Office 2000 plus,30,1,,0.88,True
+OFFC-071,Office 2000 plus,18,1,,0.99,True
+OFFC-072,Kep Service Ltd,5,1,,0.86,False
+OFFC-072,Molenaar Kenya,30,1,,0.87,True
+OFFC-073,Kep Service Ltd,22,1,,0.88,False
+OFFC-073,Molenaar Kenya,21,1,,0.99,True
+OFFC-074,Office 2000 plus,27,1,,0.99,True
+OFFC-075,Lowyalty Branding and Printing,30,1,,0.89,True
+OFFC-076,Office 2000 plus,28,1,,0.97,True
+OFFC-077,Alpha Medical Ltd,27,1,,0.94,True
+OFFC-077,Karangatha ,5,1,,0.86,False
+OFFC-077,Kijani Medical Ltd,30,1,,0.91,False
+OFFC-078,Office 2000 plus,30,1,,0.96,True
+OFFC-079,Office 2000 plus,30,1,,0.87,True
+OFFC-080,Naivas,5,1,,0.86,False
+OFFC-080,Office 2000 plus,30,1,,0.98,True
+OFFC-081,EAGM,5,1,,0.86,False
+OFFC-081,Topserve Ltd,30,1,,0.87,True
+OFFC-082,Office 2000 plus,30,1,,0.99,True
+OFFC-083,Office 2000 plus,5,1,,0.86,True
+OFFC-084,Office 2000 plus,30,1,,0.88,True
+OFFC-088,Lowyalty Branding and Printing,30,1,,0.88,True
+OFFC-089,Dignity Collection Ltd,5,1,,0.86,True
+OFFC-090,Office 2000 plus,30,1,,0.9,True
+OFFC-091,Stephen Kiragu,5,1,,0.86,True
+OFFC-092,Office 2000 plus,30,1,,0.93,True
+OFFC-093,Lowyalty Branding and Printing,16,1,,0.87,True
+OFFC-094,Office 2000 plus,30,1,,0.99,True
+OFFC-095,Office 2000 plus,30,1,,0.95,True
+OFFC-099,Kep Service Ltd,5,1,,0.86,False
+OFFC-099,Molenaar Kenya,20,1,,0.87,True
+OFFC-100,Office 2000 plus,29,1,,0.96,True
+OFFC-101,Office 2000 plus,30,1,,0.94,True
+OFFC-102,Office 2000 plus,30,1,,0.87,True
+OFFC-103,Office 2000 plus,30,1,,0.91,True
+OFFC-104,Office 2000 plus,30,1,,0.87,True
+OFFC-105,Office 2000 plus,30,1,,0.87,True
+OFFC-106,Office 2000 plus,5,1,,0.86,True
+PCKG-001,Paper House of Kenya,5,1,,0.86,True
+PCKG-004,Adpak International Ltd,5,1,,0.86,True
+PCKG-004,Sky Labels,5,1,,0.86,False
+PCKG-010,Adpak International Ltd,5,1,,0.86,True
+PCKG-010,Paper House of Kenya,5,1,,0.86,False
+PCKG-013,Sky labels,5,1,,0.86,True
+PCKG-015,Adpak International Ltd,30,1,,0.87,False
+PCKG-015,Pressmaster Africa Ltd,30,1,,0.93,True
+PCKG-015,Sitama Packaging Ltd,30,1,,0.92,False
+PCKG-016,Adpak International Ltd,30,1,,0.9,True
+PCKG-020,Paper House of Kenya,30,1,,0.88,True
+PCKG-020,Sky Labels,30,1,,0.87,False
+PCKG-023,Adpak International Ltd,30,1,,0.89,True
+PCKG-023,Paper House of Kenya,5,1,,0.86,False
+PCKG-023,Sky Labels,5,1,,0.86,False
+PCKG-025,Adpak International Ltd,30,1,,0.89,True
+PCKG-025,Sky Labels,5,1,,0.86,False
+PCKG-026,Adpak International Ltd,30,1,,0.87,True
+PCKG-026,Sky Labels,5,1,,0.86,False
+PCKG-027,Adpak International Ltd,5,1,,0.86,False
+PCKG-027,Paper House of Kenya,30,1,,0.98,True
+PCKG-028,Paper House of Kenya,30,1,,0.91,True
+PCKG-028,Sky Labels,4,1,,0.87,False
+PCKG-029,Adpak International Ltd,30,1,,0.88,True
+PCKG-029,Sky Labels,5,1,,0.86,False
+PCKG-030,Paper House of Kenya,5,1,,0.86,True
+PCKG-030,Sky Labels,5,1,,0.86,False
+PCKG-031,Paper House of Kenya,5,1,,0.86,True
+PCKG-031,Sky Labels,5,1,,0.86,False
+PCKG-033,Adpak International Ltd,30,1,,0.87,True
+PCKG-033,Sky Labels,30,1,,0.87,False
+PCKG-034,Sky Labels,5,1,,0.86,True
+PCKG-035,Adpak International Ltd,30,1,,0.87,True
+PCKG-036,Paper House of Kenya,5,1,,0.86,True
+PCKG-037,Adpak International Ltd,30,1,,0.87,True
+PCKG-037,Sky Labels,5,1,,0.86,False
+PCKG-038,Paper House of Kenya,5,1,,0.86,True
+PCKG-038,Sky Labels,5,1,,0.86,False
+PCKG-039,Adpak International Ltd,30,1,,0.87,True
+PCKG-039,Paper House of Kenya,5,1,,0.86,False
+PCKG-039,Sky Labels,5,1,,0.86,False
+PCKG-040,Adpak International Ltd,30,1,,0.87,False
+PCKG-040,Paper House of Kenya,5,1,,0.86,False
+PCKG-040,Sky Labels,30,1,,0.94,True
+PCKG-041,Paper House of Kenya,30,1,,0.88,True
+PCKG-041,Sky Labels,5,1,,0.86,False
+PCKG-044,Colour Labels Ltd,5,1,,0.86,False
+PCKG-044,Paper House of Kenya,30,1,,0.91,True
+PCKG-045,Colour Labels Ltd,5,1,,0.86,False
+PCKG-045,Paper House of Kenya,30,1,,0.91,True
+PCKG-046,Colour Labels Ltd,5,1,,0.86,False
+PCKG-046,Paper House of Kenya,27,1,,0.98,True
+PCKG-047,Colour Labels Ltd,5,1,,0.86,False
+PCKG-047,Paper House of Kenya,30,1,,0.98,True
+PCKG-051,Adpak International Ltd,5,1,,0.86,False
+PCKG-051,Paper House of Kenya,19,1,,0.99,True
+PCKG-052,Adpak International Ltd,29,1,,0.88,False
+PCKG-052,Paper House of Kenya,30,1,,0.93,True
+PCKG-052,Sitama Packaging Ltd,20,1,,0.89,False
+PCKG-052,Sky labels,30,1,,0.87,False
+PCKG-059,Paper House of Kenya,3,1,,0.87,True
+PCKG-060,Adpak International Ltd,5,1,,0.86,False
+PCKG-060,Sitama Packaging Ltd,30,1,,0.89,True
+PCKG-061,Paper House of Kenya,5,1,,0.86,True
+PCKG-062,Paper House of Kenya,30,1,,0.87,True
+PCKG-063,Paper House of Kenya,30,1,,0.88,True
+PCKG-064,Paper House of Kenya,30,1,,0.89,True
+PCKG-065,Paper House of Kenya,30,1,,0.89,True
+PCKG-066,Paper House of Kenya,30,1,,0.88,True
+PCKG-071,Adpak International Ltd,30,1,,0.9,True
+PCKG-071,Paper House of Kenya,5,1,,0.86,False
+PCKG-074,Paper House of Kenya,5,1,,0.86,False
+PCKG-074,Sky Labels,30,1,,0.91,True
+PCKG-074,Sky labels,30,1,,0.87,False
+PCKG-075,Sky Labels,30,1,,0.94,True
+PCKG-075,Sky labels,5,1,,0.86,False
+PCKG-077,Paper House of Kenya,28,1,,0.87,True
+PCKG-078,Paper House of Kenya,5,1,,0.86,True
+PCKG-079,Paper House of Kenya,28,1,,0.88,True
+PCKG-080,Paper House of Kenya,30,1,,0.87,True
+PCKG-081,Colour Labels Ltd,5,1,,0.86,False
+PCKG-081,Paper House of Kenya,30,1,,0.88,True
+PCKG-082,Sitama Packaging Ltd,5,1,,0.86,True
+PCKG-083,Colour Labels Ltd,5,1,,0.86,False
+PCKG-083,Paper House of Kenya,30,1,,0.88,True
+PCKG-083,Sitama Packaging Ltd,5,1,,0.86,False
+PCKG-085,Colour Labels Ltd,5,1,,0.86,False
+PCKG-085,Paper House of Kenya,30,1,,0.87,True
+PCKG-086,Colour Labels Ltd,5,1,,0.86,False
+PCKG-086,Paper House of Kenya,30,1,,0.87,True
+PCKG-087,Paper House of Kenya,5,1,,0.86,True
+PCKG-088,Paper House of Kenya,30,1,,0.87,True
+PCKG-098,Paper House of Kenya,5,1,,0.86,True
+PCKG-099,Paper House of Kenya,5,1,,0.86,True
+PCKG-105,Colour Labels Ltd,5,1,,0.86,False
+PCKG-105,Paper House of Kenya,30,1,,0.96,True
+PCKG-107,Adpak International Ltd,30,1,,0.91,True
+PCKG-110,Paper House of Kenya,30,1,,0.89,True
+PCKG-110,Sky Labels,5,1,,0.86,False
+PCKG-111,Paper House of Kenya,30,1,,0.88,True
+PCKG-111,Sky Labels,5,1,,0.86,False
+PCKG-112,Paper House of Kenya,5,1,,0.86,True
+PCKG-117,Adpak International Ltd,30,1,,0.88,True
+PCKG-117,Sky Labels,5,1,,0.86,False
+PCKG-118,Paper House of Kenya,30,1,,0.98,True
+PCKG-119,Paper House of Kenya,30,1,,0.98,True
+PCKG-120,Colour Labels Ltd,26,1,,0.93,True
+PCKG-120,Paper House of Kenya,24,1,,0.92,False
+PCKG-121,Sky Labels,5,1,,0.86,True
+PCKG-124,Paper House of Kenya,30,1,,0.87,True
+PCKG-127,Colour Labels Ltd,30,1,,0.88,True
+PCKG-127,Paper House of Kenya,30,1,,0.87,False
+PCKG-128,Sky Labels,30,1,,0.89,True
+PCKG-129,Sky Labels,30,1,,0.89,True
+PCKG-141,Adpak International Ltd,5,1,,0.86,True
+PCKG-145,Paper House of Kenya,30,1,,0.91,True
+PCKG-148,Paper House of Kenya,30,1,,0.88,True
+PCKG-149,Paper House of Kenya,30,1,,0.88,True
+PCKG-150,Colour Labels Ltd,5,1,,0.86,False
+PCKG-150,Paper House of Kenya,30,1,,0.92,True
+PCKG-151,Colour Labels Ltd,5,1,,0.86,False
+PCKG-151,Paper House of Kenya,30,1,,0.92,True
+PCKG-158,Paper House of Kenya,30,1,,0.97,True
+PCKG-159,Paper House of Kenya,5,1,,0.86,True
+PCKG-160,Paper House of Kenya,5,1,,0.86,True
+PCKG-161,Adpak International Ltd,30,1,,0.91,False
+PCKG-161,Colour Labels Ltd,3,1,,0.87,False
+PCKG-161,Paper House of Kenya,30,1,,0.91,False
+PCKG-161,Sitama Packaging Ltd,27,1,,0.99,True
+PCKG-161,Sky Labels,30,1,,0.87,False
+PCKG-161,Sky labels,1,1,,0.88,False
+PCKG-161,Sticker Printing Solution,5,1,,0.86,False
+PCKG-163,Sky Labels,30,1,,0.87,True
+PCKG-163,Sky labels,5,1,,0.86,False
+PCKG-164,Sky Labels,5,1,,0.86,True
+PCKG-167,Paper House of Kenya,30,1,,0.87,False
+PCKG-167,Sky Labels,30,1,,0.88,True
+PCKG-168,Paper House of Kenya,30,1,,0.88,False
+PCKG-168,Sky Labels,30,1,,0.89,True
+PCKG-170,Paper House of Kenya,30,1,,0.87,False
+PCKG-170,Sky Labels,30,1,,0.88,True
+PCKG-172,Paper House of Kenya,30,1,,0.87,False
+PCKG-172,Sky Labels,30,1,,0.88,True
+PCKG-173,Paper House of Kenya,30,1,,0.87,False
+PCKG-173,Sky Labels,30,1,,0.89,True
+PCKG-174,Paper House of Kenya,30,1,,0.87,False
+PCKG-174,Sky Labels,30,1,,0.88,True
+PCKG-175,Paper House of Kenya,30,1,,0.87,False
+PCKG-175,Sky Labels,30,1,,0.89,True
+PCKG-176,Paper House of Kenya,30,1,,0.87,False
+PCKG-176,Sky Labels,30,1,,0.88,True
+PCKG-177,Paper House of Kenya,30,1,,0.87,False
+PCKG-177,Sky Labels,30,1,,0.88,True
+PCKG-186,Paper House of Kenya,5,1,,0.86,True
+PCKG-187,Adpak International Ltd,5,1,,0.86,True
+PCKG-188,Sitama Packaging Ltd,5,1,,0.86,True
+PCKG-189,Paper House of Kenya,30,1,,0.99,True
+PCKG-189,Sky Labels,18,1,,0.89,False
+PCKG-190,Paper House of Kenya,30,1,,0.98,True
+PCKG-190,Sky Labels,18,1,,0.89,False
+PCKG-191,Paper House of Kenya,30,1,,0.99,True
+PCKG-191,Sky Labels,18,1,,0.89,False
+PCKG-193,Friends of Creation,28,1,,0.91,True
+PCKG-193,Mark Chome,5,1,,0.86,False
+PCKG-194,Polyflex Industries Ltd,30,1,,0.94,True
+PCKG-195,Paperbags Ltd,5,1,,0.86,True
+PCKG-196,Polyflex Industries Ltd,30,1,,0.89,True
+PCKG-198,PIL,30,1,,0.87,True
+PCKG-198,Packaging Industries ltd,5,1,,0.86,False
+PCKG-200,General Printers Ltd,30,1,,0.89,False
+PCKG-200,Packaging Industries ltd,6,1,,0.9,False
+PCKG-200,Polyflex Industries Ltd,20,1,,0.99,True
+PCKG-201,Polyflex Industries Ltd,15,1,,0.99,True
+PCKG-205,General Printers Ltd,30,1,,0.88,True
+PCKG-210,PIL,22,1,,0.96,True
+PCKG-210,Packaging Industries ltd,30,1,,0.93,False
+PCKG-210,Polyflex Industries Ltd,22,1,,0.88,False
+PCKG-212,Polyflex Industries Ltd,5,1,,0.86,True
+PCKG-213,Platinum Packaging,5,1,,0.86,True
+PCKG-214,Platinum Packaging,5,1,,0.86,False
+PCKG-214,Polyflex Industries Ltd,30,1,,0.88,True
+PCKG-215,Polyflex Industries Ltd,30,1,,0.92,True
+PCKG-217,Paper House of Kenya,5,1,,0.86,False
+PCKG-217,Paperbags Ltd,15,1,,0.99,True
+PCKG-222,Shrink Pack Ltd,30,1,,0.87,True
+PCKG-223,Civem Africa Ltd,30,1,,0.89,True
+PCKG-225,Paper House of Kenya,5,1,,0.86,True
+PCKG-229,Edmonn Africa Ltd,28,1,,0.91,True
+PCKG-230,Edmonn Africa Ltd,30,1,,0.89,True
+PCKG-231,Ecstacy Ltd,18,1,,0.91,True
+PCKG-231,Topserve Ltd,30,1,,0.89,False
+PCKG-232,Acme Ltd,5,1,,0.86,True
+PCKG-232,Elgon Ltd,5,1,,0.86,False
+PCKG-232,Kenpoly Ltd,5,1,,0.86,False
+PCKG-233,Acme Ltd,5,1,,0.86,True
+PCKG-233,Kenpoly Ltd,5,1,,0.86,False
+PCKG-234,Platinum Packaging,5,1,,0.86,True
+PCKG-235,Platinum Packaging,30,1,,0.87,True
+PCKG-236,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-237,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-238,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-239,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-240,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-241,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-242,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-243,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-244,Techpak Ltd,30,1,,0.88,False
+PCKG-244,Thermopak Ltd,30,1,,0.97,True
+PCKG-245,Techpak Ltd,30,1,,0.88,False
+PCKG-245,Thermopak Ltd,30,1,,0.95,True
+PCKG-246,Kenpoly Ltd,11,1,,0.99,True
+PCKG-246,Thermopak Ltd,5,1,,0.86,False
+PCKG-247,Kenpoly Ltd,19,1,,0.99,True
+PCKG-248,Kenpoly Ltd,30,1,,0.99,True
+PCKG-249,Kenpoly Ltd,30,1,,0.95,True
+PCKG-250,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-251,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-252,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-253,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-254,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-255,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-256,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-257,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-258,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-259,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-260,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-261,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-262,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-263,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-264,Arichem Ltd,24,1,,0.92,True
+PCKG-264,Milly Glass Works,5,1,,0.86,False
+PCKG-265,Arichem Ltd,30,1,,0.91,True
+PCKG-265,Milly Glass Works,5,1,,0.86,False
+PCKG-266,Arichem Ltd,21,1,,0.99,True
+PCKG-266,Milly Glass Works,5,1,,0.86,False
+PCKG-267,Arichem Ltd,14,1,,0.99,True
+PCKG-267,Milly Glass Works,30,1,,0.88,False
+PCKG-268,Millicent Njoki Wanyoike,5,1,,0.86,False
+PCKG-268,Milly Glass Works,30,1,,0.99,True
+PCKG-269,Arichem Ltd,20,1,,0.99,True
+PCKG-269,Milly Glass Works,30,1,,0.99,False
+PCKG-270,Printpak,30,1,,0.87,True
+PCKG-271,Chandaria Industries Ltd,5,1,,0.86,False
+PCKG-271,Printpak,21,1,,0.99,True
+PCKG-272,Printpak,30,1,,0.98,True
+PCKG-273,Colour Labels Ltd,20,1,,0.96,True
+PCKG-273,Hill Converters Ltd,17,1,,0.87,False
+PCKG-273,Printpak,29,1,,0.95,False
+PCKG-274,Techpak Ltd,10,1,,0.88,False
+PCKG-274,Thermopak Ltd,20,1,,0.99,True
+PCKG-275,Techpak Ltd,10,1,,0.88,False
+PCKG-275,Thermopak Ltd,22,1,,0.99,True
+PCKG-277,Techpak Ltd,5,1,,0.86,False
+PCKG-277,Thermopak Ltd,30,1,,0.93,True
+PCKG-278,Thermopak Ltd,30,1,,0.93,True
+PCKG-279,Techpak Ltd,5,1,,0.86,False
+PCKG-279,Thermopak Ltd,11,1,,0.99,True
+PCKG-280,Arichem Ltd,5,1,,0.86,False
+PCKG-280,Techpak Ltd,5,1,,0.86,False
+PCKG-280,Thermopak Ltd,12,1,,0.99,True
+PCKG-281,Techpak Ltd,21,1,,0.87,False
+PCKG-281,Thermopak Ltd,23,1,,0.97,True
+PCKG-282,Techpak Ltd,21,1,,0.87,False
+PCKG-282,Thermopak Ltd,30,1,,0.94,True
+PCKG-283,Coomete Farm,5,1,,0.86,False
+PCKG-283,Thermopak Ltd,18,1,,0.99,True
+PCKG-284,Coomete Farm,5,1,,0.86,False
+PCKG-284,Thermopak Ltd,19,1,,0.99,True
+PCKG-288,Kenpoly Ltd,5,1,,0.86,True
+PCKG-289,Nairobi Plastics Ltd,5,1,,0.86,True
+PCKG-292,Safepak Ltd,22,1,,0.99,True
+PCKG-296,Techpak Ltd,30,1,,0.93,True
+PCKG-297,Techpak Ltd,30,1,,0.92,True
+PCKG-301,Arichem Ltd,14,1,,0.99,True
+PCKG-301,Milly Glass Works,30,1,,0.87,False
+PCKG-302,Thermopak Ltd,30,1,,0.88,True
+PCKG-303,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-304,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-307,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-308,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-309,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-310,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-311,Pressmaster Africa Ltd,5,1,,0.86,False
+PCKG-311,Printcare,30,1,,0.9,True
+PCKG-312,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-313,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-314,Allpack Industries Ltd,18,1,,0.9,False
+PCKG-314,Carton Manufacturers Ltd,30,1,,0.97,True
+PCKG-315,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-316,Pressmaster Africa Ltd,28,1,,0.97,True
+PCKG-316,Printcare,23,1,,0.93,False
+PCKG-317,Zheijang Sowinpak Tech Co. Ltd,5,1,,0.86,True
+PCKG-318,Pressmaster Africa Ltd,30,1,,0.95,True
+PCKG-320,Pressmaster Africa Ltd,25,1,,0.95,True
+PCKG-320,Printcare,24,1,,0.95,False
+PCKG-322,Pressmaster Africa Ltd,30,1,,0.93,True
+PCKG-323,Techpak Ltd,5,1,,0.86,False
+PCKG-323,Thermopak Ltd,30,1,,0.98,True
+PCKG-324,Business alpha to zed connected,30,1,,0.99,True
+PCKG-324,Donemark,5,1,,0.86,False
+PCKG-325,Techpak Ltd,5,1,,0.86,False
+PCKG-325,Thermopak Ltd,30,1,,0.96,True
+PCKG-326,Business alpha to zed connected,30,1,,0.99,True
+PCKG-326,Donemark,5,1,,0.86,False
+PCKG-328,Business alpha to zed connected,7,1,,0.87,True
+PCKG-330,Pressmaster Africa Ltd,30,1,,0.99,False
+PCKG-330,Printcare,11,1,,0.99,True
+PCKG-331,Arichem Ltd,30,1,,0.9,True
+PCKG-332,Pressmaster Africa Ltd,20,1,,0.97,True
+PCKG-334,Pressmaster Africa Ltd,30,1,,0.92,True
+PCKG-335,Safepak Ltd,23,1,,0.99,True
+PCKG-337,Platinum Packaging,5,1,,0.86,True
+PCKG-337,Texplast,5,1,,0.86,False
+PCKG-338,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-340,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PCKG-341,Pressmaster Africa Ltd,5,1,,0.86,False
+PCKG-341,Printcare,30,1,,0.9,True
+PCKG-342,Techpak Ltd,5,1,,0.86,False
+PCKG-342,Thermopak Ltd,19,1,,0.99,True
+PCKG-343,Arichem Ltd,30,1,,0.89,True
+PCKG-343,Milly Glass Works,5,1,,0.86,False
+PCKG-344,Pressmaster Africa Ltd,30,1,,0.88,True
+PCKG-345,Arichem Ltd,5,1,,0.86,True
+PCKG-345,Milly Glass Works,5,1,,0.86,False
+PCKG-346,General Plastics Ltd,30,1,,0.89,True
+PCKG-346,Thermopak Ltd,30,1,,0.88,False
+PCKG-347,Thermopak Ltd,16,1,,0.99,True
+PCKG-348,Ecstacy Ltd,5,1,,0.86,True
+PCKG-349,Pressmaster Africa Ltd,30,1,,0.95,True
+PCKG-350,General Plastics Ltd,30,1,,0.88,False
+PCKG-350,Thermopak Ltd,30,1,,0.89,True
+PCKG-352,Allpack Industries Ltd,30,1,,0.87,False
+PCKG-352,Carton Manufacturers Ltd,30,1,,0.91,True
+PCKG-353,Business alpha to zed connected,5,1,,0.86,False
+PCKG-353,Paperbags Ltd,15,1,,0.99,True
+PCKG-354,Business alpha to zed connected,5,1,,0.86,False
+PCKG-354,Paperbags Ltd,27,1,,0.99,True
+PCKG-356,Pressmaster Africa Ltd,28,1,,0.99,True
+PCKG-357,Morden lithographics,30,1,,0.87,True
+PCKG-358,Pressmaster Africa Ltd,30,1,,0.95,True
+PCKG-361,Pressmaster Africa Ltd,2,1,,0.87,True
+PCKG-363,Pressmaster Africa Ltd,30,1,,0.88,False
+PCKG-363,Printcare,30,1,,0.89,True
+PCKG-364,Allpack Industries Ltd,30,1,,0.94,True
+PCKG-364,Carton Manufacturers Ltd,5,1,,0.86,False
+PCKG-365,Pressmaster Africa Ltd,5,1,,0.86,True
+PCKG-366,Pressmaster Africa Ltd,5,1,,0.86,True
+PCKG-369,Platinum Packaging,30,1,,0.87,True
+PCKG-370,Pressmaster Africa Ltd,30,1,,0.88,True
+PCKG-376,Panache Packaging,11,1,,0.87,True
+PCKG-379,Pressmaster Africa Ltd,30,1,,0.94,True
+PCKG-379,Printcare,30,1,,0.88,False
+PCKG-380,Pressmaster Africa Ltd,30,1,,0.87,True
+PCKG-381,Pressmaster Africa Ltd,30,1,,0.87,True
+PCKG-383,Pressmaster Africa Ltd,30,1,,0.88,True
+PCKG-384,Panache Packaging,21,1,,0.96,True
+PCKG-385,Colour Labels Ltd,5,1,,0.86,True
+PCKG-386,Platinum Packaging,5,1,,0.86,True
+PCKG-387,Kenpoly Ltd,5,1,,0.86,True
+PCKG-388,Paperbags Ltd,30,1,,0.9,True
+PCKG-389,Pressmaster Africa Ltd,5,1,,0.86,True
+PCKG-390,Pressmaster Africa Ltd,30,1,,0.87,True
+PCKG-391,Statpack,5,1,,0.86,True
+PCKG-392,Thermopak Ltd,14,1,,0.95,True
+PPEQ-004,Tawa Nutrition Ltd,5,1,,0.86,True
+PPEQ-005,Chandaria Industries Ltd,30,1,,0.88,True
+PPEQ-008,Lowyalty Branding and Printing,30,1,,0.88,True
+PPEQ-012,Freddy Hirsch Ltd,5,1,,0.86,True
+PPEQ-012,Lowyalty Branding and Printing,5,1,,0.86,False
+PPEQ-020,Stephen Kiragu,5,1,,0.86,True
+PPEQ-023,Lowyalty Branding and Printing,30,1,,0.87,True
+PPEQ-024,Alpha Medical Ltd,30,1,,0.89,False
+PPEQ-024,Kijani Medical Ltd,19,1,,0.96,True
+PPEQ-025,Stephen Kiragu,5,1,,0.86,True
+PPEQ-026,Chandaria Industries Ltd,30,1,,0.97,False
+PPEQ-026,Kimfay Ltd,20,1,,0.99,True
+PPEQ-027,Chandaria Industries Ltd,5,1,,0.86,False
+PPEQ-027,Kimfay Ltd,28,1,,0.99,True
+PPEQ-027,Naivas,4,1,,0.88,False
+PPEQ-028,Chandaria Industries Ltd,30,1,,0.94,False
+PPEQ-028,Kimfay Ltd,30,1,,0.95,True
+PPEQ-029,Chandaria Industries Ltd,5,1,,0.86,False
+PPEQ-029,Kimfay Ltd,30,1,,0.99,True
+PPEQ-030,Kimfay Ltd,30,1,,0.92,True
+PPEQ-031,Chandarana Ltd,5,1,,0.86,False
+PPEQ-031,Chandaria Industries Ltd,30,1,,0.96,True
+PPEQ-031,Kimfay Ltd,30,1,,0.9,False
+PPEQ-032,Nemchem,5,1,,0.86,True
+PPEQ-050,Alpha Medical Ltd,30,1,,0.92,False
+PPEQ-050,Chandaria Industries Ltd,5,1,,0.86,False
+PPEQ-050,Conquerr Ltd,30,1,,0.87,False
+PPEQ-050,Kijani Medical Ltd,29,1,,0.98,True
+PPEQ-052,Naivas,5,1,,0.86,True
+PPEQ-055,Naivas,5,1,,0.86,True
+PPEQ-059,Alpha Medical Ltd,18,1,,0.87,True
+PPEQ-059,Kijani Medical Ltd,30,1,,0.87,False
+PPEQ-062,Naivas,30,1,,0.88,True
+PPEQ-063,Naivas,30,1,,0.89,True
+PPEQ-064,Naivas,5,1,,0.86,True
+PPEQ-065,Lowyalty Branding and Printing,5,1,,0.86,True
+PPEQ-066,Blue eyes Ltd,5,1,,0.86,True
+PPEQ-067,Alpha Medical Ltd,14,1,,0.99,True
+PPEQ-067,Conquerr Ltd,5,1,,0.86,False
+PPEQ-067,Kijani Medical Ltd,24,1,,0.99,False
+PPEQ-069,Blue eyes Ltd,5,1,,0.86,True
+PPEQ-069,Eyes Ltd,5,1,,0.86,False
+PPEQ-071,Unipro Ltd,5,1,,0.86,True
+PPEQ-073,Office 2000 plus,18,1,,0.99,True
+PPEQ-075,Alpha Medical Ltd,30,1,,0.88,False
+PPEQ-075,Conquerr Ltd,5,1,,0.86,False
+PPEQ-075,Kijani Medical Ltd,30,1,,0.97,True
+PPEQ-076,Naivas,30,1,,0.88,True
+PPEQ-077,Naivas,5,1,,0.86,True
+PPEQ-077,Nemchem,5,1,,0.86,False
+PPEQ-081,Naivas,30,1,,0.96,True
+PPEQ-082,Brandables Ltd,5,1,,0.86,False
+PPEQ-082,Global Slacker Enterprises Ltd,29,1,,0.97,True
+PPEQ-082,Naivas,21,1,,0.89,False
+PPEQ-083,Freddy Hirsch Ltd,8,1,,0.89,True
+PPEQ-086,Chandaria Industries Ltd,30,1,,0.98,True
+PPEQ-087,Chandaria Industries Ltd,30,1,,0.99,True
+PPEQ-087,Kimfay Ltd,30,1,,0.95,False
+PPEQ-089,Naivas,5,1,,0.86,True
+PPEQ-089,Nemchem,5,1,,0.86,False
+PPEQ-090,Chandaria Industries Ltd,30,1,,0.97,True
+PPEQ-091,Alpha Medical Ltd,5,1,,0.86,True
+PPEQ-092,Alpha Medical Ltd,5,1,,0.86,True
+PPEQ-092,Office 2000 plus,5,1,,0.86,False
+PPEQ-095,Chandaria Industries Ltd,30,1,,0.91,False
+PPEQ-095,Kimfay Ltd,30,1,,0.94,True
+PPEQ-096,Naivas,12,1,,0.87,True
+PPEQ-097,Blue eyes Ltd,1,1,,0.87,True
+PPEQ-098,Chandaria Industries Ltd,30,1,,0.96,False
+PPEQ-098,Kimfay Ltd,19,1,,0.99,True
+PPEQ-099,Lowyalty Branding and Printing,30,1,,0.87,True
+PPEQ-100,Alpha Medical Ltd,5,1,,0.86,True
+PPEQ-101,Nakuru Industries Ltd,5,1,,0.86,True
+PPEQ-102,Naivas,5,1,,0.86,True
+PPEQ-103,Naivas,5,1,,0.86,True
+PPEQ-104,Naivas,5,1,,0.86,True
+PPEQ-105,Naivas,5,1,,0.86,True
+PPEQ-109,Paperbags Ltd,30,1,,0.88,True
+PPEQ-110,Sanpac Africa,5,1,,0.86,True
+PPEQ-112,Colour Labels Ltd,30,1,,0.87,True
+PPEQ-112,Sky Labels,5,1,,0.86,False
+PPEQ-113,Colour Labels Ltd,30,1,,0.87,True
+PPEQ-113,Sky Labels,5,1,,0.86,False
+PPEQ-114,Colour Labels Ltd,30,1,,0.88,True
+PPEQ-114,Sky Labels,5,1,,0.86,False
+PPEQ-118,Colour Labels Ltd,5,1,,0.86,True
+PPEQ-118,Sky Labels,5,1,,0.86,False
+PPEQ-119,Colour Labels Ltd,5,1,,0.86,True
+PPEQ-119,Sky Labels,5,1,,0.86,False
+PPEQ-120,Colour Labels Ltd,5,1,,0.86,False
+PPEQ-120,Sky Labels,21,1,,0.88,True
+PPEQ-120,Sky labels,5,1,,0.86,False
+PPEQ-121,Colour Labels Ltd,5,1,,0.86,False
+PPEQ-121,Sky Labels,27,1,,0.88,True
+PPEQ-121,Sky labels,5,1,,0.86,False
+PPEQ-122,Pressmaster Africa Ltd,5,1,,0.86,False
+PPEQ-122,Sky Labels,30,1,,0.88,True
+PPEQ-122,Sky labels,5,1,,0.86,False
+PPEQ-123,Colour Labels Ltd,5,1,,0.86,False
+PPEQ-123,Sky Labels,30,1,,0.9,True
+PPEQ-123,Sky labels,5,1,,0.86,False
+PPEQ-124,Dairy Consulting Ltd,30,1,,0.93,True
+PPEQ-126,Paperbags Ltd,24,1,,0.98,True
+PPEQ-132,Panache Packaging,5,1,,0.86,True
+PPEQ-133,Panache Packaging,5,1,,0.86,True
+PPEQ-138,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-139,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-140,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-141,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-142,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-143,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-144,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-145,Zheijang Sowinpak Tech Co. Ltd,30,1,,0.87,True
+PPEQ-147,Sky Labels,30,1,,0.87,True
+PPEQ-148,Arichem Ltd,27,1,,0.91,True
+PPEQ-148,Milly Glass Works,27,1,,0.91,False
+PPEQ-153,Thermopak Ltd,5,1,,0.86,True
+PPEQ-160,Johana Greens,30,1,,0.87,True
+PPEQ-166,Tollchem,30,1,,0.89,True
+TAST-002,254 Brewing ,30,1,,0.87,True
+TAST-005,Dion Wines & Spirits,30,1,,0.92,True
+TAST-006,Dion Wines & Spirits,30,1,,0.9,True
+TAST-007,Dion Wines & Spirits,5,1,,0.86,True
+TAST-008,Dion Wines & Spirits,30,1,,0.88,True
+TAST-009,Suva Ltd,5,1,,0.86,True
+TAST-024,Dion Wines & Spirits,30,1,,0.87,True
+TAST-025,Dion Wines & Spirits,30,1,,0.89,True
+TAST-026,Dion Wines & Spirits,30,1,,0.92,True
+TAST-027,Dion Wines & Spirits,30,1,,0.91,True
+TAST-028,Dion Wines & Spirits,30,1,,0.95,True
+TAST-029,Foodplus Ltd,5,1,,0.86,False
+TAST-029,Under The Influence Africa,30,1,,0.87,True
+TAST-030,Under the Influence EA,5,1,,0.86,True
+TAST-032,Under The Influence Africa,30,1,,0.89,True
+TAST-032,Under the Influence EA,5,1,,0.86,False
+TAST-039,Naivas,30,1,,0.94,True
+TAST-041,Aquamist Ltd,18,1,,0.99,True
+TAST-043,Aquamist Ltd,20,1,,0.99,True
+TAST-047,Tremol FP24,5,1,,0.86,True
+TAST-048,Cash sale,5,1,,0.86,True
+TAST-048,Tremol FP24,5,1,,0.86,False
+TAST-049,Cash sale,5,1,,0.86,True
+TAST-049,Tremol FP24,5,1,,0.86,False
+TAST-056,Cash sale,5,1,,0.86,True
+TAST-056,Ecomatics Consult Ltd,5,1,,0.86,False
+TAST-056,Tremol FP24,5,1,,0.86,False
+TAST-063,Dion Wines & Spirits,15,1,,0.87,True
+TAST-066,Dion Wines & Spirits,5,1,,0.86,True
+TAST-067,Dion Wines & Spirits,30,1,,0.89,True
+TAST-068,Dion Wines & Spirits,5,1,,0.86,True
+TAST-069,Dion Wines & Spirits,5,1,,0.86,True
+TAST-071,Dion Wines & Spirits,5,1,,0.86,True
+TAST-073,Dion Wines & Spirits,5,1,,0.86,True
+TAST-075,Dion Wines & Spirits,30,1,,0.87,True
+TAST-077,Dion Wines & Spirits,30,1,,0.88,True
+TAST-080,Pasagot Ltd,24,1,,0.88,True
+TAST-080,Suva Ltd,30,1,,0.87,False
+TAST-081,Pasagot Ltd,5,1,,0.86,True
+TAST-081,Suva Ltd,5,1,,0.86,False
+TAST-082,Pasagot Ltd,24,1,,0.88,True
+TAST-083,Dion Wines & Spirits,30,1,,0.9,True
+TAST-084,Under The Influence Africa,5,1,,0.86,True
+TAST-085,Under The Influence Africa,30,1,,0.88,True
+TAST-086,Under The Influence Africa,30,1,,0.88,True
+TAST-086,Under the Influence EA,5,1,,0.86,False
+TAST-087,Under The Influence Africa,30,1,,0.89,True
+TAST-087,Under the Influence EA,30,1,,0.88,False
+TAST-088,Foodplus Ltd,5,1,,0.86,True
+TAST-088,Under The Influence Africa,5,1,,0.86,False
+TAST-089,Under The Influence Africa,5,1,,0.86,True
+TAST-090,Under The Influence Africa,5,1,,0.86,True
+TAST-091,Under The Influence Africa,5,1,,0.86,True
+TAST-091,Under the Influence EA,5,1,,0.86,False
+TAST-092,Under The Influence Africa,1,1,,0.87,True
+TAST-092,Under the Influence EA,5,1,,0.86,False
+TAST-093,Under The Influence Africa,30,1,,0.89,True
+TAST-093,Under the Influence EA,30,1,,0.87,False
+TAST-094,Under The Influence Africa,30,1,,0.88,True
+TAST-095,Under The Influence Africa,5,1,,0.86,True
+TAST-096,Under The Influence Africa,5,1,,0.86,True
+TAST-097,Under The Influence Africa,5,1,,0.86,True
+TAST-097,Under the Influence EA,5,1,,0.86,False
+TAST-098,Under The Influence Africa,5,1,,0.86,True
+TAST-099,Under The Influence Africa,30,1,,0.87,True
+TAST-100,Under The Influence Africa,5,1,,0.86,True
+TAST-101,254 Brewing ,30,1,,0.87,True
+TAST-102,254 Brewing ,30,1,,0.87,True
+TAST-103,254 Brewing ,30,1,,0.87,True
+TAST-104,Under The Influence Africa,5,1,,0.86,True
+TAST-107,Dion Wines & Spirits,5,1,,0.86,True
+TAST-108,Dion Wines & Spirits,5,1,,0.86,True
+TAST-109,Dion Wines & Spirits,5,1,,0.86,True
+TAST-110,Dion Wines & Spirits,5,1,,0.86,True
+TAST-111,Dion Wines & Spirits,5,1,,0.86,True
+TAST-112,Dion Wines & Spirits,30,1,,0.87,True
+TAST-113,Under The Influence Africa,5,1,,0.86,True
+TAST-114,Under The Influence Africa,5,1,,0.86,True
+TAST-115,Under The Influence Africa,5,1,,0.86,True
+TAST-116,Under The Influence Africa,5,1,,0.86,True
+TAST-117,Under The Influence Africa,5,1,,0.86,True
+TAST-118,Cash sale,5,1,,0.86,True
+TAST-119,Under the Influence EA,5,1,,0.86,True
+TAST-120,Dion Wines & Spirits,30,1,,0.87,True
+TAST-121,Under the Influence EA,5,1,,0.86,True
+TAST-122,Dion Wines & Spirits,12,1,,0.87,True
+TAST-123,Dion Wines & Spirits,12,1,,0.87,True
+TAST-124,Dion Wines & Spirits,5,1,,0.86,True
+TAST-125,Dion Wines & Spirits,5,1,,0.86,True
+TAST-126,Dion Wines & Spirits,5,1,,0.86,True
+TAST-127,Sol O Vino Ltd,30,1,,0.87,True
+TAST-128,Sol O Vino Ltd,30,1,,0.87,True
+TAST-129,Sol O Vino Ltd,30,1,,0.87,True
+TAST-130,Sol O Vino Ltd,30,1,,0.91,True
+TAST-131,Sol O Vino Ltd,5,1,,0.86,True
+TAST-132,Sol O Vino Ltd,5,1,,0.86,True
+TSRM-001,EAGM,30,1,,0.87,False
+TSRM-001,Naivas,30,1,,0.88,True
+TSRM-002,Naivas,5,1,,0.86,True
+TSRM-003,Kenpoly Ltd,5,1,,0.86,True
+TSRM-004,Clean Shelf Supermarkets Ltd,5,1,,0.86,False
+TSRM-004,Naivas,30,1,,0.9,True
+TSRM-006,Kenpoly Ltd,30,1,,0.92,True
+TSRM-008,Ecstacy Ltd,30,1,,0.94,True
+TSRM-009,Ecstacy Ltd,30,1,,0.91,True
+TSRM-011,Naivas,5,1,,0.86,True
+TSRM-012,Naivas,30,1,,0.87,True
+TSRM-014,Ecstacy Ltd,30,1,,0.94,True
+TSRM-014,Techpak Ltd,5,1,,0.86,False
+TSRM-023,Ecstacy Ltd,21,1,,0.99,True
+TSRM-023,Techpak Ltd,22,1,,0.91,False
+TSRM-025,Ecstacy Ltd,30,1,,0.9,True
+TSRM-025,Techpak Ltd,5,1,,0.86,False
+TSRM-026,Ecstacy Ltd,29,1,,0.99,True
+TSRM-026,Panache Packaging,5,1,,0.86,False
+TSRM-028,Naivas,30,1,,0.93,True
+TSRM-032,Naivas,30,1,,0.88,True
+TSRM-033,Ecstacy Ltd,23,1,,0.99,True
+TSRM-033,Techpak Ltd,15,1,,0.89,False
+TSRM-034,Kenpoly Ltd,5,1,,0.86,True
+TSRM-037,Nairobi Plastics Ltd,5,1,,0.86,True
+TSRM-038,Ecstacy Ltd,30,1,,0.9,True
+TSRM-039,Kenpoly Ltd,5,1,,0.86,True
+TSRM-039,Naivas,5,1,,0.86,False
+TSRM-040,Kenpoly Ltd,5,1,,0.86,True
+TSRM-043,Ecstacy Ltd,30,1,,0.88,True
+TSRM-047,Ecstacy Ltd,17,1,,0.99,True
+TSRM-049,Panache Packaging,30,1,,0.9,True
+TSRM-050,Kenpoly Ltd,30,1,,0.89,True
+TSRM-052,Ecstacy Ltd,30,1,,0.97,True
+TSRM-052,Techpak Ltd,6,1,,0.89,False
+TSRM-054,Ecstacy Ltd,30,1,,0.89,True
+TSRM-055,Ecstacy Ltd,30,1,,0.98,True
+TSRM-056,Ecstacy Ltd,30,1,,0.99,True
+TSRM-057,Ecstacy Ltd,5,1,,0.86,True
+TSRM-057,Panache Packaging,5,1,,0.86,False
+TSRM-059,Ecstacy Ltd,26,1,,0.99,True
+TSRM-060,Ecstacy Ltd,5,1,,0.86,True
+TSRM-062,Kenpoly Ltd,30,1,,0.87,True
+TSRM-063,Kenpoly Ltd,30,1,,0.94,True
+TSRM-064,Naivas,30,1,,0.87,True
+TSRM-066,Kenpoly Ltd,30,1,,0.9,True
+TSRM-067,Naivas,5,1,,0.86,True
+TSRM-068,Proto Energy,11,1,,0.99,True
+TSRM-069,Proto Energy,12,1,,0.99,True
+TSRM-070,Proto Energy,20,1,,0.97,True
+TSRM-071,Kenpoly Ltd,5,1,,0.86,True
+TSRM-072,Duneve Fresh Farm,4,1,,0.88,True
