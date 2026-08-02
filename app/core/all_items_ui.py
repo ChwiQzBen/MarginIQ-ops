@@ -881,6 +881,26 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
                 st.rerun()
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def _cached_item_demand_forecast(item_key: str, daily_demand: pd.DataFrame, forecast_days: int = 30):
+    """Cached wrapper around create_ensemble_forecast() for the per-item
+    demand forecast selector in _render_analytics_tab().
+
+    Without this, the multi-model ensemble (Prophet/XGBoost/LightGBM/
+    ARIMA/etc. -- same one already gated + cached for Dry Ice Mode via
+    get_forecast_data() in main.py) ran uncached here. Because
+    st.selectbox persists `selected_item` via its widget key across
+    reruns, once any item had been picked in a session this block
+    re-ran the full ensemble from scratch on EVERY rerun of the entire
+    app -- not just when this tab was visible or the selection changed
+    -- which is what was stalling the app past the Stock Movements tab.
+
+    item_key is passed explicitly (redundant with daily_demand's
+    content) purely so the cache is legible/scoped per selected item.
+    """
+    return create_ensemble_forecast(daily_demand, forecast_days=forecast_days)
+
+
 # ============================================================
 # FULLY PORTED — 📈 All Items Analytics
 # ============================================================
@@ -1247,7 +1267,8 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                                     if not daily_demand.empty:
                                         if len(daily_demand) >= 5 and daily_demand['Order_Quantity_kg'].sum() > 0:
                                             with st.spinner(f"Generating forecast for {selected_item}..."):
-                                                fig_forecast, forecast_values, model_forecasts, accuracy = create_ensemble_forecast(
+                                                fig_forecast, forecast_values, model_forecasts, accuracy = _cached_item_demand_forecast(
+                                                    selected_item,
                                                     daily_demand,
                                                     forecast_days=30
                                                 )
