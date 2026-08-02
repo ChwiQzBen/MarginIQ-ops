@@ -11,6 +11,7 @@ THEME = {
     "primary": "#667eea",
     "primary_dark": "#764ba2",
     "primary_gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    "primary_rgb": "102, 126, 234",
     "info": "#4fc3f7",
     "success": "#28a745",
     "warning": "#ffc107",
@@ -76,8 +77,17 @@ def inject_global_css() -> None:
     (right after st.set_page_config()).
     """
     import streamlit as st
-    st.markdown("""
+
+    root_vars = f"""
     <style>
+        :root {{
+            --primary: {THEME['primary']};
+            --primary-dark: {THEME['primary_dark']};
+            --primary-rgb: {THEME['primary_rgb']};
+        }}
+    """
+
+    st.markdown(root_vars + """
         /* ===== LIQUID GLASS DESIGN SYSTEM (Inspired by Zoho) ===== */
         
         /* Main glass effect for cards */
@@ -123,7 +133,7 @@ def inject_global_css() -> None:
             position: fixed;
             bottom: 30px;
             right: 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             border-radius: 50%;
             width: 60px;
@@ -132,7 +142,7 @@ def inject_global_css() -> None:
             align-items: center;
             justify-content: center;
             font-size: 30px;
-            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.4);
             cursor: pointer;
             z-index: 999;
             transition: all 0.3s ease;
@@ -141,7 +151,7 @@ def inject_global_css() -> None:
         
         .quick-action-fab:hover {
             transform: scale(1.1) rotate(90deg);
-            box-shadow: 0 6px 30px rgba(102, 126, 234, 0.6);
+            box-shadow: 0 6px 30px rgba(var(--primary-rgb), 0.6);
         }
         
         /* Status cards with glass effect */
@@ -182,7 +192,7 @@ def inject_global_css() -> None:
         }
         
         /* Modern sidebar with glass effect */
-        .css-1d391kg {
+        section[data-testid="stSidebar"] {
             background: rgba(255, 255, 255, 0.05) !important;
             backdrop-filter: blur(10px) !important;
             -webkit-backdrop-filter: blur(10px) !important;
@@ -221,7 +231,7 @@ def inject_global_css() -> None:
             font-size: 24px !important;
             line-height: 1.3 !important;
             font-weight: 600 !important;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -235,19 +245,19 @@ def inject_global_css() -> None:
         
         /* Enhanced button styling */
         .stButton button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
             color: white !important;
             border: none !important;
             border-radius: 8px !important;
             padding: 8px 20px !important;
             font-weight: 500 !important;
             transition: all 0.3s ease !important;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.2) !important;
         }
         
         .stButton button:hover {
             transform: translateY(-2px) !important;
-            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.3) !important;
+            box-shadow: 0 6px 25px rgba(var(--primary-rgb), 0.3) !important;
         }
         
         .stButton button:active {
@@ -273,21 +283,22 @@ def inject_global_css() -> None:
         }
         
         .stTabs [data-baseweb="tab"]:hover {
-            background: rgba(102, 126, 234, 0.08) !important;
-            color: #667eea !important;
+            background: rgba(var(--primary-rgb), 0.08) !important;
+            color: var(--primary) !important;
         }
         
         .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
             color: white !important;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+            box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3) !important;
         }
         
-        /* Enhanced expander */
+        /* Expander styling (merged — see theme.py cleanup notes) */
         .streamlit-expanderHeader {
             background: rgba(255, 255, 255, 0.05) !important;
             border-radius: 8px !important;
             font-weight: 500 !important;
+            padding: 10px 0 !important;
             transition: all 0.3s ease !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
         }
@@ -298,7 +309,7 @@ def inject_global_css() -> None:
         }
         
         /* Enhanced sidebar */
-        .css-1d391kg .stSelectbox {
+        section[data-testid="stSidebar"] div[data-testid="stSelectbox"] {
             background: rgba(255, 255, 255, 0.03) !important;
             border-radius: 8px !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -346,29 +357,45 @@ def inject_global_css() -> None:
             to { transform: translateX(0); opacity: 1; }
         }
         
-        /* Enhanced data table */
+        /* Data tables (merged — see theme.py cleanup notes) */
         .stDataFrame {
             background: rgba(255, 255, 255, 0.03) !important;
             border-radius: 12px !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            overflow: hidden !important;
+            overflow: auto !important;
+            min-height: 100px !important;
+            transition: none !important;
+            animation: none !important;
         }
         
         .stDataFrame table {
             border-collapse: separate !important;
             border-spacing: 0 !important;
+            table-layout: fixed !important;
+            width: 100% !important;
         }
         
         .stDataFrame thead tr th {
-            background: rgba(102, 126, 234, 0.08) !important;
+            background: rgba(var(--primary-rgb), 0.08) !important;
             font-weight: 600 !important;
             padding: 10px 12px !important;
-            border-bottom: 2px solid rgba(102, 126, 234, 0.2) !important;
+            border-bottom: 2px solid rgba(var(--primary-rgb), 0.2) !important;
         }
         
         .stDataFrame tbody tr:hover {
-            background: rgba(102, 126, 234, 0.05) !important;
+            background: rgba(var(--primary-rgb), 0.05) !important;
             transition: background 0.3s ease;
+        }
+
+        .stDataFrame iframe {
+            min-height: 200px !important;
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        [data-testid="stDataFrame"] > div {
+            transition: none !important;
+            animation: none !important;
         }
         
         /* ===== YOUR ORIGINAL CSS KEPT BELOW ===== */
@@ -383,7 +410,7 @@ def inject_global_css() -> None:
         }
         
         .metric-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             padding: 1rem;
             border-radius: 10px;
             color: white;
@@ -462,36 +489,7 @@ def inject_global_css() -> None:
         hr {
             margin: 30px 0 !important;
         }
-        
-        /* Fix expander spacing */
-        .streamlit-expanderHeader {
-            font-weight: 500 !important;
-            padding: 10px 0 !important;
-        }
-        
-        /* Fix dataframes - prevent overflow */
-        .stDataFrame {
-            overflow: auto !important;
-            min-height: 100px !important;
-            transition: none !important;
-            animation: none !important;
-        }
-        
-        .stDataFrame table {
-            table-layout: fixed !important;
-            width: 100% !important;
-        }
-        
-        .stDataFrame iframe {
-            min-height: 200px !important;
-            transition: none !important;
-            animation: none !important;
-        }
-        
-        [data-testid="stDataFrame"] > div {
-            transition: none !important;
-            animation: none !important;
-        }
+         
         
         /* ===== MOBILE RESPONSIVENESS ===== */
         @media (max-width: 768px) {
