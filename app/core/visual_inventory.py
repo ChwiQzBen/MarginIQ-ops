@@ -14,7 +14,7 @@ easy diffing against the original.
 """
 import pandas as pd
 import streamlit as st
-
+import textwrap
 
 def inventory_filters(items):
     """
@@ -182,7 +182,7 @@ def visual_inventory_grid(items, columns=3):
             </div>
             """
 
-            st.markdown(html_content, unsafe_allow_html=True)
+            st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
 
 
 def get_sample_inventory_data():
@@ -508,7 +508,9 @@ def inventory_heatmap(inventory_items, title="Inventory Heat Map", columns=6):
 
             # st.markdown() instead of st.components.v1.html() -- same
             # per-item iframe cost issue as visual_inventory_grid() above.
-            st.markdown(html_content, unsafe_allow_html=True)
+            # dedent() strips the Python-source indentation so markdown
+            # doesn't mistake the HTML block for an indented code block.
+            st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
 
     # Display summary statistics
     st.markdown("---")
