@@ -14,7 +14,21 @@ easy diffing against the original.
 """
 import pandas as pd
 import streamlit as st
-import textwrap
+
+def _strip_html_indent(html):
+    """
+    Strip leading whitespace from every line of an HTML string before
+    passing it to st.markdown(unsafe_allow_html=True).
+
+    textwrap.dedent() only removes one uniform prefix, so nested tags
+    keep their relative indentation. Streamlit's markdown parser treats
+    any blank line inside the string as the end of the current HTML
+    block; the next line then starts a *new* block, and if it still has
+    4+ leftover spaces, it gets misread as an indented code block. This
+    flattens every line to column 0 so that can't happen, regardless of
+    how many blank lines are inside the HTML.
+    """
+    return "\n".join(line.lstrip() for line in html.splitlines())
 
 def inventory_filters(items):
     """
@@ -182,7 +196,7 @@ def visual_inventory_grid(items, columns=3):
             </div>
             """
 
-            st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
+            st.markdown(_strip_html_indent(html_content), unsafe_allow_html=True)
 
 
 def get_sample_inventory_data():
@@ -508,9 +522,12 @@ def inventory_heatmap(inventory_items, title="Inventory Heat Map", columns=6):
 
             # st.markdown() instead of st.components.v1.html() -- same
             # per-item iframe cost issue as visual_inventory_grid() above.
-            # dedent() strips the Python-source indentation so markdown
-            # doesn't mistake the HTML block for an indented code block.
-            st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
+            # _strip_html_indent() flattens every line to column 0. Blank
+            # lines inside the HTML reset Streamlit's markdown parser,
+            # so a plain dedent() (single uniform prefix) still leaves
+            # enough leftover indentation on resumed lines to be misread
+            # as an indented code block.
+            st.markdown(_strip_html_indent(html_content), unsafe_allow_html=True)
 
     # Display summary statistics
     st.markdown("---")
