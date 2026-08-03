@@ -92,7 +92,8 @@ def init_cheese_storage(supabase_client=None) -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT, lpo_number TEXT, customer_name TEXT,
         date_received TEXT, delivery_date TEXT, cheese_name TEXT,
         quantity_kg REAL, quantity_delivered_kg REAL, price_per_kg REAL,
-        status TEXT, notes TEXT, created_at TEXT
+        status TEXT, notes TEXT, created_at TEXT,
+        lpo_date TEXT, lpo_expiry_date TEXT
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
@@ -106,6 +107,12 @@ def init_cheese_storage(supabase_client=None) -> None:
     c.execute("PRAGMA table_info(lpo_lines)")
     if 'customer_id' not in [col[1] for col in c.fetchall()]:
         c.execute("ALTER TABLE lpo_lines ADD COLUMN customer_id INTEGER")
+    c.execute("PRAGMA table_info(lpo_lines)")
+    if 'lpo_date' not in [col[1] for col in c.fetchall()]:
+        c.execute("ALTER TABLE lpo_lines ADD COLUMN lpo_date TEXT")
+    c.execute("PRAGMA table_info(lpo_lines)")
+    if 'lpo_expiry_date' not in [col[1] for col in c.fetchall()]:
+        c.execute("ALTER TABLE lpo_lines ADD COLUMN lpo_expiry_date TEXT")
     c.execute("""INSERT OR IGNORE INTO aging_room_config (room_name, max_capacity_kg, notes)
                  VALUES ('default', ?, 'Set this to your real aging room capacity in kg')""",
               (DEFAULT_AGING_ROOM_CAPACITY_KG,))
@@ -656,7 +663,9 @@ def get_weighted_milk_cost_for_date(target_date: date) -> float:
 def save_lpo_line(lpo_number: str, customer_name: str, delivery_date: date,
                    cheese_name: str, quantity_kg: float, price_per_kg: float = 0.0,
                    date_received: Optional[date] = None, notes: str = "",
-                   supabase_client=None, customer_id: Optional[int] = None) -> Optional[int]:
+                   supabase_client=None, customer_id: Optional[int] = None,
+                   lpo_date: Optional[date] = None,
+                   lpo_expiry_date: Optional[date] = None) -> Optional[int]:
     date_received = date_received or date.today()
     row = {
         "lpo_number": lpo_number, "customer_name": customer_name, "customer_id": customer_id,
@@ -664,6 +673,8 @@ def save_lpo_line(lpo_number: str, customer_name: str, delivery_date: date,
         "cheese_name": cheese_name, "quantity_kg": quantity_kg,
         "quantity_delivered_kg": None, "price_per_kg": price_per_kg,
         "status": "Pending", "notes": notes,
+        "lpo_date": lpo_date.isoformat() if lpo_date else None,
+        "lpo_expiry_date": lpo_expiry_date.isoformat() if lpo_expiry_date else None,
     }
     if supabase_client:
         try:
@@ -675,10 +686,12 @@ def save_lpo_line(lpo_number: str, customer_name: str, delivery_date: date,
     c = conn.cursor()
     c.execute("""INSERT INTO lpo_lines
         (lpo_number, customer_name, customer_id, date_received, delivery_date, cheese_name,
-         quantity_kg, quantity_delivered_kg, price_per_kg, status, notes, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'Pending', ?, ?)""",
+         quantity_kg, quantity_delivered_kg, price_per_kg, status, notes, created_at,
+         lpo_date, lpo_expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'Pending', ?, ?, ?, ?)""",
               (lpo_number, customer_name, customer_id, date_received.isoformat(), delivery_date.isoformat(),
-               cheese_name, quantity_kg, price_per_kg, notes, datetime.now().isoformat()))
+               cheese_name, quantity_kg, price_per_kg, notes, datetime.now().isoformat(),
+               row["lpo_date"], row["lpo_expiry_date"]))
     new_id = c.lastrowid
     conn.commit()
     conn.close()
