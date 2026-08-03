@@ -167,3 +167,4 @@ app_logs.txt
 users.json
 users.json
 !app/data/suppliers.csv
+.streamlit/secrets.toml

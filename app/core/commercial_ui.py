@@ -10,10 +10,11 @@ import pandas as pd
 from app.core.sales_service import dispatch_and_record_sale, available_stock_kg
 from app.core.cheese_shared_state import ensure_cheese_state
 from app.core.cheese_data_access import (
-    save_lpo_line, get_lpo_lines, record_lpo_delivery, cancel_lpo_line,
+    get_lpo_lines, record_lpo_delivery, cancel_lpo_line,
     get_sales_history, save_customer, get_customers, delete_customer,
     reconcile_customers_from_history,
 )
+from app.core.lpo_sheet_sync import sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id
 from app.core.customer_analytics import (
     compute_ordering_patterns, compute_product_mix, compute_rfm, compute_clv, compute_churn_risk,
 )
@@ -130,39 +131,39 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
     else:
         st.caption(f"No open LPOs due {tomorrow.strftime('%b %d')} (tomorrow) yet.")
 
-    with st.expander("➕ Receive LPO", expanded=not tomorrow_open):
-        with st.form("receive_lpo_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                lpo_number = st.text_input("LPO Number")
-                customer_id, customer_name = _customer_picker(customers, "lpo")
-                cheese_name = st.selectbox("Cheese", book.list_names(), key="lpo_cheese")
-            with col2:
-                delivery_date = st.date_input("Delivery Date", value=tomorrow, min_value=date.today())
-                quantity_kg = st.number_input("Quantity (kg)", min_value=0.0, value=10.0, step=1.0)
-                price_per_kg = st.number_input("Price per kg (KSh, optional)", min_value=0.0,
-                                                value=0.0, step=10.0)
-            notes = st.text_input("Notes (optional)")
-            if st.form_submit_button("📥 Record LPO", type="primary"):
-                if not lpo_number or not customer_name:
-                    st.error("LPO number and customer are required.")
-                elif quantity_kg <= 0:
-                    st.error("Enter a quantity greater than 0.")
+    with st.expander("🔄 Sync from Google Sheet", expanded=not tomorrow_open):
+        st.caption(
+            "LPOs are entered in the Google Sheet, not here — this just pulls in "
+            "whatever's new. Already-synced rows are never re-touched, even if "
+            "the Sheet row changes afterward."
+        )
+        col_refresh, _ = st.columns([1, 4])
+        with col_refresh:
+            if st.button("🔄 Refresh from Sheet", key="lpo_sheet_refresh"):
+                clear_lpo_sheet_caches()
+                st.rerun()
+
+        sheet_url = st.secrets.get("LPO_SHEET_URL")
+        if not sheet_url:
+            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync LPOs.")
+        else:
+            sheet_id = extract_sheet_id(sheet_url)
+        
+            try:
+                result = sync_new_lpo_lines_from_sheet(
+                    sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
+                )
+                if result["created"]:
+                    st.success(f"✅ Synced {result['created']} new LPO line(s) from the Sheet.")
+                    st.rerun()
                 else:
-                    try:
-                        resolved_id = _resolve_customer_id(customer_id, customer_name, supabase_client)
-                        new_id = save_lpo_line(
-                            lpo_number=lpo_number, customer_name=customer_name,
-                            delivery_date=delivery_date, cheese_name=cheese_name,
-                            quantity_kg=quantity_kg, price_per_kg=price_per_kg,
-                            notes=notes, supabase_client=supabase_client,
-                            customer_id=resolved_id,
-                        )
-                        st.success(f"✅ Recorded LPO {lpo_number} — {quantity_kg:.1f}kg of "
-                                   f"{cheese_name} due {delivery_date.strftime('%b %d')} (line #{new_id}).")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Could not record LPO: {e}")
+                    st.caption("No new LPO lines to sync — everything in the Sheet is already recorded.")
+                if result["skipped_invalid"]:
+                    with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                        for err in result["errors"]:
+                            st.caption(f"- {err}")
+            except Exception as e:
+                st.error(f"❌ Could not sync from the Sheet: {e}")
 
     st.markdown("---")
     st.markdown("#### Pending LPOs")
@@ -177,11 +178,26 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
             overdue = line["delivery_date"] < today_str
             already_delivered_kg = float(line.get("quantity_delivered_kg") or 0.0)
             remaining_kg = max(0.0, float(line["quantity_kg"]) - already_delivered_kg)
+
+            expiry_flag = ""
+            lpo_expiry_str = line.get("lpo_expiry_date")
+            if lpo_expiry_str:
+                try:
+                    expiry_date_val = datetime.fromisoformat(lpo_expiry_str).date()
+                    days_left = (expiry_date_val - date.today()).days
+                    if days_left < 0:
+                        expiry_flag = f" · 🔴 LPO expired {abs(days_left)}d ago"
+                    elif days_left <= 7:
+                        expiry_flag = f" · 🟡 LPO expires in {days_left}d"
+                except ValueError:
+                    pass
+
+            item_display = line.get("sku_description") or line["cheese_name"]
             with st.container():
                 st.markdown(
                     f"{'⚠️ OVERDUE — ' if overdue else ''}**{line['lpo_number']}** — "
-                    f"{line['customer_name']} — {line['cheese_name']} — "
-                    f"{line['quantity_kg']:.1f}kg — due {line['delivery_date']} — *{line['status']}*"
+                    f"{line['customer_name']} — {item_display} — "
+                    f"{line['quantity_kg']:.1f}kg — due {line['delivery_date']} — *{line['status']}*{expiry_flag}"
                 )
                 if already_delivered_kg > 0:
                     st.caption(f"📦 {already_delivered_kg:.1f}kg delivered so far — "

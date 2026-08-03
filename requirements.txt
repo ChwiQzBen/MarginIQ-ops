@@ -81,3 +81,4 @@ aiohttp==3.14.1
 websockets==12.0
 protobuf==4.25.9
 tensorflow-cpu==2.16.1
+google-auth>=2.0.0
