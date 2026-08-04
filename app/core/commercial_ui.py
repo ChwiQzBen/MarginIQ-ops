@@ -148,8 +148,53 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
             st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync LPOs.")
         else:
             sheet_id = extract_sheet_id(sheet_url)
-        
+            
+            # ============================================================
+            # 🔍 DEBUG: Step-by-step sync with detailed error reporting
+            # ============================================================
             try:
+                # Step 1: Test authentication
+                st.write("🔍 Step 1: Testing authentication...")
+                from app.core.lpo_sheet_sync import _get_gspread_client
+                client = _get_gspread_client()
+                st.write("✅ Authentication successful")
+                
+                # Step 2: Test opening the sheet
+                st.write("🔍 Step 2: Opening sheet...")
+                sheet = client.open_by_key(sheet_id)
+                st.write(f"✅ Opened sheet: {sheet.title}")
+                
+                # Step 3: Test reading LPO Register tab
+                st.write("🔍 Step 3: Reading LPO Register tab...")
+                worksheet = sheet.worksheet("LPO Register")
+                records = worksheet.get_all_records()
+                st.write(f"✅ Found {len(records)} rows in LPO Register")
+                if records:
+                    st.write("📋 Headers found:", list(records[0].keys()))
+                else:
+                    st.warning("⚠️ No data found in LPO Register tab")
+                
+                # Step 4: Test reading Items tab
+                st.write("🔍 Step 4: Reading Items tab...")
+                items_worksheet = sheet.worksheet("Items")
+                items_records = items_worksheet.get_all_records()
+                st.write(f"✅ Found {len(items_records)} rows in Items tab")
+                if items_records:
+                    st.write("📋 Items headers:", list(items_records[0].keys()))
+                    st.write("📋 First item:", items_records[0])
+                else:
+                    st.warning("⚠️ No data found in Items tab")
+                
+                # Step 5: Test item mapping
+                st.write("🔍 Step 5: Building item master map...")
+                from app.core.lpo_sheet_sync import get_item_master_map
+                item_master_map = get_item_master_map(sheet_id)
+                st.write(f"✅ Found {len(item_master_map)} item mappings")
+                if item_master_map:
+                    st.write("📋 Item mappings:", item_master_map)
+                
+                # Step 6: Run the actual sync
+                st.write("🔍 Step 6: Running sync...")
                 result = sync_new_lpo_lines_from_sheet(
                     sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
                 )
@@ -162,8 +207,11 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
                     with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
                         for err in result["errors"]:
                             st.caption(f"- {err}")
+                            
             except Exception as e:
-                st.error(f"❌ Could not sync from the Sheet: {e}")
+                st.error(f"❌ Sync failed at step: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
     st.markdown("---")
     st.markdown("#### Pending LPOs")
