@@ -193,11 +193,13 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
                     pass
 
             item_display = line.get("sku_description") or line["cheese_name"]
+            qty_display = (f"{line['quantity_units']:.0f} units ({line['quantity_kg']:.1f}kg)"
+                            if line.get("quantity_units") else f"{line['quantity_kg']:.1f}kg")
             with st.container():
                 st.markdown(
                     f"{'⚠️ OVERDUE — ' if overdue else ''}**{line['lpo_number']}** — "
                     f"{line['customer_name']} — {item_display} — "
-                    f"{line['quantity_kg']:.1f}kg — due {line['delivery_date']} — *{line['status']}*{expiry_flag}"
+                    f"{qty_display} — due {line['delivery_date']} — *{line['status']}*{expiry_flag}"
                 )
                 if already_delivered_kg > 0:
                     st.caption(f"📦 {already_delivered_kg:.1f}kg delivered so far — "
