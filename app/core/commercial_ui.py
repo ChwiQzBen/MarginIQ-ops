@@ -142,7 +142,7 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
         with col_refresh:
             if st.button("🔄 Refresh from Sheet", key="lpo_sheet_refresh"):
                 clear_lpo_sheet_caches()
-                st.rerun()
+            
 
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
