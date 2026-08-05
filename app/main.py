@@ -579,8 +579,56 @@ def main():
         k = a.calculate_kpis(period=st.session_state.selected_period)
         return d, a, k
 
-    if mode in ("📦 All Items Mode", "❄️ Dry Ice Mode"):
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _load_all_items_analysis_data():
+        """Build a genuine All Items daily-quantity series for Advanced
+        Analytics. Previously All Items Mode reused Dry Ice's
+        historical_orders table via _load_dry_ice_analysis_data(), so
+        Advanced Analytics' anomaly detection and forecast-accuracy metric
+        were silently analyzing Dry Ice order data while labeled as All
+        Items. Sources total daily quantity checked OUT (usage) across ALL
+        items from Google Sheets, summed to one row per day — the shape
+        AdvancedAnalytics.detect_anomalies() expects: 'Date' + a numeric
+        target column ('Order_Quantity_kg')."""
+        empty = pd.DataFrame(columns=['Date', 'Order_Quantity_kg'])
+        try:
+            gsheet = GoogleSheetReader()
+            if not gsheet.authenticate():
+                return empty
+
+            check_out_df = gsheet.get_check_out()
+            if check_out_df.empty:
+                return empty
+
+            date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
+            qty_col = next((c for c in check_out_df.columns
+                             if 'quantity' in c.lower() or 'qty' in c.lower()), None)
+            if not date_col or not qty_col:
+                return empty
+
+            d = check_out_df[[date_col, qty_col]].copy()
+            d.columns = ['Date', 'Order_Quantity_kg']
+            d['Date'] = pd.to_datetime(d['Date'], errors='coerce')
+            d['Order_Quantity_kg'] = pd.to_numeric(d['Order_Quantity_kg'], errors='coerce')
+            d = d.dropna(subset=['Date', 'Order_Quantity_kg'])
+            if d.empty:
+                return empty
+
+            # One row per day, summed across every item — the daily
+            # "activity volume" signal anomaly/pattern detection expects,
+            # not per-item granularity.
+            d = d.groupby(d['Date'].dt.normalize())['Order_Quantity_kg'].sum().reset_index()
+            return d.sort_values('Date').reset_index(drop=True)
+        except Exception as e:
+            logger.warning(f"Could not load All Items analysis data: {e}")
+            return empty
+
+    if mode == "❄️ Dry Ice Mode":
         df, analyzer, kpis = _load_dry_ice_analysis_data()
+    elif mode == "📦 All Items Mode":
+        df = _load_all_items_analysis_data()
+        analyzer = None
+        kpis = {}
     else:
         df = pd.DataFrame(columns=['Date', 'Order_Quantity_kg', 'Containers_Used', 'Transport_Cost', 'Total_Cost'])
         analyzer = None
