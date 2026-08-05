@@ -58,24 +58,25 @@ def render_commercial_mode(supabase_client=None,
         st.warning("This section isn't available for your current role.")
         return
 
-    tabs = st.tabs(visible)
-    tab_lookup = dict(zip(visible, tabs))
+    if "commercial_active_tab" not in st.session_state or st.session_state.commercial_active_tab not in visible:
+        st.session_state.commercial_active_tab = visible[0]
 
-    if "📄 LPO Register" in tab_lookup:
-        with tab_lookup["📄 LPO Register"]:
-            _render_lpo_register_tab(book, supabase_client)
-    if "💰 Sales" in tab_lookup:
-        with tab_lookup["💰 Sales"]:
-            _render_sales_tab(book, tracker, supabase_client)
-    if "👥 Customers" in tab_lookup:
-        with tab_lookup["👥 Customers"]:
-            _render_customers_tab(supabase_client)
-    if "📊 Customer Analytics" in tab_lookup:
-        with tab_lookup["📊 Customer Analytics"]:
-            _render_customer_analytics_tab(supabase_client)
-    if "📋 Commercial Reports" in tab_lookup:
-        with tab_lookup["📋 Commercial Reports"]:
-            _render_commercial_reports_tab(supabase_client)
+    active_tab = st.radio(
+        "Section", visible, horizontal=True,
+        key="commercial_active_tab", label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    if active_tab == "📄 LPO Register":
+        _render_lpo_register_tab(book, supabase_client)
+    elif active_tab == "💰 Sales":
+        _render_sales_tab(book, tracker, supabase_client)
+    elif active_tab == "👥 Customers":
+        _render_customers_tab(supabase_client)
+    elif active_tab == "📊 Customer Analytics":
+        _render_customer_analytics_tab(supabase_client)
+    elif active_tab == "📋 Commercial Reports":
+        _render_commercial_reports_tab(supabase_client)
 
 
 def _customer_picker(customers: list, key_prefix: str):

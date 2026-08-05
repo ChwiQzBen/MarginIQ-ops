@@ -85,8 +85,13 @@ def render_bcpos_mode(supabase_client=None,
         )
         st.markdown("---")
     else:
-        # Default to Manufacturing when logged out or no permission
-        sub_mode = "🏭 Manufacturing"
+        from app.core.rbac import get_current_role
+        st.caption(f"🔍 debug: role={get_current_role()!r}, "
+                   f"_auth in state={'_auth' in st.session_state}, "
+                   f"auth dict in state={'auth' in st.session_state}")
+        # Don't force Manufacturing on a transient permission check —
+        # only fall back if we've never set a sub-mode this session.
+        sub_mode = st.session_state.get("bcpos_sub_mode", "🏭 Manufacturing")
 
     if sub_mode == "🏭 Manufacturing":
         render_cheese_production_mode(

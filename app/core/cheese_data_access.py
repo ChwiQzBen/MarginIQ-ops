@@ -34,12 +34,15 @@ import json
 import sqlite3
 import streamlit as st
 
+import logging
 from newsvendor_engine import AgingConfig
 from production_tracking import (
     RecipeBook, CheeseRecipe, BOMLineItem, OperationStep,
     BatchTracker, ProductionBatch, AgingBatch, FinishedGoodBatch,
     QualityCheckpoint, BatchStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 CHEESE_SQLITE_FILE = "cheese_production.db"
 DEFAULT_AGING_ROOM_CAPACITY_KG = 500.0
@@ -206,25 +209,32 @@ def _row_to_recipe(row: Dict[str, Any]) -> CheeseRecipe:
 # ============================================================
 # RECIPES
 # ============================================================
-def save_recipe(recipe: CheeseRecipe, supabase_client=None) -> None:
+def save_recipe(recipe: CheeseRecipe, supabase_client=None) -> bool:
+    """Returns True if the write reached Supabase (durable), False if it
+    fell back to local SQLite — SQLite lives on Streamlit Cloud's ephemeral
+    filesystem, so False means this recipe will be GONE on next restart."""
     row = _recipe_to_row(recipe)
+    wrote_to_supabase = False
     if supabase_client:
         try:
             supabase_client.table("cheese_recipes").upsert(row).execute()
-            return
-        except Exception:
-            pass  # fall through to SQLite
-    conn = _sqlite()
-    c = conn.cursor()
-    c.execute("""INSERT OR REPLACE INTO cheese_recipes
-        (name, product_code, category, batch_size_kg, milk_liters_per_batch,
-         shelf_life_days, lead_time_days, non_milk_ingredients, packaging,
-         operations, aging_config, recipe_version)
-        VALUES (:name, :product_code, :category, :batch_size_kg, :milk_liters_per_batch,
-         :shelf_life_days, :lead_time_days, :non_milk_ingredients, :packaging,
-         :operations, :aging_config, :recipe_version)""", row)
-    conn.commit()
-    conn.close()
+            wrote_to_supabase = True
+        except Exception as e:
+            logger.error(f"Supabase save_recipe failed for '{recipe.name}', "
+                         f"falling back to SQLite: {e}")
+    if not wrote_to_supabase:
+        conn = _sqlite()
+        c = conn.cursor()
+        c.execute("""INSERT OR REPLACE INTO cheese_recipes
+            (name, product_code, category, batch_size_kg, milk_liters_per_batch,
+             shelf_life_days, lead_time_days, non_milk_ingredients, packaging,
+             operations, aging_config, recipe_version)
+            VALUES (:name, :product_code, :category, :batch_size_kg, :milk_liters_per_batch,
+             :shelf_life_days, :lead_time_days, :non_milk_ingredients, :packaging,
+             :operations, :aging_config, :recipe_version)""", row)
+        conn.commit()
+        conn.close()
+    return wrote_to_supabase
 
 
 def delete_recipe(name: str, supabase_client=None) -> None:

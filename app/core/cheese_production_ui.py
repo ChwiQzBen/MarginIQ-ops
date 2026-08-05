@@ -108,31 +108,30 @@ def render_cheese_production_mode(supabase_client=None,
         st.warning("This section isn't available for your current role. If you feel this is a mistake, please contact your administrator.")
         return
 
-    tabs = st.tabs(visible)
-    tab_lookup = dict(zip(visible, tabs))
+    if "cheese_active_tab" not in st.session_state or st.session_state.cheese_active_tab not in visible:
+        st.session_state.cheese_active_tab = visible[0]
 
-    if "🧀 Recipes" in tab_lookup:
-        with tab_lookup["🧀 Recipes"]:
-            _render_recipes_tab(book, supabase_client)
-    if "🥛 Milk Receipts" in tab_lookup:
-        with tab_lookup["🥛 Milk Receipts"]:
-            _render_milk_receipts_tab(supabase_client)
-    if "📋 Production Planning" in tab_lookup:  
-        with tab_lookup["📋 Production Planning"]: 
-            _render_production_planning_tab(book, tracker, supabase_client,
-                                            milk_cost_per_liter, raw_milk_price_per_liter)
-    if "🏭 Batch Tracking & QC" in tab_lookup:
-        with tab_lookup["🏭 Batch Tracking & QC"]:
-            _render_batch_tracking_tab(book, tracker, supabase_client)
-    if "🧊 Aging Room" in tab_lookup:
-        with tab_lookup["🧊 Aging Room"]:
-            _render_aging_room_tab(tracker, supabase_client)
-    if "📦 FEFO Inventory" in tab_lookup:
-        with tab_lookup["📦 FEFO Inventory"]:
-            _render_fefo_inventory_tab(book, tracker)
-    if "📄 Production Reports" in tab_lookup:
-        with tab_lookup["📄 Production Reports"]:
-            _render_reports_tab(book, tracker)
+    active_tab = st.radio(
+        "Section", visible, horizontal=True,
+        key="cheese_active_tab", label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    if active_tab == "🧀 Recipes":
+        _render_recipes_tab(book, supabase_client)
+    elif active_tab == "🥛 Milk Receipts":
+        _render_milk_receipts_tab(supabase_client)
+    elif active_tab == "📋 Production Planning":
+        _render_production_planning_tab(book, tracker, supabase_client,
+                                        milk_cost_per_liter, raw_milk_price_per_liter)
+    elif active_tab == "🏭 Batch Tracking & QC":
+        _render_batch_tracking_tab(book, tracker, supabase_client)
+    elif active_tab == "🧊 Aging Room":
+        _render_aging_room_tab(tracker, supabase_client)
+    elif active_tab == "📦 FEFO Inventory":
+        _render_fefo_inventory_tab(book, tracker)
+    elif active_tab == "📄 Production Reports":
+        _render_reports_tab(book, tracker)
 
 
 # ============================================================
@@ -254,10 +253,15 @@ def _render_recipes_tab(book: RecipeBook, supabase_client) -> None:
                             aging=aging,
                             recipe_version=editing.recipe_version if editing else "v1.0",
                         )
-                        save_recipe(recipe, supabase_client)
+                        wrote_to_supabase = save_recipe(recipe, supabase_client)
                         book.add(recipe)
-                        st.success(f"✅ Saved '{name}'. Unit cost (excl. milk): KSh {recipe.unit_cost():.2f}/kg, "
-                                   f"yield {recipe.yield_kg_per_liter_milk():.3f} kg/L milk.")
+                        if wrote_to_supabase:
+                            st.success(f"✅ Saved '{name}' to Supabase. Unit cost (excl. milk): KSh {recipe.unit_cost():.2f}/kg, "
+                                       f"yield {recipe.yield_kg_per_liter_milk():.3f} kg/L milk.")
+                        else:
+                            st.warning(f"⚠️ '{name}' saved LOCALLY ONLY — Supabase write failed. "
+                                       f"This recipe will be LOST on the next app restart or redeploy. "
+                                       f"Check your Supabase connection before relying on it.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Could not save recipe: {e}")
