@@ -1869,11 +1869,22 @@ def main():
         <div class="mode-badge-all">📦 ALL ITEMS MODE</div>
         """, unsafe_allow_html=True)
         
+        
+        all_items_only = {
+            name: details for name, details in inventory_items.items()
+            if str(details.get('category', '')).strip().lower() != 'dry ice'
+        }
+        all_items_stock_df = (
+            stock_df[stock_df['ITEM_CATEGORY'].astype(str).str.strip().str.lower() != 'dry ice']
+            if stock_df is not None and not stock_df.empty and 'ITEM_CATEGORY' in stock_df.columns
+            else stock_df
+        )
+
         # Create context and render
         all_items_ctx = AllItemsContext(
-            inventory_items=inventory_items,
+            inventory_items=all_items_only,
             df=df,
-            stock_df=stock_df,
+            stock_df=all_items_stock_df,
             analytics=analytics,
             constants=constants,
             kpis=kpis,

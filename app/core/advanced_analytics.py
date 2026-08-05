@@ -1386,10 +1386,13 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
             st.metric("⚠️ Anomalies Detected", "0", "No anomalies")
     
     with col4:
-        if forecast_accuracy > 0:
-            st.metric("📈 Forecast Accuracy", f"{forecast_accuracy:.1f}%", accuracy_message)
-        else:
-            st.metric("📈 Forecast Accuracy", "0%", "Needs analysis")
+        # Always surface the real accuracy_message computed above (e.g.
+        # "Need 11 data points (have 3)", "No positive demand data",
+        # "Missing order data", "Error calculating") instead of silently
+        # discarding it in favor of a generic "Needs analysis" whenever
+        # the score happens to be 0 — that reason is the whole diagnostic
+        # signal for why the metric reads 0%.
+        st.metric("📈 Forecast Accuracy", f"{forecast_accuracy:.1f}%", accuracy_message)
     
     st.divider()
     
