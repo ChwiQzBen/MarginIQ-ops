@@ -1896,20 +1896,6 @@ def main():
         else:
             all_items_stock_df = stock_df
 
-        # TEMP DIAGNOSTIC — confirms the filter is catching everything.
-        # Remove once verified.
-        removed_count = len(inventory_items) - len(all_items_only)
-        with st.expander(f"🔍 Debug: Dry Ice filter ({removed_count} item(s) excluded)", expanded=False):
-            remaining_categories = sorted(set(
-                str(d.get('category', '')) for d in all_items_only.values()
-            ))
-            st.write(f"Categories remaining after filter: {remaining_categories}")
-            still_present = [n for n in all_items_only if 'dry ice' in n.lower()]
-            if still_present:
-                st.error(f"⚠️ Still found 'dry ice' in {len(still_present)} item name(s): {still_present[:10]}")
-            else:
-                st.write("✅ No 'dry ice' substring found in any remaining item name.")
-
         # Create context and render
         all_items_ctx = AllItemsContext(
             inventory_items=all_items_only,

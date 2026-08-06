@@ -138,33 +138,38 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
             "whatever's new. Already-synced rows are never re-touched, even if "
             "the Sheet row changes afterward."
         )
-        col_refresh, _ = st.columns([1, 4])
-        with col_refresh:
-            if st.button("🔄 Refresh from Sheet", key="lpo_sheet_refresh"):
-                clear_lpo_sheet_caches()
-            
-
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
             st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync LPOs.")
         else:
-            sheet_id = extract_sheet_id(sheet_url)
-        
-            try:
-                result = sync_new_lpo_lines_from_sheet(
-                    sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
-                )
-                if result["created"]:
-                    st.success(f"✅ Synced {result['created']} new LPO line(s) from the Sheet.")
+            # Sync now runs ONLY inside this button click — it previously ran
+            # unconditionally on every render of this tab, and called
+            # st.rerun() on success, which re-triggered the same unconditional
+            # sync again. If sheet-side duplicate detection ever missed a
+            # single row, that became a genuine infinite rerun loop; even
+            # when dedup worked, it still meant a Google Sheets API call on
+            # every rerun of this tab (including ones triggered by unrelated
+            # widgets, like the delivery-quantity inputs below).
+            if st.button("🔄 Refresh from Sheet", key="lpo_sheet_refresh"):
+                clear_lpo_sheet_caches()
+                sheet_id = extract_sheet_id(sheet_url)
+                try:
+                    result = sync_new_lpo_lines_from_sheet(
+                        sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
+                    )
+                    if result["created"]:
+                        st.success(f"✅ Synced {result['created']} new LPO line(s) from the Sheet.")
+                    else:
+                        st.info("No new LPO lines to sync — everything in the Sheet is already recorded.")
+                    if result["skipped_invalid"]:
+                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                            for err in result["errors"]:
+                                st.caption(f"- {err}")
                     st.rerun()
-                else:
-                    st.caption("No new LPO lines to sync — everything in the Sheet is already recorded.")
-                if result["skipped_invalid"]:
-                    with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
-                        for err in result["errors"]:
-                            st.caption(f"- {err}")
-            except Exception as e:
-                st.error(f"❌ Could not sync from the Sheet: {e}")
+                except Exception as e:
+                    st.error(f"❌ Could not sync from the Sheet: {e}")
+            else:
+                st.caption("Click **Refresh from Sheet** to check for new LPO lines.")
 
     st.markdown("---")
     st.markdown("#### Pending LPOs")

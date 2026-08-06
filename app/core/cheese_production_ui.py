@@ -253,15 +253,15 @@ def _render_recipes_tab(book: RecipeBook, supabase_client) -> None:
                             aging=aging,
                             recipe_version=editing.recipe_version if editing else "v1.0",
                         )
-                        wrote_to_supabase = save_recipe(recipe, supabase_client)
+                        wrote_to_supabase, save_error = save_recipe(recipe, supabase_client)
                         book.add(recipe)
                         if wrote_to_supabase:
                             st.success(f"✅ Saved '{name}' to Supabase. Unit cost (excl. milk): KSh {recipe.unit_cost():.2f}/kg, "
                                        f"yield {recipe.yield_kg_per_liter_milk():.3f} kg/L milk.")
                         else:
                             st.warning(f"⚠️ '{name}' saved LOCALLY ONLY — Supabase write failed. "
-                                       f"This recipe will be LOST on the next app restart or redeploy. "
-                                       f"Check your Supabase connection before relying on it.")
+                                       f"This recipe will be LOST on the next app restart or redeploy.\n\n"
+                                       f"**Reason:** {save_error or 'Unknown error'}")
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Could not save recipe: {e}")

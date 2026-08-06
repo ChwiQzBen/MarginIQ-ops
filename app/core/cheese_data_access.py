@@ -209,19 +209,24 @@ def _row_to_recipe(row: Dict[str, Any]) -> CheeseRecipe:
 # ============================================================
 # RECIPES
 # ============================================================
-def save_recipe(recipe: CheeseRecipe, supabase_client=None) -> bool:
-    """Returns True if the write reached Supabase (durable), False if it
-    fell back to local SQLite — SQLite lives on Streamlit Cloud's ephemeral
-    filesystem, so False means this recipe will be GONE on next restart."""
+def save_recipe(recipe: CheeseRecipe, supabase_client=None) -> tuple[bool, str | None]:
+    """Returns (wrote_to_supabase, error_message). error_message is None on
+    success or when supabase_client itself was falsy (never attempted).
+    SQLite lives on Streamlit Cloud's ephemeral filesystem, so
+    wrote_to_supabase=False means this recipe will be GONE on next restart."""
     row = _recipe_to_row(recipe)
     wrote_to_supabase = False
+    error_message = None
     if supabase_client:
         try:
             supabase_client.table("cheese_recipes").upsert(row).execute()
             wrote_to_supabase = True
         except Exception as e:
+            error_message = str(e)
             logger.error(f"Supabase save_recipe failed for '{recipe.name}', "
                          f"falling back to SQLite: {e}")
+    elif supabase_client is None:
+        error_message = "No Supabase client was passed in (supabase_client is None)."
     if not wrote_to_supabase:
         conn = _sqlite()
         c = conn.cursor()
@@ -234,7 +239,7 @@ def save_recipe(recipe: CheeseRecipe, supabase_client=None) -> bool:
              :operations, :aging_config, :recipe_version)""", row)
         conn.commit()
         conn.close()
-    return wrote_to_supabase
+    return wrote_to_supabase, error_message
 
 
 def delete_recipe(name: str, supabase_client=None) -> None:

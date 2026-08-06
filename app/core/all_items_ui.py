@@ -864,36 +864,6 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
         </div>
         """, unsafe_allow_html=True)
 
-        # TEMP DIAGNOSTIC — checks whether Dry Ice is coming from
-        # ctx.inventory_items (the live, filtered source) or from an
-        # EXISTING count's snapshot captured in session_state before the
-        # Dry Ice filter existed. Filtering ctx.inventory_items now does
-        # NOT retroactively change an already-created count.
-        with st.expander("🔍 Debug: Stock Take item source", expanded=False):
-            dry_ice_in_ctx = [n for n in (ctx.inventory_items or {}) if 'dry ice' in n.lower()]
-            if dry_ice_in_ctx:
-                st.error(f"⚠️ 'Dry Ice' still present in ctx.inventory_items: {dry_ice_in_ctx[:10]}")
-            else:
-                st.write("✅ No 'Dry Ice' items in ctx.inventory_items (the live filtered source).")
-            st.write(f"ctx.inventory_items count: {len(ctx.inventory_items) if ctx.inventory_items else 0}")
-            existing_counts = list(st.session_state.get('stock_takes', {}).keys())
-            st.write(f"Existing stock take session(s): {existing_counts if existing_counts else 'None'}")
-            if existing_counts:
-                st.warning(
-                    "⚠️ Existing count(s) above were created BEFORE this filter existed. "
-                    "They captured their own item snapshot at creation time — "
-                    "the reset button below clears them so a fresh count uses "
-                    "the filtered item list."
-                )
-            if st.button("🗑️ Reset all Stock Take sessions", key="reset_stock_take_sessions"):
-                st.session_state['stock_takes'] = {}
-                st.session_state['count_sheets'] = {}
-                st.session_state['count_assignments'] = {}
-                st.session_state['active_count_id'] = None
-                st.session_state['stock_take_inventory'] = {}
-                st.success("Stock Take session state cleared. Create a new count to use the filtered item list.")
-                st.rerun()
-
         if ctx.inventory_items:
             stock_take_interface(ctx.inventory_items)
         else:
@@ -1708,28 +1678,7 @@ def _render_visual_inventory_tab(ctx: AllItemsContext) -> None:
 
 
 def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
-    # TEMP DIAGNOSTIC — shows exactly what _load_all_items_analysis_data()
-    # (main.py) produced. "Forecast Accuracy: 0%" can mean several
-    # different underlying causes that look identical from the metric
-    # alone. Remove once the zero-accuracy issue is resolved.
-    with st.expander("🔍 Debug: All Items Analytics data source", expanded=False):
-        if ctx.df is None or ctx.df.empty:
-            st.write("ctx.df is empty or None — no daily quantity data was loaded from Google Sheets check-out data.")
-        else:
-            st.write(f"Rows: {len(ctx.df)}")
-            if 'Date' in ctx.df.columns:
-                st.write(f"Date range: {ctx.df['Date'].min()} to {ctx.df['Date'].max()}")
-            else:
-                st.write("No 'Date' column present")
-            if 'Order_Quantity_kg' in ctx.df.columns:
-                st.write(f"Total Order_Quantity_kg: {ctx.df['Order_Quantity_kg'].sum()}")
-            st.dataframe(ctx.df.head(10), use_container_width=True)
-        st.write(f"inventory_items count: {len(ctx.inventory_items) if ctx.inventory_items else 0}")
-
     if ctx.df is not None and not ctx.df.empty and ctx.inventory_items:
         create_advanced_analytics_tab(ctx.analytics, ctx.df, ctx.inventory_items, ctx.stock_df)
     else:
-        if ctx.df is None or ctx.df.empty:
-            st.warning("⚠️ No daily order/usage data available for Advanced Analytics — check the debug panel above.")
-        else:
-            st.warning("⚠️ No inventory items available for Advanced Analytics.")
+        st.warning("No data available for advanced analytics")
