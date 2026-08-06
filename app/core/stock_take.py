@@ -383,12 +383,18 @@ def stock_take_interface(inventory_items):
     # module safe to use standalone (it only sets keys that are missing).
     init_stock_take_session()
     
-    # Store inventory items in session state for persistence
-    if 'stock_take_inventory' not in st.session_state:
+    # Always sync session state with the freshly-passed inventory_items
+    # when it has real content. Previously this only wrote on the FIRST
+    # ever run ('not in session_state'), so once stock_take_inventory got
+    # set to sample/stale data on any earlier run, it silently shadowed
+    # every subsequent call forever — even after the real, correctly
+    # filtered inventory_items started arriving on every rerun. Only fall
+    # back to sample data when the passed-in inventory_items is itself
+    # genuinely empty, not based on whatever session state happened to
+    # hold from a previous run.
+    if inventory_items:
         st.session_state.stock_take_inventory = inventory_items
-    
-    # Ensure we have sample data if inventory is empty
-    if not st.session_state.stock_take_inventory:
+    elif 'stock_take_inventory' not in st.session_state or not st.session_state.stock_take_inventory:
         st.session_state.stock_take_inventory = get_sample_inventory_data()
         
     # Use the selected menu from session state (set in main sidebar)
