@@ -360,6 +360,14 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
                     user=auth.current_user['email'] if auth.is_authenticated else 'SYSTEM'
                 )
 
+                # Invalidate caches — without this, a fresh insert can stay
+                # invisible for up to 5 minutes (or until app restart) because
+                # get_transactions_from_db / get_historical_orders_from_db
+                # keep serving whatever they last cached for this period.
+                get_transactions_from_db.clear()
+                if transaction_type == 'receipt':
+                    get_historical_orders_from_db.clear()
+
                 return transaction_id
 
         except ValidationError:
@@ -444,6 +452,10 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
                 details=f"Transaction ID: {transaction_id}, New stock: {new_stock}kg",
                 user=auth.current_user['email'] if auth.is_authenticated else 'SYSTEM'
             )
+
+            get_transactions_from_db.clear()
+            if transaction_type == 'receipt':
+                get_historical_orders_from_db.clear()
 
             return transaction_id
 

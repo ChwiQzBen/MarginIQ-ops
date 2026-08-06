@@ -110,6 +110,25 @@ st.set_page_config(
 
 inject_global_css()
 
+st.markdown("""
+<style>
+div[data-testid="stMetric"] {
+    overflow: visible !important;
+}
+div[data-testid="stMetricValue"] {
+    font-size: clamp(0.85rem, 1.5vw, 1.6rem) !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    overflow: visible !important;
+    line-height: 1.25 !important;
+}
+div[data-testid="stMetricLabel"] {
+    white-space: normal !important;
+    overflow: visible !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 class Constants:
     PRICE_PER_KG = 146.55
     CONTAINER_SIZE = 150
