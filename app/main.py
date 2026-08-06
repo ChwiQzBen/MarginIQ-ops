@@ -1870,15 +1870,45 @@ def main():
         """, unsafe_allow_html=True)
         
         
+        def _is_dry_ice(name: str, details: dict) -> bool:
+            """Substring match (not exact-equality) against both category
+            AND item name. Exact-equality on category alone (previous
+            attempt) missed variants like 'Dry Ice - Blocks' or
+            'Dry Ice (kg)', which stayed silently included."""
+            category = str(details.get('category', '')).strip().lower()
+            item_name = str(name).strip().lower()
+            return 'dry ice' in category or 'dry ice' in item_name
+
         all_items_only = {
             name: details for name, details in inventory_items.items()
-            if str(details.get('category', '')).strip().lower() != 'dry ice'
+            if not _is_dry_ice(name, details)
         }
-        all_items_stock_df = (
-            stock_df[stock_df['ITEM_CATEGORY'].astype(str).str.strip().str.lower() != 'dry ice']
-            if stock_df is not None and not stock_df.empty and 'ITEM_CATEGORY' in stock_df.columns
-            else stock_df
-        )
+
+        if stock_df is not None and not stock_df.empty and 'ITEM_CATEGORY' in stock_df.columns:
+            _cat_lower = stock_df['ITEM_CATEGORY'].astype(str).str.strip().str.lower()
+            _name_lower = (
+                stock_df['ITEM_NAME'].astype(str).str.strip().str.lower()
+                if 'ITEM_NAME' in stock_df.columns else pd.Series([''] * len(stock_df))
+            )
+            all_items_stock_df = stock_df[
+                ~(_cat_lower.str.contains('dry ice', na=False) | _name_lower.str.contains('dry ice', na=False))
+            ]
+        else:
+            all_items_stock_df = stock_df
+
+        # TEMP DIAGNOSTIC — confirms the filter is catching everything.
+        # Remove once verified.
+        removed_count = len(inventory_items) - len(all_items_only)
+        with st.expander(f"🔍 Debug: Dry Ice filter ({removed_count} item(s) excluded)", expanded=False):
+            remaining_categories = sorted(set(
+                str(d.get('category', '')) for d in all_items_only.values()
+            ))
+            st.write(f"Categories remaining after filter: {remaining_categories}")
+            still_present = [n for n in all_items_only if 'dry ice' in n.lower()]
+            if still_present:
+                st.error(f"⚠️ Still found 'dry ice' in {len(still_present)} item name(s): {still_present[:10]}")
+            else:
+                st.write("✅ No 'dry ice' substring found in any remaining item name.")
 
         # Create context and render
         all_items_ctx = AllItemsContext(
