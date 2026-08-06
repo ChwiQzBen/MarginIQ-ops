@@ -65,6 +65,7 @@ class Permission(str, Enum):
     VIEW_COMMERCIAL_REPORTS = "view_commercial_reports"
     VIEW_CUSTOMER_ANALYTICS = "view_customer_analytics"
     MANAGE_PURCHASING = "manage_purchasing"
+    RECONCILE_CHECKOUTS = "reconcile_checkouts"
 
 
 ROLE_PERMISSIONS = {
@@ -74,7 +75,7 @@ ROLE_PERMISSIONS = {
         Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
         Permission.VIEW_ANALYTICS, Permission.VIEW_FORECASTS, Permission.VIEW_COST_DATA,
         Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE, Permission.MANAGE_PURCHASING,
-        Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS,
+        Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS, Permission.RECONCILE_CHECKOUTS,
         # --- cheese: full operational access ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -85,6 +86,7 @@ ROLE_PERMISSIONS = {
     "user": {
         Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
         Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
+        Permission.RECONCILE_CHECKOUTS,
         # --- cheese: day-to-day recording only, no planning/batch release ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -105,6 +107,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🖼️ Visual Inventory": Permission.VIEW_ANALYTICS,
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
+    "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
 }
 
 DRY_ICE_TAB_REQUIREMENTS = {

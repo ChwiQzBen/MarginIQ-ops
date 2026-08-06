@@ -57,6 +57,9 @@ from app.core.visual_inventory import (
 from app.core.stock_take import stock_take_interface
 from app.core.jit_purchasing_ui import render_jit_purchasing_tab
 from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS
+from app.core.checkout_reconciliation import (
+    init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
+)
 
 @dataclass
 class AllItemsContext:
@@ -107,6 +110,9 @@ def render_all_items_mode(ctx: AllItemsContext,
     if "🔄 JIT Purchasing" in tab_lookup:
         with tab_lookup["🔄 JIT Purchasing"]:
             render_jit_purchasing_tab(ctx.constants)
+    if "🔒 Checkout Reconciliation" in tab_lookup:
+        with tab_lookup["🔒 Checkout Reconciliation"]:
+            _render_checkout_reconciliation_tab(ctx)
 
 
 # ============================================================
@@ -1682,3 +1688,137 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
         create_advanced_analytics_tab(ctx.analytics, ctx.df, ctx.inventory_items, ctx.stock_df)
     else:
         st.warning("No data available for advanced analytics")
+
+
+# ============================================================
+# 🔒 CHECKOUT RECONCILIATION
+# ============================================================
+def _render_checkout_reconciliation_tab(ctx: AllItemsContext) -> None:
+    st.markdown("### 🔒 Checkout Reconciliation")
+    st.caption(
+        "Security control: every check-out recorded here starts as **Pending** and is "
+        "excluded from confirmed-usage figures until an authorized user reconciles it "
+        "against the physical dispatch slip / gate pass number. A mismatch or missing "
+        "slip should be marked **Blocked**, not Reconciled."
+    )
+
+    supabase_client = None
+    try:
+        from app.core.supabase_client import init_supabase
+        supabase_client = init_supabase()
+    except Exception:
+        pass
+    init_checkout_reconciliation_storage(supabase_client)
+
+    all_checkouts = get_checkouts(supabase_client=supabase_client)
+    pending = [c for c in all_checkouts if c["status"] == "Pending"]
+    reconciled = [c for c in all_checkouts if c["status"] == "Reconciled"]
+    blocked = [c for c in all_checkouts if c["status"] == "Blocked"]
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("⏳ Pending", len(pending))
+    m2.metric("✅ Reconciled", len(reconciled))
+    m3.metric("🚫 Blocked", len(blocked))
+
+    st.markdown("---")
+    st.markdown("#### 📝 Record a Check-Out")
+    item_options = sorted((ctx.inventory_items or {}).keys())
+    with st.form("record_checkout_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            checkout_date = st.date_input("Checkout Date", value=datetime.now().date())
+            if item_options:
+                item_name = st.selectbox("Item", item_options)
+            else:
+                item_name = st.text_input("Item")
+            quantity = st.number_input("Quantity", min_value=0.0, value=1.0, step=1.0)
+            unit = st.text_input("Unit", value="kg")
+        with col2:
+            requested_by = st.text_input("Requested By")
+            destination = st.text_input("Destination (optional)")
+            dispatch_slip_number = st.text_input(
+                "Dispatch Slip / Gate Pass Number",
+                help="Required — this is the physical reference this check-out will be reconciled against.",
+            )
+        notes = st.text_input("Notes (optional)")
+
+        if st.form_submit_button("📤 Record Check-Out", type="primary"):
+            if not item_name:
+                st.error("Select or enter an item.")
+            elif quantity <= 0:
+                st.error("Enter a quantity greater than 0.")
+            elif not dispatch_slip_number.strip():
+                st.error("Dispatch slip / gate pass number is required.")
+            else:
+                new_id = record_checkout(
+                    checkout_date=checkout_date, item_name=item_name, quantity=quantity,
+                    dispatch_slip_number=dispatch_slip_number.strip(), unit=unit,
+                    requested_by=requested_by, destination=destination, notes=notes,
+                    supabase_client=supabase_client,
+                )
+                st.success(f"✅ Recorded as **Pending** (#{new_id}). It won't count as "
+                           f"confirmed usage until reconciled below.")
+                st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### ⏳ Pending Reconciliation")
+    if not pending:
+        st.info("Nothing pending — every check-out is reconciled.")
+    else:
+        for co in pending:
+            with st.container():
+                st.markdown(
+                    f"**#{co['id']}** — {co['item_name']} — {co['quantity']:.1f} {co.get('unit', '')} "
+                    f"— slip **{co['dispatch_slip_number']}** — {co['checkout_date']} "
+                    f"— requested by {co.get('requested_by') or '—'}"
+                )
+                if co.get("destination"):
+                    st.caption(f"Destination: {co['destination']}")
+                c1, c2, c3 = st.columns([2, 1, 1])
+                with c1:
+                    reconciler = st.text_input(
+                        "Reconciled by", key=f"reconciler_{co['id']}", label_visibility="collapsed",
+                        placeholder="Your name",
+                    )
+                with c2:
+                    if st.button("✅ Verified — Reconcile", key=f"verify_{co['id']}"):
+                        if not reconciler.strip():
+                            st.error("Enter your name before reconciling.")
+                        else:
+                            reconcile_checkout(co["id"], reconciler.strip(), verified=True,
+                                                supabase_client=supabase_client)
+                            st.success(f"✅ #{co['id']} reconciled.")
+                            st.rerun()
+                with c3:
+                    if st.button("🚫 Could Not Verify — Block", key=f"block_{co['id']}"):
+                        if not reconciler.strip():
+                            st.error("Enter your name before blocking.")
+                        else:
+                            reconcile_checkout(co["id"], reconciler.strip(), verified=False,
+                                                supabase_client=supabase_client)
+                            st.warning(f"🚫 #{co['id']} blocked — excluded from confirmed usage.")
+                            st.rerun()
+                st.markdown("---")
+
+    with st.expander(f"🚫 Blocked ({len(blocked)}) — need correction or re-verification"):
+        if blocked:
+            st.dataframe(pd.DataFrame(blocked)[
+                ["id", "checkout_date", "item_name", "quantity", "dispatch_slip_number",
+                 "reconciled_by", "reconciliation_notes"]
+            ], use_container_width=True, hide_index=True)
+        else:
+            st.caption("None.")
+
+    with st.expander(f"✅ Reconciled history ({len(reconciled)})"):
+        if reconciled:
+            df = pd.DataFrame(reconciled)[
+                ["id", "checkout_date", "item_name", "quantity", "dispatch_slip_number",
+                 "reconciled_by", "reconciled_at"]
+            ]
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Download Reconciled CSV", csv,
+                                file_name=f"reconciled_checkouts_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv")
+        else:
+            st.caption("None yet.")
