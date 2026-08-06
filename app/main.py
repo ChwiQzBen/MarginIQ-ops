@@ -834,6 +834,36 @@ def main():
         print(f"Period changed. Loading transactions for {st.session_state.selected_period}...")
         st.session_state.transactions = get_transactions_from_db(st.session_state.selected_period)
         st.session_state.last_loaded_period = st.session_state.selected_period # Update the tracker
+
+    # TEMP DIAGNOSTIC — bypasses st.cache_data entirely, queries Supabase
+    # directly for the currently selected period. Tells us definitively
+    # whether this is a caching issue, an RLS policy issue, or a
+    # period-string mismatch, instead of guessing further. Remove once
+    # resolved.
+    if mode == "❄️ Dry Ice Mode":
+        with st.expander("🔍 Debug: Direct Supabase query (bypasses cache)", expanded=False):
+            sb = init_supabase()
+            st.write(f"Supabase client connected: {bool(sb)}")
+            st.write(f"Currently selected period (exact string): {st.session_state.selected_period!r}")
+            if sb:
+                try:
+                    raw_txn = sb.table('transactions').select('*') \
+                        .eq('analysis_period', st.session_state.selected_period).execute()
+                    st.write(f"Raw Supabase 'transactions' rows for this period: {len(raw_txn.data)}")
+                    if raw_txn.data:
+                        st.dataframe(pd.DataFrame(raw_txn.data).head(10), use_container_width=True)
+
+                    raw_all_periods = sb.table('transactions').select('analysis_period').execute()
+                    distinct_periods = sorted(set(r.get('analysis_period') for r in raw_all_periods.data))
+                    st.write(f"Distinct analysis_period values actually in Supabase: {distinct_periods}")
+
+                    raw_hist = sb.table('historical_orders').select('*') \
+                        .eq('analysis_period', st.session_state.selected_period).execute()
+                    st.write(f"Raw Supabase 'historical_orders' rows for this period: {len(raw_hist.data)}")
+                except Exception as e:
+                    st.error(f"Direct Supabase query failed: {e}")
+            st.write(f"Cached get_transactions_from_db result count (what the UI actually uses): "
+                     f"{len(st.session_state.transactions)}")
     
     
     #1. Generate Forecast (Logic from former Tab 2) ---
