@@ -111,16 +111,17 @@ def fix_order_date():
 
 
 def init_db():
-    """Initialize database (Supabase or SQLite)"""
+    """Initialize database (Supabase or SQLite). Local SQLite schema is
+    ALWAYS created, even when Supabase is reachable — every write function
+    in this module falls back to SQLite on a transient Supabase failure,
+    so the fallback tables must already exist before that ever happens,
+    not just when Supabase is unreachable at startup."""
     if USE_SUPABASE:
         from app.core.supabase_client import init_supabase
         if init_supabase():
-            # Supabase tables are created manually in the Supabase dashboard
-            # Or you can run a one-time setup script
             st.toast("☁️ Connected to cloud database", icon="✅")
-            return
 
-    # Fallback to SQLite
+    # Always ensure local SQLite fallback schema exists
     conn = sqlite3.connect('dry_ice.db')
     c = conn.cursor()
 
