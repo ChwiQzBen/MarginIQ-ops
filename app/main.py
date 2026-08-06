@@ -844,6 +844,27 @@ def main():
         with st.expander("🔍 Debug: Direct Supabase query (bypasses cache)", expanded=False):
             sb = init_supabase()
             st.write(f"Supabase client connected: {bool(sb)}")
+
+            # Decode the JWT payload to confirm which role Supabase actually
+            # sees on every request — 'anon' vs 'service_role'. Doesn't
+            # expose the full secret, and doesn't rely on trusting the
+            # label in secrets.toml, which can silently be wrong or stale.
+            import base64 as _b64, json as _json
+            try:
+                _raw_key = st.secrets.get("SUPABASE_KEY", "")
+                _payload_b64 = _raw_key.split(".")[1]
+                _payload_b64 += "=" * (-len(_payload_b64) % 4)  # pad for base64
+                _payload = _json.loads(_b64.urlsafe_b64decode(_payload_b64))
+                st.write(f"JWT 'role' claim (what Supabase actually sees): **{_payload.get('role', 'unknown')}**")
+                st.write(f"Project ref in key: {_payload.get('ref', 'unknown')}")
+                _url = st.secrets.get("SUPABASE_URL", "")
+                st.write(f"SUPABASE_URL project ref: {_url.split('//')[-1].split('.')[0] if _url else 'unknown'}")
+                if _payload.get('ref') and _url and _payload.get('ref') not in _url:
+                    st.error("⚠️ Key's project ref does NOT match SUPABASE_URL's project — "
+                              "these may be pointing at two different Supabase projects.")
+            except Exception as e:
+                st.warning(f"Could not decode key: {e}")
+
             st.write(f"Currently selected period (exact string): {st.session_state.selected_period!r}")
             if sb:
                 try:
