@@ -89,30 +89,30 @@ def render_all_items_mode(ctx: AllItemsContext,
         st.warning("This section isn't available for your current role. If you feel this is a mistake, please contact your administrator.")
         return
 
-    tabs = st.tabs(visible)
-    tab_lookup = dict(zip(visible, tabs))
+    
+    if "all_items_active_tab" not in st.session_state or st.session_state.all_items_active_tab not in visible:
+        st.session_state.all_items_active_tab = visible[0]
 
-    if "📦 Inventory" in tab_lookup:
-        with tab_lookup["📦 Inventory"]:
-            _render_inventory_tab()
-    if "📊 Stock Movements" in tab_lookup:
-        with tab_lookup["📊 Stock Movements"]:
-            _render_stock_movements_tab(ctx)
-    if "📈 All Items Analytics" in tab_lookup:
-        with tab_lookup["📈 All Items Analytics"]:
-            _render_analytics_tab(ctx)
-    if "🖼️ Visual Inventory" in tab_lookup:
-        with tab_lookup["🖼️ Visual Inventory"]:
-            _render_visual_inventory_tab(ctx)
-    if "🤖 Advanced Analytics" in tab_lookup:
-        with tab_lookup["🤖 Advanced Analytics"]:
-            _render_advanced_analytics_tab(ctx)
-    if "🔄 JIT Purchasing" in tab_lookup:
-        with tab_lookup["🔄 JIT Purchasing"]:
-            render_jit_purchasing_tab(ctx.constants)
-    if "🔒 Checkout Reconciliation" in tab_lookup:
-        with tab_lookup["🔒 Checkout Reconciliation"]:
-            _render_checkout_reconciliation_tab(ctx)
+    active_tab = st.radio(
+        "Section", visible, horizontal=True,
+        key="all_items_active_tab", label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    if active_tab == "📦 Inventory":
+        _render_inventory_tab()
+    elif active_tab == "📊 Stock Movements":
+        _render_stock_movements_tab(ctx)
+    elif active_tab == "📈 All Items Analytics":
+        _render_analytics_tab(ctx)
+    elif active_tab == "🖼️ Visual Inventory":
+        _render_visual_inventory_tab(ctx)
+    elif active_tab == "🤖 Advanced Analytics":
+        _render_advanced_analytics_tab(ctx)
+    elif active_tab == "🔄 JIT Purchasing":
+        render_jit_purchasing_tab(ctx.constants)
+    elif active_tab == "🔒 Checkout Reconciliation":
+        _render_checkout_reconciliation_tab(ctx)
 
 
 # ============================================================

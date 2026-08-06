@@ -173,30 +173,30 @@ def render_dry_ice_mode(ctx: DryIceContext,
         st.warning("This section isn't available for your current role. If you feel this is a mistake, please contact your administrator.")
         return
 
-    tabs = st.tabs(visible)
-    tab_lookup = dict(zip(visible, tabs))
+    
+    if "dry_ice_active_tab" not in st.session_state or st.session_state.dry_ice_active_tab not in visible:
+        st.session_state.dry_ice_active_tab = visible[0]
 
-    if "📊 Order Analysis" in tab_lookup:
-        with tab_lookup["📊 Order Analysis"]:
-            _render_order_analysis_tab(ctx)
-    if "🔮 Demand Forecast" in tab_lookup:
-        with tab_lookup["🔮 Demand Forecast"]:
-            _render_demand_forecast_tab(ctx)
-    if "📦 Inventory Management" in tab_lookup:
-        with tab_lookup["📦 Inventory Management"]:
-            _render_inventory_management_tab(ctx)
-    if "💰 Cost Optimization" in tab_lookup:
-        with tab_lookup["💰 Cost Optimization"]:
-            _render_cost_optimization_tab(ctx)
-    if "📋 Recommendations" in tab_lookup:
-        with tab_lookup["📋 Recommendations"]:
-            _render_recommendations_tab(ctx)
-    if "🛠️ Maintenance" in tab_lookup:
-        with tab_lookup["🛠️ Maintenance"]:
-            _render_maintenance_tab(ctx)
-    if "📜 Transaction History" in tab_lookup:
-        with tab_lookup["📜 Transaction History"]:
-            _render_transaction_history_tab(ctx)
+    active_tab = st.radio(
+        "Section", visible, horizontal=True,
+        key="dry_ice_active_tab", label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    if active_tab == "📊 Order Analysis":
+        _render_order_analysis_tab(ctx)
+    elif active_tab == "🔮 Demand Forecast":
+        _render_demand_forecast_tab(ctx)
+    elif active_tab == "📦 Inventory Management":
+        _render_inventory_management_tab(ctx)
+    elif active_tab == "💰 Cost Optimization":
+        _render_cost_optimization_tab(ctx)
+    elif active_tab == "📋 Recommendations":
+        _render_recommendations_tab(ctx)
+    elif active_tab == "🛠️ Maintenance":
+        _render_maintenance_tab(ctx)
+    elif active_tab == "📜 Transaction History":
+        _render_transaction_history_tab(ctx)
 
 
 # ============================================================
