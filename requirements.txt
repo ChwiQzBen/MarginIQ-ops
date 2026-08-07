@@ -67,8 +67,6 @@ zipp==3.23.0
 gspread==6.2.1
 oauth2client==4.1.3
 pmdarima==2.1.1
-torch==2.0.1
-torchvision==0.15.2
 bcrypt>=4.0.0
 pyotp>=2.9.0
 qrcode>=7.4.0
@@ -82,3 +80,4 @@ websockets==12.0
 protobuf==4.25.9
 tensorflow-cpu==2.16.1
 google-auth>=2.0.0
+psutil>=5.9.0
