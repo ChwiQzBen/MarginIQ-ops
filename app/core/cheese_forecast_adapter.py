@@ -34,8 +34,6 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from app.core.advanced_forecasting_v2 import AdvancedForecaster
-
 _FORECAST_DAYS = 30
 _DEFAULT_MODELS = ["prophet", "xgboost", "lightgbm", "random_forest"]
 
@@ -53,6 +51,8 @@ def make_ensemble_demand_forecaster(models: Optional[List[str]] = None):
     active_models = models if models is not None else _DEFAULT_MODELS
 
     def _forecast(cheese_name: str, daily_sales_kg: List[float]) -> Tuple[float, float]:
+        
+        from app.core.advanced_forecasting_v2 import AdvancedForecaster
         af = AdvancedForecaster()
 
         end = date.today()
