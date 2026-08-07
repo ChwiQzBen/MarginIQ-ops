@@ -359,7 +359,8 @@ def main():
         'show_password_reset': False,  
         'reset_email_input': '',       
         'rate_limit_warning': None,
-        'selected_models': ['prophet', 'arima', 'lstm', 'monte_carlo', 'xgboost', 'lightgbm', 'random_forest'],
+        # Excludes slow models (ARIMA, LSTM) by default; users can enable via Model Configuration
+        'selected_models': ['prophet', 'monte_carlo', 'xgboost', 'lightgbm', 'random_forest'],
     }
     
     for key, value in session_defaults.items():
