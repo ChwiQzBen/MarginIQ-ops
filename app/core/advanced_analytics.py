@@ -1,40 +1,25 @@
 """
 Advanced Analytics Module - Enterprise-grade forecasting and analytics
 Integrates multivariate prediction, anomaly detection, and automated model selection
+
+PERFORMANCE NOTE: sklearn extras, statsmodels, pmdarima, prophet, and torch
+used to import at MODULE LEVEL — meaning every one of them loaded on every
+app boot, in every mode (BCPOS, Dry Ice, All Items), even though this
+module's actual UI entry point (create_advanced_analytics_tab) only calls
+analyze_all_items() and detect_anomalies(), which need nothing beyond
+pandas/numpy and sklearn's IsolationForest. Prophet (via cmdstanpy) and
+torch are both notoriously slow imports. torch/nn were never referenced
+anywhere in this file's method bodies at all — pure dead weight. adfuller,
+ExponentialSmoothing, ARIMA, and auto_arima were imported but never used
+anywhere in this file either. Every genuinely-used heavy import is now
+deferred into the specific method that needs it; the never-used ones are
+simply removed.
 """
 import streamlit as st
 import pandas as pd
 import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
-
-# Core Analytics Libraries
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor, IsolationForest
-from sklearn.neural_network import MLPRegressor
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
-
-# Time Series
-from statsmodels.tsa.seasonal import seasonal_decompose
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from statsmodels.tsa.arima.model import ARIMA
-from pmdarima import auto_arima
-
-# Advanced Libraries
-try:
-    from prophet import Prophet
-    PROPHET_AVAILABLE = True
-except ImportError:
-    PROPHET_AVAILABLE = False
-
-try:
-    import torch
-    import torch.nn as nn
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
 
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
@@ -110,6 +95,7 @@ class AdvancedAnalytics:
         
     def _init_anomaly_detector(self):
         """Initialize Isolation Forest for anomaly detection"""
+        from sklearn.ensemble import IsolationForest
         self.anomaly_detector = IsolationForest(
             contamination=0.05,  # 5% of data considered anomalies
             random_state=42,
@@ -142,6 +128,9 @@ class AdvancedAnalytics:
         Returns:
             Dict with forecast results and model selection
         """
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
+
         if feature_cols is None:
             # Default business drivers
             feature_cols = [
@@ -304,6 +293,9 @@ class AdvancedAnalytics:
 
     def _get_models_for_selection(self):
         """Get models for automated selection"""
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.neural_network import MLPRegressor
+
         models = {
             'RandomForest': RandomForestRegressor(
                 n_estimators=100,
@@ -322,8 +314,11 @@ class AdvancedAnalytics:
             )
         }
         
-        # Add Prophet if available
-        if PROPHET_AVAILABLE:
+        # Add Prophet if available — imported here, not at module level,
+        # since cmdstanpy (Prophet's backend) is one of the slowest
+        # imports in the Python data-science ecosystem.
+        try:
+            from prophet import Prophet
             models['Prophet'] = Prophet(
                 seasonality_mode='multiplicative',
                 yearly_seasonality=True,
@@ -331,6 +326,8 @@ class AdvancedAnalytics:
                 daily_seasonality=False,
                 interval_width=0.8
             )
+        except ImportError:
+            pass
         
         return models
 
@@ -652,6 +649,8 @@ class AdvancedAnalytics:
         Returns:
             Dict with decomposition results
         """
+        from statsmodels.tsa.seasonal import seasonal_decompose
+
         # Prepare time series
         ts = df.set_index('Date')[target_col]
         

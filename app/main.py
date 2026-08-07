@@ -18,7 +18,6 @@ from core.smart_alerts import SmartAlerts
 from core.predictive_maintenance import PredictiveMaintenance
 from core.system_integrations import SystemIntegrations
 from core.report_generator import ReportGenerator
-from app.core.advanced_analytics import AdvancedAnalytics
 from app.core.google_sheet_reader import GoogleSheetReader
 from app.core.decision_engine import InventorySnapshot, InventoryDecisionEngine
 from app.core.bcpos_ui import render_bcpos_mode
@@ -653,10 +652,7 @@ def main():
         analyzer = None
         kpis = {}
 
-    # Initialize advanced analytics
-    analytics = AdvancedAnalytics() 
-
-   # Try to load from Google Sheets first
+    # Try to load from Google Sheets first
     @st.cache_data(ttl=600)
     @safe_operation(error_message="Failed to load inventory data")
     def load_inventory_data():
@@ -1914,6 +1910,10 @@ def main():
             ]
         else:
             all_items_stock_df = stock_df
+
+        
+        from app.core.advanced_analytics import AdvancedAnalytics
+        analytics = AdvancedAnalytics()
 
         # Create context and render
         all_items_ctx = AllItemsContext(
