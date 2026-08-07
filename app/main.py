@@ -896,7 +896,7 @@ def main():
     if mode == "❄️ Dry Ice Mode":
         # Check if we have data before generating forecast
         if not df.empty and len(df) >= 5:
-            with st.spinner("🔄 Generating forecast with auto-tuned models..."):
+            with st.spinner("⏳ Please wait as we work on your request..."):
                 fig_ensemble, ensemble_forecast_values, model_forecasts, backtest_accuracy, total_forecasted_demand, forecast_std_dev = get_forecast_data(df)
             
                 # Update model forecasts with proper names
