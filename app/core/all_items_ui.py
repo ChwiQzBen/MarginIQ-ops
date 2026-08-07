@@ -800,14 +800,18 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     st.divider()
 
-    movement_tab1, movement_tab2, movement_tab3, movement_tab4 = st.tabs([
-        "📥 Check-Ins",
-        "📤 Check-Outs",
-        "📊 Current Stock",
-        "📋 Stock Take"
-    ])
+    subtab_options = ["📥 Check-Ins", "📤 Check-Outs", "📊 Current Stock", "📋 Stock Take"]
+    if "stock_movements_active_subtab" not in st.session_state or \
+            st.session_state.stock_movements_active_subtab not in subtab_options:
+        st.session_state.stock_movements_active_subtab = subtab_options[0]
 
-    with movement_tab1:
+    active_subtab = st.radio(
+        "Movement view", subtab_options, horizontal=True,
+        key="stock_movements_active_subtab", label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    if active_subtab == "📥 Check-Ins":
         st.markdown("### 📥 Check-In Records")
         with st.expander("📋 View Check-In Records", expanded=False):
             if not check_in_df.empty:
@@ -822,7 +826,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             else:
                 st.info("No check-in records found.")
 
-    with movement_tab2:
+    elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
         with st.expander("📋 View Check-Out Records", expanded=False):
             if not check_out_df.empty:
@@ -837,7 +841,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             else:
                 st.info("No check-out records found.")
 
-    with movement_tab3:
+    elif active_subtab == "📊 Current Stock":
         st.markdown("### 📊 Current Stock Levels")
         with st.expander("📋 View Current Stock Levels", expanded=False):
             if not current_stock_df.empty:
@@ -852,7 +856,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             else:
                 st.info("No current stock records found.")
 
-    with movement_tab4:
+    elif active_subtab == "📋 Stock Take":
         st.markdown("### 📋 Stock Take")
         st.markdown("""
         <div style="
@@ -876,11 +880,6 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             st.warning("⚠️ No inventory data available. Please load inventory from Google Sheets first.")
             st.info("Go to the 📦 Inventory tab and refresh to load data.")
 
-            # NOTE: main.py's original version of this button reassigned a
-            # local `inventory_items` variable that was never read again and
-            # never triggered a rerun, so it silently did nothing. Fixed here
-            # to actually persist the sample data and rerun so the button
-            # works as intended.
             if st.button("📥 Load Sample Inventory Data", key="stock_take_load_sample"):
                 from app.core.visual_inventory import get_sample_inventory_data
                 st.session_state.stock_take_inventory = get_sample_inventory_data()
