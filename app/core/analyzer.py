@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from prophet import Prophet
 from scipy.stats import norm
 import sys
 import os
@@ -198,6 +197,7 @@ class DryIceAnalyzer:
     
     def forecast_demand(self, periods=30):
         """Generate demand forecast with Prophet"""
+        from prophet import Prophet
         try:
             # Handle both DataFrame and data loader objects
             if hasattr(self.data_loader, 'df'):
