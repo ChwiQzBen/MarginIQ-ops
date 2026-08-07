@@ -9,6 +9,8 @@ from plotly.subplots import make_subplots
 from scipy.stats import norm
 import sys
 import os
+import time
+_import_start = time.time()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import math
 from core.analyzer import DryIceAnalyzer
@@ -330,6 +332,8 @@ def create_enhanced_charts(df, analyzer, kpis, forecast_data, safety_stock):
         fig_forecast.update_layout(title="Demand Forecast (30 Days)")
 
     return fig_orders, fig_cost_overview, fig_forecast
+
+logger.info(f"⏱️ All imports finished in {time.time() - _import_start:.1f}s")
 
 def main():
     global px
