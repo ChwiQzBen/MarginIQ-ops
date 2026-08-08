@@ -113,10 +113,6 @@ def _resolve_customer_id(customer_id, customer_name, supabase_client):
 # ============================================================
 def _render_lpo_register_tab(book, supabase_client) -> None:
     st.markdown("### 📄 LPO Register")
-    st.caption(
-        "Confirmed customer orders. Open quantities here floor tomorrow's "
-        "production plan in 🧀 Manufacturing → 📋 Production Planning."
-    )
     if not book.list_names():
         st.info("Add a recipe in 🧀 Manufacturing → Recipes before receiving LPOs.")
         return
@@ -133,11 +129,6 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
         st.caption(f"No open LPOs due {tomorrow.strftime('%b %d')} (tomorrow) yet.")
 
     with st.expander("🔄 Sync from Google Sheet", expanded=not tomorrow_open):
-        st.caption(
-            "LPOs are entered in the Google Sheet, not here — this just pulls in "
-            "whatever's new. Already-synced rows are never re-touched, even if "
-            "the Sheet row changes afterward."
-        )
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
             st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync LPOs.")
@@ -168,8 +159,6 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Could not sync from the Sheet: {e}")
-            else:
-                st.caption("Click **Refresh from Sheet** to check for new LPO lines.")
 
     st.markdown("---")
     st.markdown("#### Pending LPOs")
@@ -249,11 +238,6 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
 # ============================================================
 def _render_sales_tab(book, tracker, supabase_client) -> None:
     st.markdown("### 💰 Record a Sale")
-    st.caption(
-        "Dispatches stock via FEFO (earliest-expiry batches consumed first) and "
-        "saves the sale to history, so 🧀 Manufacturing → Production Planning's "
-        "demand forecast has real data."
-    )
 
     if not book.list_names():
         st.info("Add a recipe in 🧀 Manufacturing → Recipes first, then produce "
@@ -323,14 +307,8 @@ def _render_sales_tab(book, tracker, supabase_client) -> None:
 # ============================================================
 def _render_customers_tab(supabase_client) -> None:
     st.markdown("### 👥 Customers")
-    st.caption(
-        "Customer registry. New Sales/LPOs can now pick a customer directly — "
-        "existing history still needs reconciliation (below) before Customer "
-        "Analytics can trust it."
-    )
 
     customers = get_customers(supabase_client=supabase_client)
-
     if customers:
         df = pd.DataFrame(customers)
         cols = ["name", "contact_person", "phone", "email", "credit_terms_days"]
@@ -388,12 +366,7 @@ def _render_customers_tab(supabase_client) -> None:
                 st.rerun()
 
     with st.expander("🔄 Reconcile existing Sales/LPO history", expanded=False):
-        st.caption(
-            "One-time backfill: matches freetext customer names on past sales "
-            "and LPOs to this registry (case-insensitive), creating a new "
-            "customer record for any name that doesn't already exist. Safe to "
-            "run again later — already-linked rows are skipped."
-        )
+        st.caption("One-time backfill — safe to run again, already-linked rows are skipped.")
         if st.button("Run Reconciliation", key="run_customer_reconciliation"):
             with st.spinner("Matching historical records..."):
                 result = reconcile_customers_from_history(supabase_client=supabase_client)
@@ -410,12 +383,6 @@ def _render_customers_tab(supabase_client) -> None:
 # ============================================================
 def _render_customer_analytics_tab(supabase_client) -> None:
     st.markdown("### 📊 Customer Analytics")
-    st.caption(
-        "Ordering Patterns, Product Preferences, RFM segmentation, CLV, and "
-        "churn risk. Only customer_id-linked sales count here — scores are "
-        "most meaningful once there's a real book of customers and order "
-        "history, so treat early numbers as directional."
-    )
 
     customers = get_customers(supabase_client=supabase_client)
     sales = get_sales_history(supabase_client=supabase_client)
@@ -476,7 +443,6 @@ def _render_customer_analytics_tab(supabase_client) -> None:
 
     st.markdown("---")
     st.markdown("#### RFM Segments")
-    st.caption("Recency / Frequency / Monetary, scored 1-5 relative to your other customers.")
     rfm = compute_rfm(sales, customers)
     if rfm:
         rfm_df = pd.DataFrame([{
@@ -491,10 +457,6 @@ def _render_customer_analytics_tab(supabase_client) -> None:
 
     st.markdown("---")
     st.markdown("#### Customer Lifetime Value (CLV)")
-    st.caption(
-        "Historical revenue plus a cadence-projected annual value. Projection "
-        "needs at least 2 orders to estimate a cadence — shows '—' until then."
-    )
     clv = compute_clv(sales, customers)
     if clv:
         clv_df = pd.DataFrame([{
@@ -510,11 +472,7 @@ def _render_customer_analytics_tab(supabase_client) -> None:
 
     st.markdown("---")
     st.markdown("#### Churn Risk")
-    st.caption(
-        "Flags customers overdue relative to their own ordering cadence. "
-        "Customers with under 2 orders don't have a personal cadence yet, "
-        "so a 30-day default is used instead (marked with *)."
-    )
+    st.caption("* = fewer than 2 orders, using a 30-day default cadence.")
     churn = compute_churn_risk(sales, customers)
     if churn:
         risk_order = {"High": 0, "Medium": 1, "Low": 2}
@@ -547,10 +505,7 @@ def _render_commercial_reports_tab(supabase_client) -> None:
 
     render_report_tab(
         title="📋 Commercial Reports",
-        caption="Rollups over Sales and LPO data. Customer-level breakdowns use freetext "
-                "customer names — expect some fragmentation until Sales/LPO are fully "
-                "linked to the Customers registry (see 👥 Customers → Reconciliation).",
-        session_key="commercial_report",
+        caption="Freetext customer names may fragment breakdowns until linked in 👥 Customers.",        session_key="commercial_report",
         build_fn=_build,
         summarize_fn=summarize_commercial_report_data,
         pdf_fn=generate_commercial_report,
