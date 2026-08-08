@@ -1030,11 +1030,6 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
     df, kpis, constants = ctx.df, ctx.kpis, ctx.constants
 
     st.markdown("### 🏗️ Storage Capacity Planning")
-    st.caption(
-        "For order-frequency savings and payback, see 📦 Inventory Management "
-        "and 💰 Cost Optimization — this tab is only about whether you have "
-        "somewhere to physically hold an EOQ-sized order."
-    )
 
     if df.empty or ctx.eoq <= 0:
         st.info(
@@ -1073,7 +1068,6 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
         st.metric("Peak on-hand (EOQ + safety stock)", f"{peak_storage_kg:,.0f} kg")
 
     st.markdown("#### 🧊 Containers needed")
-    st.caption(f"Using your standard container size of {container_size:,.0f} kg.")
     container_cols = st.columns(2)
     with container_cols[0]:
         st.metric("Containers today (typical order)", f"{containers_today}")
@@ -1083,6 +1077,7 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
             "Containers at EOQ + safety stock",
             f"{containers_at_peak}",
             f"+{container_delta}" if container_delta > 0 else f"{container_delta}",
+            help=f"Based on a {container_size:,.0f} kg standard container size.",
         )
 
     # ------------------------------------------------------------
@@ -1091,11 +1086,7 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
     # ------------------------------------------------------------
     st.markdown("---")
     st.markdown("#### 🏗️ Do you actually have room for that?")
-    st.caption(
-        "There's no container or storage-space data on file yet, so enter "
-        "your real on-site capacity here to check it against the EOQ "
-        "scenario above. This resets each session — it isn't saved anywhere."
-    )
+    st.caption("Session only — not saved between visits.")
 
     available_capacity = st.number_input(
         "On-site dry ice storage capacity (kg)",
@@ -1129,12 +1120,7 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
         f"KSh {ctx.annual_sublimation_loss:,.0f}",
         help=f"At the app's modeled average loss rate of {ctx.avg_sublimation:.2%}, applied to your annual volume.",
     )
-    st.caption(
-        "This uses the same flat average loss rate as the rest of the app — it does NOT "
-        "scale up for the longer dwell time a bigger EOQ order would sit in storage before "
-        "it's used. Treat it as a floor on the real cost once you're holding stock longer "
-        "between deliveries, not a ceiling."
-    )
+    st.caption("Floor, not ceiling — doesn't scale up for longer dwell time under bulk orders.")
 
     # ------------------------------------------------------------
     # Storage investment payback — only relevant if there's a gap
@@ -1142,10 +1128,6 @@ def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
     if available_capacity > 0 and capacity_gap > 0:
         st.markdown("---")
         st.markdown("#### 💰 Is closing the gap worth it?")
-        st.caption(
-            "Weighs the one-off cost of adding storage against the annual transport "
-            "savings EOQ ordering already gets you (from 📦 Inventory Management)."
-        )
         storage_investment_cost = st.number_input(
             "Estimated cost to add the missing storage capacity (KSh)",
             min_value=0.0,
