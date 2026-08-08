@@ -6,7 +6,8 @@ from datetime import date, timedelta, datetime
 from typing import Optional, Callable
 import streamlit as st
 import pandas as pd
-from app.core.sales_sheet_sync import sync_new_sales_from_sheet, clear_sales_sheet_caches
+import gspread
+from app.core.sales_sheet_sync import sync_new_sales_from_sheet, clear_sales_sheet_caches, DAILY_SALES_TAB
 from app.core.sales_service import dispatch_and_record_sale, available_stock_kg
 from app.core.cheese_shared_state import ensure_cheese_state
 from app.core.cheese_data_access import (
@@ -14,13 +15,11 @@ from app.core.cheese_data_access import (
     get_sales_history, save_customer, get_customers, delete_customer,
     reconcile_customers_from_history, find_or_create_customer_id,
 )
-from app.core.lpo_sheet_sync import sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id
+from app.core.lpo_sheet_sync import (
+    sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id, LPO_REGISTER_TAB,
+)
 from app.core.customer_analytics import (
     compute_ordering_patterns, compute_product_mix, compute_rfm, compute_clv, compute_churn_risk,
-)
-
-from app.core.commercial_reports import (
-    build_commercial_report_data, summarize_commercial_report_data, generate_commercial_report,
 )
 
 from app.core.commercial_reports import (
@@ -157,6 +156,11 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
                             for err in result["errors"]:
                                 st.caption(f"- {err}")
                     st.rerun()
+                except gspread.exceptions.WorksheetNotFound:
+                    st.error(
+                        f"❌ No tab named '{LPO_REGISTER_TAB}' found in that spreadsheet. "
+                        f"Check the tab name matches exactly (spelling/case/trailing spaces)."
+                    )
                 except Exception as e:
                     st.error(f"❌ Could not sync from the Sheet: {e}")
 
@@ -310,6 +314,11 @@ def _render_sales_tab(book, tracker, supabase_client) -> None:
                             for err in result["errors"]:
                                 st.caption(f"- {err}")
                     st.rerun()
+                except gspread.exceptions.WorksheetNotFound:
+                    st.error(
+                        f"❌ No tab named '{DAILY_SALES_TAB}' found in that spreadsheet. "
+                        f"Check the tab name matches exactly (spelling/case/trailing spaces)."
+                    )
                 except Exception as e:
                     st.error(f"❌ Could not sync from the Sheet: {e}")
             else:
@@ -576,7 +585,8 @@ def _render_commercial_reports_tab(supabase_client) -> None:
 
     render_report_tab(
         title="📋 Commercial Reports",
-        caption="Freetext customer names may fragment breakdowns until linked in 👥 Customers.",        session_key="commercial_report",
+        caption="Freetext customer names may fragment breakdowns until linked in 👥 Customers.",
+        session_key="commercial_report",
         build_fn=_build,
         summarize_fn=summarize_commercial_report_data,
         pdf_fn=generate_commercial_report,
