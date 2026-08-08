@@ -29,6 +29,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+import math
 from core.performance import paginate_dataframe, compress_dataframe
 from core.error_handling import logger
 from app.core.realtime_forecast import get_realtime_forecaster
@@ -49,7 +50,7 @@ DRY_ICE_TAB_REQUIREMENTS = {
     "📦 Inventory Management": "view_stock",
     "💰 Cost Optimization": "view_cost_data",
     "📋 Recommendations": "view_strategy",
-    "🛠️ Maintenance": "view_maintenance",
+    "🏗️ Storage Capacity": "view_maintenance",
     "📜 Transaction History": "view_reports",
 }
 
@@ -193,8 +194,8 @@ def render_dry_ice_mode(ctx: DryIceContext,
         _render_cost_optimization_tab(ctx)
     elif active_tab == "📋 Recommendations":
         _render_recommendations_tab(ctx)
-    elif active_tab == "🛠️ Maintenance":
-        _render_maintenance_tab(ctx)
+    elif active_tab == "🏗️ Storage Capacity":
+        _render_storage_capacity_tab(ctx)
     elif active_tab == "📜 Transaction History":
         _render_transaction_history_tab(ctx)
 
@@ -1011,171 +1012,154 @@ def _render_recommendations_tab(ctx: DryIceContext) -> None:
 
 
 # ============================================================
-# 🛠️ MAINTENANCE
+# 🏗️ STORAGE CAPACITY PLANNING
 # ============================================================
 @fragment
-def _render_maintenance_tab(ctx: DryIceContext) -> None:
-    mobile_ui = ctx.mobile_ui
+def _render_storage_capacity_tab(ctx: DryIceContext) -> None:
+    """Answers one question: if you switch to EOQ-sized bulk orders instead
+    of today's smaller, more frequent ones, do you have anywhere to put it?
 
-    st.markdown("### 🛠️ Predictive Maintenance Dashboard")
-    # Container Health Assessment
-    st.markdown("#### 📦 Container Health Assessment")
+    Deliberately does NOT simulate a container fleet — Browns doesn't track
+    one today, so the old version of this tab (hardcoded health scores,
+    fake 2024 maintenance dates, invented uptime %) was actively misleading
+    rather than just empty. Everything below is either computed live from
+    ctx (EOQ, safety stock, container size, sublimation rate) or entered by
+    the user in a plain number_input that only lives in session state —
+    no new table, nothing implied to persist across sessions.
+    """
+    df, kpis, constants = ctx.df, ctx.kpis, ctx.constants
 
-    # Container data
-    containers_data = {
-        'CTN-001': {'insulation_efficiency': 75, 'seal_integrity': 65, 'structural_condition': 85, 'usage_cycles': 42, 'location': 'Storage Unit #1'},
-        'CTN-002': {'insulation_efficiency': 88, 'seal_integrity': 92, 'structural_condition': 90, 'usage_cycles': 28, 'location': 'Storage Unit #2'},
-        'CTN-003': {'insulation_efficiency': 60, 'seal_integrity': 55, 'structural_condition': 70, 'usage_cycles': 67, 'location': 'Transport Container #A'}
-    }
-
-    # Container selection
-    selected_container = st.selectbox(
-        "Select Container for Analysis",
-        list(containers_data.keys()),
-        format_func=lambda x: f"{x} - {containers_data[x]['location']}",
-        key="maintenance_container_select"
-    )
-    container_data = containers_data[selected_container]
-
-    # Calculate health metrics
-    health_score = (container_data['insulation_efficiency'] + container_data['seal_integrity'] + container_data['structural_condition']) / 3
-    failure_risk = "High" if health_score < 70 else "Medium" if health_score < 85 else "Low"
-
-    # Display health metrics
-    health_cols = st.columns(5)
-    metrics = [
-        ("Insulation Efficiency", f"{container_data['insulation_efficiency']}%"),
-        ("Seal Integrity", f"{container_data['seal_integrity']}%"),
-        ("Structural Condition", f"{container_data['structural_condition']}%"),
-        ("Usage Cycles", container_data['usage_cycles']),
-        ("Health Score", f"{health_score:.1f}%")
-    ]
-
-    for col, (label, value) in zip(health_cols, metrics):
-        with col:
-            st.metric(label, value)
-
-    # Risk assessment
-    st.markdown("---")
-    st.markdown("#### 📊 Risk Assessment")
-    risk_color = "🔴" if failure_risk == "High" else "🟡" if failure_risk == "Medium" else "🟢"
-    st.metric("Failure Risk Level", f"{risk_color} {failure_risk}")
-
-    # Maintenance recommendations
-    st.markdown("---")
-    st.markdown("#### 🔧 Maintenance Recommendations")
-    recommendations = []
-    if container_data['insulation_efficiency'] < 70:
-        recommendations.append("📋 Schedule insulation inspection")
-    if container_data['seal_integrity'] < 70:
-        recommendations.append("🔧 Replace door seals and gaskets")
-    if container_data['structural_condition'] < 80:
-        recommendations.append("🔨 Conduct structural assessment")
-    if container_data['usage_cycles'] > 50:
-        recommendations.append("📋 Consider container rotation")
-    if not recommendations:
-        recommendations.append("✅ Continue regular maintenance")
-
-    for i, action in enumerate(recommendations, 1):
-        st.markdown(f"{i}. {action}")
-
-    # System overview
-    st.markdown("---")
-    st.markdown("#### 📊 System Overview")
-
-    overview_cols = st.columns(4)
-    overview_metrics = [
-        ("Equipment Uptime", "98.2%", "0.5%"),
-        ("Temperature Stability", "±0.5°C", "-0.2°C"),
-        ("Last Maintenance", "12 days ago", None),
-        ("Next Service Due", "18 days", None)
-    ]
-
-    for col, (label, value, delta) in zip(overview_cols, overview_metrics):
-        with col:
-            st.metric(label, value, delta=delta)
-
-    # Maintenance schedule
-    st.markdown("---")
-    st.markdown("#### 📅 Maintenance Schedule")
-    maintenance_data = pd.DataFrame({
-        'Equipment': ['Storage Unit #1', 'Storage Unit #2', 'Container CTN-001', 'Container CTN-002', 'Container CTN-003', 'Monitoring System'],
-        'Last Service': ['2024-06-15', '2024-06-10', '2024-06-05', '2024-06-01', '2024-05-28', '2024-06-20'],
-        'Next Service': ['2024-07-15', '2024-07-10', '2024-06-25', '2024-07-01', '2024-06-28', '2024-07-20'],
-        'Status': ['Good', 'Good', 'Fair', 'Good', 'Needs Attention', 'Excellent'],
-        'Priority': ['Medium', 'Medium', 'High', 'Low', 'High', 'Low']
-    })
-
-    maintenance_data['Last Service'] = pd.to_datetime(maintenance_data['Last Service'])
-    maintenance_data['Next Service'] = pd.to_datetime(maintenance_data['Next Service'])
-    maintenance_data['Days Overdue'] = (pd.Timestamp.today().normalize() - maintenance_data['Next Service']).dt.days
-
-    def style_status(val):
-        colors = {'Needs Attention': 'background-color: #fff3cd', 'Excellent': 'background-color: #d4edda',
-                'Good': 'background-color: #d1ecf1', 'Fair': 'background-color: #f8d7da'}
-        return colors.get(val, '')
-
-    def style_priority(val):
-        colors = {'High': 'background-color: #f8d7da', 'Medium': 'background-color: #fff3cd', 'Low': 'background-color: #d4edda'}
-        return colors.get(val, '')
-
-    # Pre-format the date columns BEFORE passing to styler
-    maintenance_data['Last Service'] = maintenance_data['Last Service'].dt.strftime('%Y-%m-%d')
-    maintenance_data['Next Service'] = maintenance_data['Next Service'].dt.strftime('%Y-%m-%d')
-    maintenance_data['Days Overdue'] = maintenance_data['Days Overdue'].apply(
-        lambda x: f"{x} days" if x > 0 else "On schedule"
+    st.markdown("### 🏗️ Storage Capacity Planning")
+    st.caption(
+        "For order-frequency savings and payback, see 📦 Inventory Management "
+        "and 💰 Cost Optimization — this tab is only about whether you have "
+        "somewhere to physically hold an EOQ-sized order."
     )
 
-    styled_maintenance = _style_map(maintenance_data.style, style_status, subset=['Status'])
-    styled_maintenance = _style_map(styled_maintenance, style_priority, subset=['Priority'])
+    if df.empty or ctx.eoq <= 0:
+        st.info(
+            "Need order history and a working EOQ figure before capacity "
+            "planning means anything — check 📊 Order Analysis and "
+            "📦 Inventory Management first."
+        )
+        return
 
-    st.dataframe(
-        styled_maintenance,
-        use_container_width=True,
-        height=250,
-        hide_index=True
-    )
+    container_size = constants.CONTAINER_SIZE
+    avg_order_size = kpis.get('avg_order_size', 0)
+    peak_storage_kg = ctx.eoq + ctx.safety_stock
 
-    # Cost tracking
-    st.markdown("---")
-    st.markdown("#### 💰 Maintenance Costs")
-    cost_data = pd.DataFrame({
-        'Month': pd.date_range('2024-01-01', periods=6, freq='M'),
-        'Preventive': [2500, 3200, 2800, 4100, 2900, 3500],
-        'Reactive': [1200, 800, 2100, 600, 1800, 900],
-        'Emergency': [0, 0, 1500, 0, 0, 2200]
-    })
-
-    fig_maintenance_cost = px.bar(
-        cost_data.melt(id_vars=['Month'], var_name='Type', value_name='Cost'),
-        x='Month', y='Cost', color='Type',
-        title="Monthly Maintenance Costs (KSh)",
-        color_discrete_map={'Preventive': '#28a745', 'Reactive': '#ffc107', 'Emergency': '#dc3545'},
-        height=mobile_ui.get_chart_height()
-    )
-    fig_maintenance_cost = mobile_ui.optimize_chart_for_mobile(fig_maintenance_cost)
-    st.plotly_chart(fig_maintenance_cost, use_container_width=True,
-        config=mobile_ui.get_mobile_chart_config())
-
-    # ROI calculator
-    st.markdown("#### 📈 Maintenance ROI")
-    with st.container():
-        roi_cols = st.columns(3)
-    with roi_cols[0]:
-        preventive_cost = st.number_input("Annual Preventive Cost (KSh)", value=40000, step=5000, key="preventive_cost")
-    with roi_cols[1]:
-        avoided_cost = st.number_input("Avoided Reactive Cost (KSh)", value=75000, step=5000, key="avoided_cost")
-    with roi_cols[2]:
-        downtime_cost = st.number_input("Avoided Downtime Cost (KSh)", value=150000, step=10000, key="downtime_cost")
-
-    total_savings = avoided_cost + downtime_cost
-    roi = ((total_savings - preventive_cost) / preventive_cost) * 100 if preventive_cost > 0 else 0
-
-    st.metric("Maintenance ROI", f"{roi:.1f}%")
-    if roi > 0:
-        st.success(f"💡 Every KSh 1 spent on preventive maintenance saves KSh {total_savings/preventive_cost:.2f} in other costs.")
+    # Containers-per-order from your own historical data when it's there —
+    # falls back to a straight division by CONTAINER_SIZE otherwise.
+    if 'Containers_Used' in df.columns and not df['Containers_Used'].empty:
+        containers_today = math.ceil(df['Containers_Used'].mean())
+    elif avg_order_size > 0 and container_size > 0:
+        containers_today = math.ceil(avg_order_size / container_size)
     else:
-        st.warning("⚠️ Consider optimizing maintenance strategy.")
+        containers_today = 0
+
+    containers_at_peak = math.ceil(peak_storage_kg / container_size) if container_size > 0 else 0
+
+    # ------------------------------------------------------------
+    # Order size: today vs. EOQ
+    # ------------------------------------------------------------
+    st.markdown("#### 📦 What changes if you switch to EOQ ordering")
+    size_cols = st.columns(3)
+    with size_cols[0]:
+        st.metric("Current avg order", f"{avg_order_size:,.0f} kg")
+    with size_cols[1]:
+        size_delta_pct = ((ctx.eoq - avg_order_size) / avg_order_size * 100) if avg_order_size > 0 else 0
+        st.metric("EOQ-recommended order", f"{ctx.eoq:,.0f} kg", f"{size_delta_pct:+.0f}% vs. today")
+    with size_cols[2]:
+        st.metric("Peak on-hand (EOQ + safety stock)", f"{peak_storage_kg:,.0f} kg")
+
+    st.markdown("#### 🧊 Containers needed")
+    st.caption(f"Using your standard container size of {container_size:,.0f} kg.")
+    container_cols = st.columns(2)
+    with container_cols[0]:
+        st.metric("Containers today (typical order)", f"{containers_today}")
+    with container_cols[1]:
+        container_delta = containers_at_peak - containers_today
+        st.metric(
+            "Containers at EOQ + safety stock",
+            f"{containers_at_peak}",
+            f"+{container_delta}" if container_delta > 0 else f"{container_delta}",
+        )
+
+    # ------------------------------------------------------------
+    # Self-reported capacity check — genuinely unknown to the app,
+    # so ask rather than assume. Session-only; nothing persisted.
+    # ------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("#### 🏗️ Do you actually have room for that?")
+    st.caption(
+        "There's no container or storage-space data on file yet, so enter "
+        "your real on-site capacity here to check it against the EOQ "
+        "scenario above. This resets each session — it isn't saved anywhere."
+    )
+
+    available_capacity = st.number_input(
+        "On-site dry ice storage capacity (kg)",
+        min_value=0.0,
+        value=float(peak_storage_kg),
+        step=50.0,
+        key="storage_capacity_input",
+        help="Total kg you could realistically hold in insulated storage at once, today.",
+    )
+
+    capacity_gap = peak_storage_kg - available_capacity
+    if available_capacity <= 0:
+        st.info("Enter your real capacity above to see whether it covers the EOQ scenario.")
+    elif capacity_gap > 0:
+        gap_containers = math.ceil(capacity_gap / container_size) if container_size > 0 else 0
+        st.warning(
+            f"⚠️ Short by {capacity_gap:,.0f} kg (~{gap_containers} container(s)) at peak. "
+            f"You'd need more storage before ordering at full EOQ — or order a smaller, "
+            f"more frequent quantity that fits what you have today."
+        )
+    else:
+        st.success(f"✅ Your reported capacity covers the EOQ scenario, with {abs(capacity_gap):,.0f} kg to spare.")
+
+    # ------------------------------------------------------------
+    # Sublimation: what bulk buying costs you in loss
+    # ------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("#### ❄️ Sublimation loss at current modeled rate")
+    st.metric(
+        "Estimated annual sublimation loss",
+        f"KSh {ctx.annual_sublimation_loss:,.0f}",
+        help=f"At the app's modeled average loss rate of {ctx.avg_sublimation:.2%}, applied to your annual volume.",
+    )
+    st.caption(
+        "This uses the same flat average loss rate as the rest of the app — it does NOT "
+        "scale up for the longer dwell time a bigger EOQ order would sit in storage before "
+        "it's used. Treat it as a floor on the real cost once you're holding stock longer "
+        "between deliveries, not a ceiling."
+    )
+
+    # ------------------------------------------------------------
+    # Storage investment payback — only relevant if there's a gap
+    # ------------------------------------------------------------
+    if available_capacity > 0 and capacity_gap > 0:
+        st.markdown("---")
+        st.markdown("#### 💰 Is closing the gap worth it?")
+        st.caption(
+            "Weighs the one-off cost of adding storage against the annual transport "
+            "savings EOQ ordering already gets you (from 📦 Inventory Management)."
+        )
+        storage_investment_cost = st.number_input(
+            "Estimated cost to add the missing storage capacity (KSh)",
+            min_value=0.0,
+            value=0.0,
+            step=5000.0,
+            key="storage_investment_cost_input",
+            help="Extra insulated containers, cold-room space, racking, etc.",
+        )
+        if storage_investment_cost > 0 and ctx.annual_transport_savings > 0:
+            monthly_transport_savings = ctx.annual_transport_savings / 12
+            payback_months = storage_investment_cost / monthly_transport_savings
+            st.metric("Payback period", f"{payback_months:.1f} months")
+        elif storage_investment_cost > 0:
+            st.info("No transport savings modeled yet for this period — payback can't be estimated.")
 
 
 # ============================================================

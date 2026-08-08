@@ -116,7 +116,7 @@ DRY_ICE_TAB_REQUIREMENTS = {
     "📦 Inventory Management": Permission.VIEW_STOCK,
     "💰 Cost Optimization": Permission.VIEW_COST_DATA,
     "📋 Recommendations": Permission.VIEW_STRATEGY,
-    "🛠️ Maintenance": Permission.VIEW_MAINTENANCE,
+    "🏗️ Storage Capacity": Permission.VIEW_MAINTENANCE,
     "📜 Transaction History": Permission.VIEW_REPORTS,
 }
 
