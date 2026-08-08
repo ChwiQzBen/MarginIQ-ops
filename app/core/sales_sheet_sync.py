@@ -38,11 +38,10 @@ from typing import Optional, TypedDict, List, Dict, Any
 
 import streamlit as st
 
-from app.core.lpo_sheet_sync import (
-    _get_gspread_client, get_item_master_map, _resolve_customer_id,
-    _parse_date, _parse_float,
+from app.core.lpo_sheet_sync import _get_gspread_client, get_item_master_map, _parse_date, _parse_float
+from app.core.cheese_data_access import (
+    get_sales_history, build_customer_name_cache, find_or_create_customer_id,
 )
-from app.core.cheese_data_access import get_sales_history, get_customers
 from app.core.sales_service import dispatch_and_record_sale
 
 __all__ = ["get_daily_sales_sheet_rows", "clear_sales_sheet_caches", "sync_new_sales_from_sheet"]
@@ -115,7 +114,7 @@ def sync_new_sales_from_sheet(sheet_id: str, tracker, valid_cheese_names: List[s
     sheet_rows = get_daily_sales_sheet_rows(sheet_id)
     item_master_map = get_item_master_map(sheet_id)
     existing_sales = get_sales_history(supabase_client=supabase_client)
-    existing_customers = get_customers(supabase_client=supabase_client)
+    customer_cache = build_customer_name_cache(supabase_client)
 
     existing_keys = {
         (
@@ -177,7 +176,7 @@ def sync_new_sales_from_sheet(sheet_id: str, tracker, valid_cheese_names: List[s
             continue
 
         try:
-            customer_id = _resolve_customer_id(row["customer_name"], existing_customers, supabase_client)
+            customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
             result = dispatch_and_record_sale(
                 tracker, recipe, quantity_kg, price_per_kg, row["sale_date"],
                 row["customer_name"], row["notes"] or f"Synced from Daily Sales sheet ({row['item_name']})",

@@ -6,13 +6,13 @@ from datetime import date, timedelta, datetime
 from typing import Optional, Callable
 import streamlit as st
 import pandas as pd
-
+from app.core.sales_sheet_sync import sync_new_sales_from_sheet, clear_sales_sheet_caches
 from app.core.sales_service import dispatch_and_record_sale, available_stock_kg
 from app.core.cheese_shared_state import ensure_cheese_state
 from app.core.cheese_data_access import (
     get_lpo_lines, record_lpo_delivery, cancel_lpo_line,
     get_sales_history, save_customer, get_customers, delete_customer,
-    reconcile_customers_from_history,
+    reconcile_customers_from_history, find_or_create_customer_id,
 )
 from app.core.lpo_sheet_sync import sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id
 from app.core.customer_analytics import (
@@ -68,7 +68,7 @@ def render_commercial_mode(supabase_client=None,
     st.markdown("---")
 
     if active_tab == "📄 LPO Register":
-        _render_lpo_register_tab(book, supabase_client)
+        _render_lpo_register_tab(book, tracker, supabase_client)
     elif active_tab == "💰 Sales":
         _render_sales_tab(book, tracker, supabase_client)
     elif active_tab == "👥 Customers":
@@ -111,7 +111,7 @@ def _resolve_customer_id(customer_id, customer_name, supabase_client):
 # ============================================================
 # TAB: LPO REGISTER
 # ============================================================
-def _render_lpo_register_tab(book, supabase_client) -> None:
+def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
     st.markdown("### 📄 LPO Register")
     if not book.list_names():
         st.info("Add a recipe in 🧀 Manufacturing → Recipes before receiving LPOs.")
@@ -199,19 +199,59 @@ def _render_lpo_register_tab(book, supabase_client) -> None:
                 if already_delivered_kg > 0:
                     st.caption(f"📦 {already_delivered_kg:.1f}kg delivered so far — "
                                f"{remaining_kg:.1f}kg remaining")
-                c1, c2, c3 = st.columns([2, 1, 1])
+                c1, c2, c3, c4 = st.columns([2, 1.3, 1, 1])
                 with c1:
                     deliver_now_kg = st.number_input(
                         "Deliver now (kg)", min_value=0.0, value=float(remaining_kg),
                         step=1.0, key=f"deliver_kg_{line['id']}", label_visibility="collapsed",
                     )
                 with c2:
-                    if st.button("✅ Record Delivery", key=f"deliver_{line['id']}"):
-                        cumulative_delivered = already_delivered_kg + deliver_now_kg
-                        record_lpo_delivery(line["id"], cumulative_delivered, supabase_client)
-                        st.success(f"Recorded delivery for {line['lpo_number']}.")
-                        st.rerun()
+                    delivery_price_per_kg = st.number_input(
+                        "Price/kg (KSh)", min_value=0.0, value=0.0, step=10.0,
+                        key=f"deliver_price_{line['id']}", label_visibility="collapsed",
+                        help="Required — turns the delivery into a real sale (dispatches "
+                             "FEFO stock + books revenue), not just a status update.",
+                    )
                 with c3:
+                    if st.button("✅ Record Delivery", key=f"deliver_{line['id']}"):
+                        if deliver_now_kg <= 0:
+                            st.error("Enter a quantity greater than 0.")
+                        elif delivery_price_per_kg <= 0:
+                            st.error("Enter a price per kg to book this delivery.")
+                        else:
+                            try:
+                                resolved_customer_id = find_or_create_customer_id(
+                                    line["customer_name"], supabase_client=supabase_client
+                                )
+                                sale_result = dispatch_and_record_sale(
+                                    tracker, line["cheese_name"], deliver_now_kg,
+                                    delivery_price_per_kg, date.today(), line["customer_name"],
+                                    f"LPO delivery — {line['lpo_number']}", supabase_client,
+                                    customer_id=resolved_customer_id,
+                                )
+                                # Record delivered kg as what was ACTUALLY dispatched, not what
+                                # was requested — keeps the LPO's remaining balance honest if
+                                # stock runs short mid-delivery.
+                                cumulative_delivered = already_delivered_kg + sale_result.allocated_kg
+                                record_lpo_delivery(line["id"], cumulative_delivered, supabase_client)
+
+                                if sale_result.shortfall_kg > 0:
+                                    st.warning(
+                                        f"⚠️ Only {sale_result.allocated_kg:.1f}kg of the "
+                                        f"{deliver_now_kg:.1f}kg requested was in stock. Recorded "
+                                        f"as delivered for {sale_result.allocated_kg:.1f}kg — "
+                                        f"{sale_result.shortfall_kg:.1f}kg stays outstanding on "
+                                        f"this LPO until more stock is released."
+                                    )
+                                st.success(
+                                    f"Recorded delivery for {line['lpo_number']} — "
+                                    f"{sale_result.allocated_kg:.1f}kg dispatched, "
+                                    f"KSh {sale_result.revenue:,.0f} booked."
+                                )
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Could not record delivery: {e}")
+                with c4:
                     if st.button("🚫 Cancel", key=f"cancel_{line['id']}"):
                         cancel_lpo_line(line["id"], supabase_client)
                         st.warning(f"Cancelled {line['lpo_number']}.")
@@ -243,6 +283,37 @@ def _render_sales_tab(book, tracker, supabase_client) -> None:
         st.info("Add a recipe in 🧀 Manufacturing → Recipes first, then produce "
                  "and release some stock before recording sales.")
         return
+
+    with st.expander("🔄 Sync from Google Sheet", expanded=False):
+        sheet_url = st.secrets.get("LPO_SHEET_URL")
+        if not sheet_url:
+            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync sales.")
+        else:
+            if st.button("🔄 Refresh from Sheet", key="sales_sheet_refresh"):
+                clear_sales_sheet_caches()
+                sheet_id = extract_sheet_id(sheet_url)
+                try:
+                    result = sync_new_sales_from_sheet(
+                        sheet_id, tracker, valid_cheese_names=book.list_names(),
+                        supabase_client=supabase_client,
+                    )
+                    if result["created"]:
+                        st.success(f"✅ Synced {result['created']} new sale(s) from the Sheet.")
+                    else:
+                        st.info("No new sales to sync — everything in the Sheet is already recorded.")
+                    if result["shortfalls"]:
+                        with st.expander(f"⚠️ {len(result['shortfalls'])} sale(s) short on stock"):
+                            for msg in result["shortfalls"]:
+                                st.caption(f"- {msg}")
+                    if result["skipped_invalid"]:
+                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                            for err in result["errors"]:
+                                st.caption(f"- {err}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Could not sync from the Sheet: {e}")
+            else:
+                st.caption("Click **Refresh from Sheet** to check for new sales.")
 
     customers = get_customers(supabase_client=supabase_client)
 
