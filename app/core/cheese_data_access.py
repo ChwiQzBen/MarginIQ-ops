@@ -884,6 +884,44 @@ def get_customers(supabase_client=None) -> List[Dict[str, Any]]:
     conn.close()
     return rows
 
+def build_customer_name_cache(supabase_client=None) -> Dict[str, int]:
+    """Normalized (lowercased, trimmed) customer name -> id, built from one
+    get_customers() call. Pass the returned dict into find_or_create_customer_id
+    across a whole loop/batch so the registry is fetched once and stays
+    correct as new customers get created mid-loop."""
+    return {c["name"].strip().lower(): c["id"] for c in get_customers(supabase_client)}
+
+
+def find_or_create_customer_id(name: str, cache: Optional[Dict[str, int]] = None,
+                                 supabase_client=None) -> Optional[int]:
+    """Case-insensitive, trimmed match against `cache` — creates a new
+    customer record on miss and writes the new id back into `cache`
+    immediately, so a second row naming the same brand-new customer within
+    the same batch resolves to the SAME id instead of creating a duplicate
+    record. Build `cache` once with build_customer_name_cache() and reuse
+    it across a whole sync loop; omit it for a one-off lookup (a single
+    fresh get_customers() call is fine at UI-click scale).
+
+    Consolidates four near-identical copies that had grown independently:
+    commercial_ui.py's LPO-delivery resolver, lpo_sheet_sync.py's private
+    _resolve_customer_id, sales_sheet_sync.py's re-import of that same
+    private function, and reconcile_customers_from_history's local
+    closure. The sheet-sync versions had a real bug — a snapshot customer
+    list that never updated mid-loop could create two customer records for
+    one new name appearing on two rows of a single sync batch. This fixes
+    that by mutating `cache` on every create, not just reading it."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    key = name.lower()
+    if cache is None:
+        cache = build_customer_name_cache(supabase_client)
+    if key in cache:
+        return cache[key]
+    new_id = save_customer(name=name, supabase_client=supabase_client)
+    cache[key] = new_id
+    return new_id
+
 
 def delete_customer(customer_id: int, supabase_client=None) -> None:
     if supabase_client:
@@ -905,20 +943,11 @@ def reconcile_customers_from_history(supabase_client=None) -> Dict[str, int]:
     Returns {'customers_created': N, 'sales_linked': N, 'lpo_linked': N}.
     Call this once before trusting any customer-level analytics; safe to
     call again later if new unlinked freetext names show up."""
-    existing = get_customers(supabase_client)
-    by_normalized = {c["name"].strip().lower(): c["id"] for c in existing}
-    customers_created_before = len(by_normalized)
+    cache = build_customer_name_cache(supabase_client)
+    customers_created_before = len(cache)
 
     def _get_or_create(raw_name: str) -> Optional[int]:
-        name = (raw_name or "").strip()
-        if not name:
-            return None
-        key = name.lower()
-        if key in by_normalized:
-            return by_normalized[key]
-        new_id = save_customer(name=name, supabase_client=supabase_client)
-        by_normalized[key] = new_id
-        return new_id
+        return find_or_create_customer_id(raw_name, cache, supabase_client)
 
     sales_linked = 0
     if supabase_client:
@@ -981,7 +1010,7 @@ def reconcile_customers_from_history(supabase_client=None) -> Dict[str, int]:
         lpo_linked += 1
 
     return {
-        "customers_created": len(by_normalized) - customers_created_before,
+        "customers_created": len(cache) - customers_created_before,
         "sales_linked": sales_linked,
         "lpo_linked": lpo_linked,
     }    

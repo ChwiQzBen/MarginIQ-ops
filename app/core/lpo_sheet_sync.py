@@ -73,7 +73,9 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-from app.core.cheese_data_access import save_lpo_line, get_lpo_lines, get_customers, save_customer
+from app.core.cheese_data_access import (
+    save_lpo_line, get_lpo_lines, build_customer_name_cache, find_or_create_customer_id,
+)
 
 __all__ = [
     "get_lpo_register_sheet_rows", "get_item_master_map", "clear_lpo_sheet_caches",
@@ -219,15 +221,6 @@ def clear_lpo_sheet_caches() -> None:
     get_item_master_map.clear()
 
 
-def _resolve_customer_id(customer_name: str, existing_customers: List[Dict[str, Any]],
-                          supabase_client=None) -> Optional[int]:
-    match = next((c for c in existing_customers
-                  if c["name"].strip().lower() == customer_name.strip().lower()), None)
-    if match:
-        return match["id"]
-    return save_customer(name=customer_name, supabase_client=supabase_client)
-
-
 def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
                                     supabase_client=None) -> Dict[str, Any]:
     """
@@ -258,7 +251,7 @@ def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
     item_master_map = get_item_master_map(sheet_id)
     existing_lines = get_lpo_lines(supabase_client=supabase_client)
     existing_keys = {(l["lpo_number"], l.get("sku_description")) for l in existing_lines}
-    existing_customers = get_customers(supabase_client=supabase_client)
+    customer_cache = build_customer_name_cache(supabase_client)
 
     created = 0
     skipped_existing = 0
@@ -298,7 +291,7 @@ def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
             continue
 
         try:
-            customer_id = _resolve_customer_id(row["customer_name"], existing_customers, supabase_client)
+            customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
             quantity_kg = row["quantity_units"] * pack_size_kg
             price_per_kg = (row["price_per_unit"] / pack_size_kg) if row["price_per_unit"] else 0.0
             save_lpo_line(
