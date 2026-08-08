@@ -1292,62 +1292,7 @@ def main():
 
     if mode == "❄️ Dry Ice Mode":
         # ============================================================
-        # SECTION 3: MOBILE QUICK ORDER (Container Style)
-        # ============================================================
-        # Mobile Quick Order Entry (only show on mobile devices)
-        if mobile_ui.is_mobile_device():
-            st.sidebar.markdown("""
-            <div style="
-                border: 2px solid #ce93d8;
-                border-radius: 12px;
-                padding: 15px;
-                margin-bottom: 15px;
-                background: rgba(206, 147, 216, 0.05);
-            ">
-                <div style="
-                    background: #ce93d8;
-                    color: white;
-                    padding: 6px 12px;
-                    border-radius: 8px;
-                    margin-bottom: 12px;
-                    display: inline-block;
-                    font-size: 14px;
-                    font-weight: 700;
-                ">
-                    📱 Mobile Quick Order
-                </div>
-            """, unsafe_allow_html=True)
-            
-            quick_order = mobile_ui.quick_order_entry()
-            
-            if quick_order:
-                with st.spinner("Processing your order..."):
-                    correct_period = get_period_from_date(quick_order['delivery_date'])
-                    inventory_tracker.current_stock += quick_order['quantity']
-                    update_current_stock_in_db(inventory_tracker.current_stock, quick_order['delivery_date'])
-                    add_transaction_to_history(
-                        transaction_type="receipt",
-                        quantity=quick_order['quantity'],
-                        description=f"Quick Order: {quick_order['product']} - {quick_order['notes'] if quick_order['notes'] else 'No notes'}",
-                        date=quick_order['delivery_date'],
-                        period=correct_period
-                    )
-                    st.sidebar.success(f"""
-                    ✅ **Order Placed Successfully!**
-                    
-                    Product: {quick_order['product']}
-                    Quantity: {quick_order['quantity']} kg
-                    Delivery: {quick_order['delivery_date'].strftime('%Y-%m-%d')}
-                    """)
-                    if 'quick_orders' not in st.session_state:
-                        st.session_state.quick_orders = []
-                    st.session_state.quick_orders.append(quick_order)
-            
-            st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-    if mode == "❄️ Dry Ice Mode":
-        # ============================================================
-        # SECTION 4: ENHANCED STOCK STATUS (Container Style)
+        # SECTION 3: ENHANCED STOCK STATUS (Container Style)
         # ============================================================
         st.sidebar.markdown("""
         <div style="
@@ -1470,7 +1415,7 @@ def main():
             )
 
     # ============================================================
-    # SECTION 5: REPORT GENERATOR (Container Style)
+    # SECTION 4: REPORT GENERATOR (Container Style)
     # ============================================================
     st.sidebar.markdown("""
     <div style="

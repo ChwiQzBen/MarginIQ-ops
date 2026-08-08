@@ -6,12 +6,10 @@ class MobileInterface:
     def __init__(self):
         self.is_mobile = self._detect_mobile()
         self.mobile_features = {
-            'quick_order_entry': True,
             'stock_level_alerts': True,
             'responsive_layout': True,
             'touch_optimized': True
-        }
-    
+        }    
     def _detect_mobile(self):
         """Detect if user is on a mobile device"""
         try:
@@ -80,49 +78,6 @@ class MobileInterface:
             </style>
             """, unsafe_allow_html=True)
     
-    def quick_order_entry(self):
-        """Mobile-optimized order form"""
-        with st.expander("➕ Quick Order Entry", expanded=False):
-            with st.form("quick_order", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    product = st.selectbox(
-                        "Product", 
-                        ["Dry Ice Pellets", "Dry Ice Blocks"],
-                        help="Select the type of dry ice"
-                    )
-                with col2:
-                    quantity = st.number_input(
-                        "Quantity (kg)", 
-                        min_value=1, 
-                        value=150, 
-                        step=25,
-                        help="Enter quantity in kilograms"
-                    )
-                delivery_date = st.date_input(
-                    "Delivery Date", 
-                    value=datetime.today(),
-                    help="Expected delivery date"
-                )
-                notes = st.text_area(
-                    "Notes (optional)",
-                    placeholder="e.g., Urgent delivery, specific time slot...",
-                    help="Add any special instructions"
-                )
-                submitted = st.form_submit_button(
-                    "📦 Place Order", 
-                    use_container_width=True,
-                    type="primary"
-                )
-                if submitted:
-                    return {
-                        "product": product, 
-                        "quantity": quantity, 
-                        "delivery_date": delivery_date,
-                        "notes": notes,
-                        "timestamp": datetime.now()
-                    }
-        return None
     
     def show_stock_alerts(self, current_stock, reorder_point, safety_stock):
         """Display stock level alerts - works on both mobile and desktop"""
@@ -191,12 +146,8 @@ class MobileInterface:
     def show_mobile_welcome(self):
         """Show a welcome banner for mobile users - shown only once per session"""
         if self.is_mobile and 'mobile_welcome_shown' not in st.session_state:
-            # Using info instead of success for better visibility
-            st.info(
-                "📱 **Mobile View Active** — Interface optimized for touch. "
-                "👆 Tap buttons • 🔍 Pinch to zoom charts • 📊 Tap and hold for details"
-            )
-            if st.button("Got it! 👍", use_container_width=True, key="mobile_welcome_btn"):
+            st.info("📱 Mobile view — charts and tables are sized for touch. Pinch to zoom on charts.")
+            if st.button("Got it", use_container_width=True, key="mobile_welcome_btn"):
                 st.session_state.mobile_welcome_shown = True
                 
 
