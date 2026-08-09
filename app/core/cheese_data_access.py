@@ -370,8 +370,9 @@ def save_cheese_sale(sale_date: date, cheese_name: str, quantity_kg: float,
         try:
             result = supabase_client.table("cheese_sales").insert(row).execute()
             return result.data[0]["id"] if result.data else None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Supabase save_cheese_sale failed for '{cheese_name}' on {date_str}, "
+                         f"falling back to SQLite (ephemeral on Streamlit Cloud): {e}")
     conn = _sqlite()
     c = conn.cursor()
     c.execute("""INSERT INTO cheese_sales
@@ -452,8 +453,9 @@ def _save_production_batch_row(batch: ProductionBatch, supabase_client=None) -> 
         try:
             supabase_client.table("cheese_production_batches").upsert(row).execute()
             return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Supabase _save_production_batch_row failed for batch "
+                         f"'{batch.batch_id}', falling back to SQLite: {e}")
     conn = _sqlite()
     conn.execute("""INSERT OR REPLACE INTO cheese_production_batches
         (batch_id, cheese_name, recipe_version, quantity_kg, milk_receipt_ids,
@@ -478,8 +480,9 @@ def _save_aging_batch_row(batch: AgingBatch, supabase_client=None) -> None:
         try:
             supabase_client.table("cheese_aging_batches").upsert(row).execute()
             return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Supabase _save_aging_batch_row failed for batch "
+                         f"'{batch.batch_id}', falling back to SQLite: {e}")
     conn = _sqlite()
     conn.execute("""INSERT OR REPLACE INTO cheese_aging_batches
         (batch_id, production_batch_id, cheese_name, aging_years, start_date,
@@ -503,8 +506,9 @@ def _save_finished_batch_row(batch: FinishedGoodBatch, supabase_client=None) -> 
         try:
             supabase_client.table("cheese_finished_batches").upsert(row).execute()
             return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Supabase _save_finished_batch_row failed for batch "
+                         f"'{batch.batch_id}', falling back to SQLite: {e}")
     conn = _sqlite()
     conn.execute("""INSERT OR REPLACE INTO cheese_finished_batches
         (batch_id, production_batch_id, aging_batch_id, cheese_name, quantity_kg,
@@ -710,8 +714,9 @@ def save_lpo_line(lpo_number: str, customer_name: str, delivery_date: date,
         try:
             result = supabase_client.table("lpo_lines").insert(row).execute()
             return result.data[0]["id"] if result.data else None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Supabase save_lpo_line failed for LPO '{lpo_number}', "
+                         f"falling back to SQLite (ephemeral on Streamlit Cloud): {e}")
     conn = _sqlite()
     c = conn.cursor()
     c.execute("""INSERT INTO lpo_lines
