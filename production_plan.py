@@ -251,6 +251,7 @@ class ProductionPlanner:
                 quantity_kg=rec.recommended_kg,
                 milk_receipt_ids=milk_receipt_ids,
                 operator=operator,
+                product_code=recipe.product_code,
             )
             batch_ids.append(batch.batch_id)
         return batch_ids

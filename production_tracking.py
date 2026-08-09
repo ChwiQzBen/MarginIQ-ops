@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from enum import Enum
-import uuid
 
 from newsvendor_engine import AgingConfig
 
@@ -151,8 +150,12 @@ DEFAULT_PRODUCTION_CHECKPOINTS = [
 ]
 
 
-def _new_id(prefix: str) -> str:
-    return f"{prefix}-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+def _sanitize_batch_code(code: str) -> str:
+    """Turns a product code (or, as fallback, a cheese name) into something
+    safe to use inside a batch ID: uppercase, whitespace collapsed to a
+    single hyphen. Real codes like 'MOZZ-5' pass through unchanged."""
+    cleaned = "-".join(str(code).strip().split())
+    return cleaned.upper() if cleaned else "ITEM"
 
 
 @dataclass
@@ -235,12 +238,26 @@ class BatchTracker:
         self.aging_batches: Dict[str, AgingBatch] = {}
         self.finished_batches: Dict[str, FinishedGoodBatch] = {}
 
+    def _next_production_batch_id(self, product_code: str, as_of: Optional[datetime] = None) -> str:
+        """Batch number = ITEM-YYYYMMDD-SEQ (e.g. MOZZ-5-20260809-01) — item
+        code + date of manufacture, the standard food-industry lot-numbering
+        convention, instead of a random suffix. SEQ increments per (item,
+        day) so two batches of the same cheese on the same day stay
+        distinct rather than colliding. Recomputed from self.production_batches
+        every call (not a stored counter), so it stays correct across app
+        restarts once load_batch_tracker() rehydrates existing batches."""
+        as_of = as_of or datetime.now()
+        prefix = f"{_sanitize_batch_code(product_code)}-{as_of.strftime('%Y%m%d')}-"
+        existing_today = [bid for bid in self.production_batches if bid.startswith(prefix)]
+        return f"{prefix}{len(existing_today) + 1:02d}"   
+
     # -- Production -------------------------------------------------
     def start_production(self, cheese_name: str, recipe_version: str, quantity_kg: float,
                           milk_receipt_ids: List[str], operator: str,
-                          checkpoint_stages: Optional[List[str]] = None) -> ProductionBatch:
+                          checkpoint_stages: Optional[List[str]] = None,
+                          product_code: str = "") -> ProductionBatch:
         batch = ProductionBatch(
-            batch_id=_new_id("PB"),
+            batch_id=self._next_production_batch_id(product_code or cheese_name),
             cheese_name=cheese_name,
             recipe_version=recipe_version,
             quantity_kg=quantity_kg,
@@ -286,7 +303,7 @@ class BatchTracker:
                             for m in range(3, months + 1, 3)]
 
         batch = AgingBatch(
-            batch_id=_new_id("AB"),
+            batch_id=f"{production_batch_id}-AGE",
             production_batch_id=production_batch_id,
             cheese_name=pb.cheese_name,
             aging_years=aging_years,
@@ -331,7 +348,7 @@ class BatchTracker:
         
         now = datetime.now()
         fg = FinishedGoodBatch(
-            batch_id=_new_id("FG"),
+            batch_id=f"{ab.production_batch_id}-FG",
             production_batch_id=ab.production_batch_id,
             aging_batch_id=ab.batch_id,
             cheese_name=ab.cheese_name,
@@ -351,7 +368,7 @@ class BatchTracker:
             raise ValueError(f"Cannot release {production_batch_id}: QC not passed")
         now = datetime.now()
         fg = FinishedGoodBatch(
-            batch_id=_new_id("FG"),
+            batch_id=f"{production_batch_id}-FG",
             production_batch_id=production_batch_id,
             aging_batch_id=None,
             cheese_name=pb.cheese_name,
