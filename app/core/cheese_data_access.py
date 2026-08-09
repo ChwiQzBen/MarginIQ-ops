@@ -149,6 +149,19 @@ def _as_list(raw) -> list:
         return raw
     return json.loads(raw)
 
+def _parse_naive_datetime(value: str) -> datetime:
+    """Supabase can return timestamp columns as tz-aware ISO strings
+    (e.g. '...+00:00') even though every datetime this app creates in
+    memory via datetime.now() is naive. Mixing the two raises TypeError:
+    can't compare offset-naive and offset-aware datetimes — e.g.
+    FEFOInventory.expiring_within() comparing a loaded expiry_date
+    against a freshly computed cutoff. Strip tzinfo on load so every
+    datetime stays naive and comparable, rather than threading
+    tz-awareness through days_remaining()/days_to_expiry()/any_failed()
+    and every other comparison in production_tracking.py."""
+    dt = datetime.fromisoformat(value)
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
 
 def _checkpoints_to_json(checkpoints: List[QualityCheckpoint]) -> str:
     return json.dumps([{
@@ -592,14 +605,14 @@ def load_batch_tracker(supabase_client=None) -> PersistentBatchTracker:
             milk_receipt_ids=_as_list(row.get("milk_receipt_ids")),
             operator=row.get("operator") or "", status=BatchStatus(row["status"]),
             checkpoints=_json_to_checkpoints(row.get("checkpoints")),
-            created_at=datetime.fromisoformat(row["created_at"]),
+            created_at=_parse_naive_datetime(row["created_at"]),
         )
     for row in ab_rows:
         tracker.aging_batches[row["batch_id"]] = AgingBatch(
             batch_id=row["batch_id"], production_batch_id=row["production_batch_id"],
             cheese_name=row["cheese_name"], aging_years=row["aging_years"],
-            start_date=datetime.fromisoformat(row["start_date"]),
-            scheduled_end_date=datetime.fromisoformat(row["scheduled_end_date"]),
+            start_date=_parse_naive_datetime(row["start_date"]),
+            scheduled_end_date=_parse_naive_datetime(row["scheduled_end_date"]),
             starting_quantity_kg=row["starting_quantity_kg"], status=BatchStatus(row["status"]),
             checkpoints=_json_to_checkpoints(row.get("checkpoints")),
         )
@@ -608,8 +621,8 @@ def load_batch_tracker(supabase_client=None) -> PersistentBatchTracker:
             batch_id=row["batch_id"], production_batch_id=row["production_batch_id"],
             aging_batch_id=row.get("aging_batch_id"), cheese_name=row["cheese_name"],
             quantity_kg=row["quantity_kg"],
-            packaging_date=datetime.fromisoformat(row["packaging_date"]),
-            expiry_date=datetime.fromisoformat(row["expiry_date"]), status=BatchStatus(row["status"]),
+            packaging_date=_parse_naive_datetime(row["packaging_date"]),
+            expiry_date=_parse_naive_datetime(row["expiry_date"]), status=BatchStatus(row["status"]),
         )
     return tracker
 
