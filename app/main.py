@@ -927,56 +927,75 @@ def main():
                 st.warning(f"⚠️ Insufficient data ({len(df)} orders). Need at least 5 orders for reliable forecasting.")
 
     
-        if total_forecasted_demand <= 0:
+        if not df.empty and len(df) >= 5 and total_forecasted_demand <= 0:
             st.warning("⚠️ Forecast resulted in zero/negative demand. Using intelligent fallback.")
-            # Use historical KPIs as fallback
             fallback_monthly_demand = max(
                 kpis.get('current_monthly_volume', 0),
-                kpis.get('avg_order_size', 300) * 4,  # Assume 4 orders per month minimum
-                1200  # Absolute minimum of 1200kg/month
+                kpis.get('avg_order_size', 300) * 4,
+                1200
             )
             total_forecasted_demand = fallback_monthly_demand
-            forecast_std_dev = total_forecasted_demand * 0.25  # 25% coefficient of variation
+            forecast_std_dev = total_forecasted_demand * 0.25
             st.info(f"Using fallback monthly demand: {total_forecasted_demand:,.0f} kg")
 
-        # --- 2. Calculate Inventory Policy (Logic from former Tab 3) ---
-        # Use forecast demand if available, otherwise fallback to historical KPIs
-        monthly_demand_input = total_forecasted_demand if total_forecasted_demand > 0 else kpis.get('current_monthly_volume', 0)
-        demand_stddev_input = forecast_std_dev * np.sqrt(30) if forecast_std_dev > 0 else kpis.get('std_order_size', 0) * math.sqrt(4) #Approx 4 weeks in month
+        if df.empty:
+            # Nothing to build a policy from — zero out instead of synthesizing
+            # a recommendation. This is what was firing for periods like
+            # 2027/2028 with zero historical orders: the fallback above used
+            # to run unconditionally and invent a 1200kg/month floor, which
+            # then flowed into EOQ/safety stock/annual spending as if it were
+            # a real recommendation for a period with no data behind it.
+            monthly_demand_input = 0
+            demand_stddev_input = 0
+            avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
+            adjusted_demand = 0
+            z_score = norm.ppf(constants.SERVICE_LEVEL)
+            eoq = 0
+            safety_stock = 0
+            reorder_point = 0
+            current_monthly_orders = 0
+            eoq_monthly_orders = 0
+            annual_transport_savings = 0
+            monthly_savings = 0
+            annual_volume = 0
+            annual_product_cost = 0
+            annual_transport_cost = 0
+            annual_sublimation_loss = 0
+            annual_holding_cost = 0
+            total_annual_spending = 0
+        else:
+            # --- 2. Calculate Inventory Policy (Logic from former Tab 3) ---
+            monthly_demand_input = total_forecasted_demand if total_forecasted_demand > 0 else kpis.get('current_monthly_volume', 0)
+            demand_stddev_input = forecast_std_dev * np.sqrt(30) if forecast_std_dev > 0 else kpis.get('std_order_size', 0) * math.sqrt(4)
 
-        # Calculate policy parameters
-        avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
-        sublimation_factor = 1 + avg_sublimation
-        adjusted_demand = monthly_demand_input * sublimation_factor
-    
-        z_score = norm.ppf(constants.SERVICE_LEVEL)
-        eoq = math.sqrt((2 * adjusted_demand * constants.TRANSPORT_COST) / (constants.HOLDING_RATE * constants.PRICE_PER_KG)) if (constants.HOLDING_RATE * constants.PRICE_PER_KG) > 0 else 0
-        safety_stock = z_score * demand_stddev_input * math.sqrt(constants.LEAD_TIME_DAYS) * sublimation_factor
-        reorder_point = (adjusted_demand / 30 * constants.LEAD_TIME_DAYS) + safety_stock
+            avg_sublimation = sum(constants.SUB_LOSS_RANGE) / 2 / 100
+            sublimation_factor = 1 + avg_sublimation
+            adjusted_demand = monthly_demand_input * sublimation_factor
 
-        # --- 3. Calculate the Definitive Annual Transport Savings ---
-        current_monthly_orders = kpis.get('order_frequency', 0)
-        eoq_monthly_orders = adjusted_demand / eoq if eoq > 0 else 0
-        annual_transport_savings = (current_monthly_orders - eoq_monthly_orders) * 12 * constants.TRANSPORT_COST
+            z_score = norm.ppf(constants.SERVICE_LEVEL)
+            eoq = math.sqrt((2 * adjusted_demand * constants.TRANSPORT_COST) / (constants.HOLDING_RATE * constants.PRICE_PER_KG)) if (constants.HOLDING_RATE * constants.PRICE_PER_KG) > 0 else 0
+            safety_stock = z_score * demand_stddev_input * math.sqrt(constants.LEAD_TIME_DAYS) * sublimation_factor
+            reorder_point = (adjusted_demand / 30 * constants.LEAD_TIME_DAYS) + safety_stock
 
-        # Ensure savings cannot be negative
-        annual_transport_savings = max(0, annual_transport_savings)
-        monthly_savings = annual_transport_savings / 12 if annual_transport_savings else 0
+            # --- 3. Calculate the Definitive Annual Transport Savings ---
+            current_monthly_orders = kpis.get('order_frequency', 0)
+            eoq_monthly_orders = adjusted_demand / eoq if eoq > 0 else 0
+            annual_transport_savings = (current_monthly_orders - eoq_monthly_orders) * 12 * constants.TRANSPORT_COST
+            annual_transport_savings = max(0, annual_transport_savings)
+            monthly_savings = annual_transport_savings / 12 if annual_transport_savings else 0
 
-        # --- 4. Recalculate Total Annual Spending & Other Costs ---
-        annual_volume = kpis.get('total_volume', 0)
-        annual_product_cost = annual_volume * constants.PRICE_PER_KG
-        annual_transport_cost = kpis.get('total_orders', 0) * constants.TRANSPORT_COST
-        annual_sublimation_loss = annual_volume * constants.PRICE_PER_KG * avg_sublimation
+            # --- 4. Recalculate Total Annual Spending & Other Costs ---
+            annual_volume = kpis.get('total_volume', 0)
+            annual_product_cost = annual_volume * constants.PRICE_PER_KG
+            annual_transport_cost = kpis.get('total_orders', 0) * constants.TRANSPORT_COST
+            annual_sublimation_loss = annual_volume * constants.PRICE_PER_KG * avg_sublimation
 
-        # Corrected holding cost calculation
-        average_inventory_level = (kpis.get('avg_order_size', 0) / 2) + safety_stock
-        annual_holding_cost = average_inventory_level * constants.PRICE_PER_KG * constants.HOLDING_RATE
-    
-        total_annual_spending = annual_product_cost + annual_transport_cost + annual_holding_cost + annual_sublimation_loss
+            average_inventory_level = (kpis.get('avg_order_size', 0) / 2) + safety_stock
+            annual_holding_cost = average_inventory_level * constants.PRICE_PER_KG * constants.HOLDING_RATE
+
+            total_annual_spending = annual_product_cost + annual_transport_cost + annual_holding_cost + annual_sublimation_loss
 
         # --- 5. Generate Other Charts and Visualizations ---
-        
         fig_orders, fig_cost_overview, fig_forecast = create_enhanced_charts(
             df=df, analyzer=analyzer, kpis=kpis, forecast_data=None, safety_stock=safety_stock
         )
