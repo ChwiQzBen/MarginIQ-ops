@@ -1379,10 +1379,15 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
         st.metric("🎯 Pattern Types", "5", "Stable, Seasonal, Trending, Volatile, Mixed")
 
     with col3:
+        anomaly_help = (
+            "A day where demand looked unusual compared to the normal pattern — "
+            "could be a spike, drop, outlier, or a shift in the overall trend. "
+            "Expand '🔍 View Anomaly Details' below for what each type means."
+        )
         if anomaly_count > 0:
-            st.metric("⚠️ Anomalies Detected", f"{anomaly_count}", "Last 30 days")
+            st.metric("⚠️ Anomalies Detected", f"{anomaly_count}", "Last 30 days", help=anomaly_help)
         else:
-            st.metric("⚠️ Anomalies Detected", "0", "No anomalies")
+            st.metric("⚠️ Anomalies Detected", "0", "No anomalies", help=anomaly_help)
     
     with col4:
         # Always surface the real accuracy_message computed above (e.g.
@@ -1407,17 +1412,29 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                 for anomaly in anomalies:
                     type_counts[anomaly.anomaly_type] = type_counts.get(anomaly.anomaly_type, 0) + 1
                 
+                with st.expander("ℹ️ What do these mean?", expanded=False):
+                    st.markdown("""
+    - **📈 Spike** — a sudden jump, more than 50% higher than the day before. Often a bulk order, a restock, or a data-entry mistake.
+    - **📉 Drop** — a sudden fall, more than 50% lower than the day before. Often a stockout, a missed delivery, or a genuinely quiet day.
+    - **🔄 Pattern Break** — not one bad day, but the *overall trend* shifting — a week's average moves well away from the week before it. Usually points to something structural: a customer lost, a new competitor, a process change.
+    - **⚠️ Outlier** — a day that doesn't match the rest of the data, but isn't a sharp jump or fall from the day right before it. Worth a second look — sometimes a real one-off, sometimes a typo.
+                        """)
+
                 # Show summary by type
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("📈 Spikes", type_counts.get('spike', 0))
+                    st.metric("📈 Spikes", type_counts.get('spike', 0),
+                              help="More than 50% higher than the previous day.")
                 with col2:
-                    st.metric("📉 Drops", type_counts.get('drop', 0))
+                    st.metric("📉 Drops", type_counts.get('drop', 0),
+                              help="More than 50% lower than the previous day.")
                 with col3:
-                    st.metric("🔄 Pattern Breaks", type_counts.get('pattern_break', 0))
+                    st.metric("🔄 Pattern Breaks", type_counts.get('pattern_break', 0),
+                              help="The week-to-week trend shifted — not just one unusual day.")
                 with col4:
-                    st.metric("⚠️ Outliers", type_counts.get('outlier', 0))
+                    st.metric("⚠️ Outliers", type_counts.get('outlier', 0),
+                              help="Doesn't match the normal pattern, but not a sharp spike or drop.")
                 
                 st.markdown("---")
                 
