@@ -1817,6 +1817,15 @@ def main():
                 background: rgba(230, 81, 0, 0.08) !important;
                 color: #e65100 !important;
             }
+
+            div[role="radiogroup"][style*="row"] label:has(input:checked),
+            div[role="radiogroup"][aria-label="Section"] label:has(input:checked),
+            div[role="radiogroup"][aria-label="Movement view"] label:has(input:checked) {
+                background: linear-gradient(135deg, #e65100 0%, #ff9800 100%) !important;
+                color: white !important;
+                box-shadow: 0 4px 15px rgba(230, 81, 0, 0.3) !important;
+            } 
+
             /* Mode Badge */
             .mode-badge-all {
                 background: linear-gradient(135deg, #e65100, #ff9800);

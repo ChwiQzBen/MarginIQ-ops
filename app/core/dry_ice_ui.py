@@ -154,6 +154,14 @@ def render_dry_ice_mode(ctx: DryIceContext,
             background: rgba(26, 35, 126, 0.08) !important;
             color: #1a237e !important;
         }
+
+        div[role="radiogroup"][style*="row"] label:has(input:checked),
+        div[role="radiogroup"][aria-label="Section"] label:has(input:checked) {
+            background: linear-gradient(135deg, #1a237e 0%, #4fc3f7 100%) !important;
+            color: white !important;
+            box-shadow: 0 4px 15px rgba(26, 35, 126, 0.3) !important;
+        }
+
         .mode-badge-dryice {
             background: linear-gradient(135deg, #1a237e, #4fc3f7);
             color: white;

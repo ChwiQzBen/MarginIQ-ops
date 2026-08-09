@@ -57,6 +57,14 @@ def render_bcpos_mode(supabase_client=None,
             background: rgba(46, 125, 50, 0.08) !important;
             color: #2e7d32 !important;
         }
+
+        div[role="radiogroup"][style*="row"] label:has(input:checked),
+        div[role="radiogroup"][aria-label="Section"] label:has(input:checked) {
+            background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%) !important;
+            color: white !important;
+            box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3) !important;
+        }
+
         .mode-badge-bcpos {
             background: linear-gradient(135deg, #2e7d32, #66bb6a);
             color: white;

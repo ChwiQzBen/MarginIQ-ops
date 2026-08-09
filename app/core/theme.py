@@ -292,6 +292,62 @@ def inject_global_css() -> None:
             color: white !important;
             box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3) !important;
         }
+
+        /* Glass-pill styling for horizontal st.radio() navigation — every
+        mode switched from st.tabs() to st.radio(horizontal=True) during
+        the CPU-throttling fix, but the glass pill-nav CSS above (written
+        only for .stTabs) never got re-pointed at radio's DOM, so it
+        silently stopped applying — this is that re-point. Scoped two
+        ways because I can't verify Streamlit's exact horizontal-radio
+        markup without a live browser: matches radiogroups whose inline
+        style contains "row" (how Streamlit commonly signals
+        horizontal=True), OR whose aria-label is one of this app's known
+        tab-nav radios. Deliberately does NOT try to hide the native
+        radio dot — that needs knowing nested markup that varies by
+        version. accent-color recolors it via a standard CSS property
+        instead, so this stays correct regardless of the underlying
+        HTML. If any nav still looks unstyled after this, inspect it in
+        the browser and share the actual markup rather than guessing
+        further. */
+        div[role="radiogroup"][style*="row"],
+        div[role="radiogroup"][aria-label="Section"],
+        div[role="radiogroup"][aria-label="Movement view"] {
+            display: flex !important;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-radius: 12px;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        div[role="radiogroup"][style*="row"] label,
+        div[role="radiogroup"][aria-label="Section"] label,
+        div[role="radiogroup"][aria-label="Movement view"] label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            border-radius: 8px;
+            padding: 8px 16px;
+            margin: 0 !important;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        div[role="radiogroup"][style*="row"] label:hover,
+        div[role="radiogroup"][aria-label="Section"] label:hover,
+        div[role="radiogroup"][aria-label="Movement view"] label:hover {
+            background: rgba(var(--primary-rgb), 0.08);
+        }
+
+        div[role="radiogroup"][style*="row"] input[type="radio"],
+        div[role="radiogroup"][aria-label="Section"] input[type="radio"],
+        div[role="radiogroup"][aria-label="Movement view"] input[type="radio"] {
+            accent-color: var(--primary);
+        }
         
         /* Expander styling (merged — see theme.py cleanup notes) */
         .streamlit-expanderHeader {
