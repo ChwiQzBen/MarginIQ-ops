@@ -1027,30 +1027,40 @@ def main():
         total_annual_spending = 0
     
     if mode == "❄️ Dry Ice Mode":
-        # Get current stock from the database
-        current_stock = get_current_stock_from_db()
+        # Current stock is now scoped to the SELECTED period: "what stock
+        # was as of that period's end", using filter_end_date (already
+        # computed above as min(display_end_date, today)) as the as-of
+        # date. This is what makes switching periods actually change the
+        # displayed stock, instead of always showing today's live number.
+        period_has_started = display_start_date <= today
+        is_active_period = display_start_date <= today <= display_end_date
 
-        # If the database is empty, seed it with the smart, dynamically calculated value
-        if current_stock == 0:
+        if period_has_started:
+            current_stock = get_current_stock_from_db(as_of_date=filter_end_date.date())
+        else:
+            # Period hasn't started — there's no legitimate "stock as of
+            # period end" yet. Must special-case this rather than querying
+            # with as_of_date=min(period_end, today), which would silently
+            # resolve to today's live stock and reproduce the original bug.
+            current_stock = 0
+
+        # Only seed a default when there's truly no data ANYWHERE and this
+        # is the live/active period — seeding a fake number into a past or
+        # future period's empty slot would be inventing history.
+        if current_stock == 0 and is_active_period:
             target_days_coverage = 45
-            # average_daily_demand is now calculated based on forecast values if available
             avg_daily_forecast = np.mean(ensemble_forecast_values) if total_forecasted_demand > 0 else (kpis.get('avg_order_size', 0) / 7)
-
-            # Use the final, forecast-driven eoq and safety_stock values
             initial_stock = max(
-                eoq * 2,                                    # Ensure at least 2 order cycles
-                safety_stock * 4,                           # Ensure adequate safety buffer
-                avg_daily_forecast * target_days_coverage   # Meet strategic coverage goals
+                eoq * 2,
+                safety_stock * 4,
+                avg_daily_forecast * target_days_coverage
             )
-            # Ensure initial stock is not zero if all calculations result in zero (e.g., no data)
             if initial_stock <= 0:
-                initial_stock = 1000 # Fallback to a default value
-
+                initial_stock = 1000
             current_stock = initial_stock
             update_current_stock_in_db(current_stock, datetime.now())
-            print(f"Database was empty. Seeded initial stock with: {current_stock:.2f} kg")
+            print(f"Database was empty for the active period. Seeded initial stock with: {current_stock:.2f} kg")
 
-        # Initialize the inventory tracker with the definitive current_stock value
         inventory_tracker = InventoryTracker(
             initial_stock=current_stock,
             analyzer=analyzer
@@ -1110,18 +1120,38 @@ def main():
             </div>
         """, unsafe_allow_html=True)
 
+        # Editing this field writes a new inventory row — the date it's
+        # dated with must match the selected period, or an edit made while
+        # browsing a past period would silently insert a TODAY-dated row
+        # and corrupt that period's timeline.
+        if is_active_period:
+            stock_edit_help = "Enter the current stock level in kilograms"
+            stock_anchor_date = today
+            stock_edit_disabled = False
+        elif period_has_started:
+            stock_edit_help = (
+                f"Editing here backfills the stock snapshot for "
+                f"{selected_period}'s period end ({display_end_date.strftime('%Y-%m-%d')})."
+            )
+            stock_anchor_date = display_end_date
+            stock_edit_disabled = False
+        else:
+            stock_edit_help = f"{selected_period} hasn't started yet — nothing to record."
+            stock_anchor_date = None
+            stock_edit_disabled = True
+
         current_stock_input = st.sidebar.number_input(
             "Current Stock (kg)",
             min_value=0.0,
             value=float(inventory_tracker.current_stock),
             step=50.0,
-            help="Enter the current stock level in kilograms"
+            help=stock_edit_help,
+            disabled=stock_edit_disabled,
         )
 
-        # Update tracker only if value changed
-        if current_stock_input != inventory_tracker.current_stock:
+        if not stock_edit_disabled and current_stock_input != inventory_tracker.current_stock:
             inventory_tracker.current_stock = current_stock_input
-            update_current_stock_in_db(current_stock_input, datetime.now())
+            update_current_stock_in_db(current_stock_input, stock_anchor_date)
 
         # Display status (LOW/CRITICAL/OK)
         status = inventory_tracker.get_stock_status()
@@ -1187,6 +1217,8 @@ def main():
                             return
 
                     try:
+                        correct_period = get_period_from_date(usage_date)
+
                         audit = AuditLogger()
                         audit.log(
                             action='RECORD_USAGE',
@@ -1197,7 +1229,7 @@ def main():
                         alert = inventory_tracker.update_stock(usage, "Daily Consumption", usage_date)
                         add_transaction_to_history(
                             "usage", usage, "Daily Consumption", usage_date,
-                            st.session_state.selected_period
+                            correct_period
                         )
 
                         if alert is not None:
@@ -1213,6 +1245,10 @@ def main():
                             st.info(f"📊 New stock level: {new_stock_val:,.0f} kg")
                             if new_stock_val < safety_stock:
                                 st.warning(f"⚠️ Stock below safety stock ({safety_stock:,.0f} kg). Consider reordering.")
+
+                            if st.session_state.selected_period != correct_period:
+                                st.session_state.selected_period = correct_period
+                                st.info(f"📊 Dashboard view switched to {correct_period} to show your new entry.")
 
                     except Exception as e:
                         logger.error(f"Failed to record usage: {e}", exc_info=True)

@@ -57,6 +57,22 @@ BAD_DATE = '2_024-09-26'
 GOOD_DATE = '2024-09-26'
 
 
+def _to_date_str(d) -> str:
+    """Normalizes a date or datetime to a plain YYYY-MM-DD string. Every
+    write AND every as-of comparison against inventory.date must go
+    through this. Mixing date-only strings ('2026-08-10', from
+    transaction dates via st.date_input) with datetime-with-time strings
+    ('2026-08-10T14:32:10...', from datetime.now()/datetime.today() used
+    when seeding or manually editing stock) breaks lexicographic string
+    comparison in the SQLite fallback: '2026-08-10T14:32:10' is NOT
+    <= '2026-08-10' even though it's the same day. Without this, a
+    same-day usage transaction can fail to find that same day's
+    seed/edit row and silently compute against a stock level of 0."""
+    if hasattr(d, 'date') and callable(getattr(d, 'date', None)):
+        d = d.date()
+    return d.isoformat()
+
+
 def fix_order_date():
     """Finds and fixes the incorrect date in both Supabase and SQLite."""
 
@@ -297,15 +313,22 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
             if supabase:
                 logger.info("Attempting Supabase transaction...")
 
-                # Get current stock from Supabase
+                # As-of-date lookup, not global-latest — a backdated
+                # transaction (recorded while viewing a past period) must
+                # build on the stock level that existed immediately before
+                # ITS date, not today's live number. _to_date_str()
+                # normalizes so this comparison isn't broken by
+                # datetime-with-time strings written elsewhere (seeding,
+                # manual stock edits).
                 current_stock_response = supabase.table('inventory')\
                     .select('stock_level')\
+                    .lte('date', _to_date_str(date))\
                     .order('date', desc=True)\
                     .limit(1)\
                     .execute()
 
                 current_stock = current_stock_response.data[0]['stock_level'] if current_stock_response.data else 0
-                logger.debug(f"Current stock (Supabase): {current_stock} kg")
+                logger.debug(f"Current stock as of {date} (Supabase): {current_stock} kg")
 
                 # Calculate new stock
                 if transaction_type == 'usage':
@@ -332,9 +355,11 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
                 transaction_id = transaction_result.data[0]['id']
                 logger.info(f"Supabase transaction created: {transaction_id}")
 
-                # Insert inventory record
+                # Insert inventory record — normalized date, must match the
+                # same YYYY-MM-DD format the as-of lookup above compares
+                # against.
                 inventory_data = {
-                    'date': date.isoformat(),
+                    'date': _to_date_str(date),
                     'stock_level': new_stock,
                     'transaction_id': transaction_id
                 }
@@ -365,6 +390,7 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
                 # get_transactions_from_db / get_historical_orders_from_db
                 # keep serving whatever they last cached for this period.
                 get_transactions_from_db.clear()
+                get_current_stock_from_db.clear()
                 if transaction_type == 'receipt':
                     get_historical_orders_from_db.clear()
 
@@ -390,11 +416,13 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
             c = conn.cursor()
             logger.debug("SQLite connection established")
 
-            # Get current stock from SQLite
-            c.execute('''SELECT stock_level FROM inventory ORDER BY date DESC LIMIT 1''')
+            # As-of-date lookup — same reasoning as the Supabase branch
+            # above, comparing against a normalized YYYY-MM-DD string.
+            c.execute('''SELECT stock_level FROM inventory WHERE date <= ?
+                         ORDER BY date DESC LIMIT 1''', (_to_date_str(date),))
             result = c.fetchone()
             current_stock = result[0] if result else 0
-            logger.debug(f"Current stock (SQLite): {current_stock} kg")
+            logger.debug(f"Current stock as of {date} (SQLite): {current_stock} kg")
 
             # Calculate new stock
             if transaction_type == 'usage':
@@ -425,15 +453,16 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
             transaction_id = c.lastrowid
             logger.debug(f"SQLite transaction created: {transaction_id}")
 
-            # Insert inventory record
+            # Insert inventory record — normalized date, must match what
+            # the as-of lookup above compares against.
             if transaction_type == 'usage':
                 c.execute('''INSERT INTO inventory (date, stock_level, transaction_id)
                              VALUES (?, ?, ?)''',
-                          (date.isoformat(), new_stock, transaction_id))
+                          (_to_date_str(date), new_stock, transaction_id))
             elif transaction_type == 'receipt':
                 c.execute('''INSERT INTO inventory (date, stock_level, transaction_id)
                              VALUES (?, ?, ?)''',
-                          (date.isoformat(), new_stock, transaction_id))
+                          (_to_date_str(date), new_stock, transaction_id))
 
                 # Add to historical orders for receipts
                 c.execute('''INSERT INTO historical_orders (date, order_quantity, analysis_period)
@@ -454,6 +483,7 @@ def add_transaction_to_db(transaction_type, quantity, description, date, period)
             )
 
             get_transactions_from_db.clear()
+            get_current_stock_from_db.clear()
             if transaction_type == 'receipt':
                 get_historical_orders_from_db.clear()
 
@@ -543,8 +573,20 @@ def get_transactions_from_db(period):
 
 
 @st.cache_data(ttl=30)
-def get_current_stock_from_db():
-    """Get current stock from Supabase or SQLite"""
+def get_current_stock_from_db(as_of_date=None):
+    """Most recent inventory reading with date <= as_of_date — i.e. what
+    stock genuinely WAS as of that point in time, correctly carrying
+    forward from an earlier period if nothing was recorded during the
+    period itself (a period with zero transactions isn't the same as a
+    period with zero stock). Without as_of_date, keeps the old
+    global-most-recent behavior for compatibility.
+
+    Callers must pass min(period_end, today) for a period that has
+    started, and must NOT call this at all (use 0 directly) for a period
+    that hasn't started yet — otherwise a genuinely future period would
+    silently resolve to today's live stock via the min(), reproducing
+    the original bug of every period looking the same."""
+    as_of_str = _to_date_str(as_of_date) if as_of_date else None
 
     # Try Supabase first
     if USE_SUPABASE:
@@ -552,12 +594,11 @@ def get_current_stock_from_db():
         supabase = init_supabase()
         if supabase:
             try:
-                response = supabase.table('inventory')\
-                    .select('stock_level')\
-                    .order('date', desc=True)\
-                    .limit(1)\
-                    .execute()
-
+                query = supabase.table('inventory').select('stock_level')\
+                    .order('date', desc=True).limit(1)
+                if as_of_str:
+                    query = query.lte('date', as_of_str)
+                response = query.execute()
                 return response.data[0]['stock_level'] if response.data else 0
             except Exception as e:
                 st.error(f"Supabase error: {e}. Falling back to SQLite.")
@@ -566,7 +607,13 @@ def get_current_stock_from_db():
     conn = sqlite3.connect('dry_ice.db')
     c = conn.cursor()
 
-    c.execute('''SELECT stock_level FROM inventory ORDER BY date DESC LIMIT 1''')
+    sql = "SELECT stock_level FROM inventory"
+    params = []
+    if as_of_str:
+        sql += " WHERE date <= ?"
+        params.append(as_of_str)
+    sql += " ORDER BY date DESC LIMIT 1"
+    c.execute(sql, params)
     result = c.fetchone()
 
     conn.close()
@@ -583,11 +630,7 @@ def update_current_stock_in_db(new_stock, date):
         supabase = init_supabase()
         if supabase:
             try:
-                # Handle date formatting
-                if hasattr(date, 'isoformat'):
-                    date_str = date.isoformat()
-                else:
-                    date_str = str(date)
+                date_str = _to_date_str(date)
 
                 # Insert new inventory record
                 inventory_data = {
@@ -607,11 +650,7 @@ def update_current_stock_in_db(new_stock, date):
     conn = sqlite3.connect('dry_ice.db')
     c = conn.cursor()
 
-    # Handle date formatting for SQLite
-    if hasattr(date, 'isoformat'):
-        date_str = date.isoformat()
-    else:
-        date_str = str(date)
+    date_str = _to_date_str(date)
 
     c.execute('''INSERT INTO inventory (date, stock_level)
                  VALUES (?, ?)''',
