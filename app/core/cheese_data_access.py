@@ -99,6 +99,13 @@ def init_cheese_storage(supabase_client=None) -> None:
         lpo_date TEXT, lpo_expiry_date TEXT, sku_description TEXT,
         quantity_units REAL, price_per_unit REAL
     )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS cheese_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, return_date TEXT NOT NULL,
+        customer_name TEXT, customer_id INTEGER, cheese_name TEXT NOT NULL,
+        quantity_kg REAL NOT NULL, reason_code TEXT, condition TEXT,
+        disposition TEXT, original_ref TEXT, notes TEXT,
+        sku_description TEXT, quantity_units REAL, created_at TEXT
+    )""")
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         contact_person TEXT, phone TEXT, email TEXT, address TEXT,
@@ -448,6 +455,98 @@ def get_daily_sales_kg(cheese_name: str, days: int = 90, supabase_client=None) -
     for r in rows:
         totals_by_day[r["date"]] = totals_by_day.get(r["date"], 0.0) + float(r["quantity_kg"])
     return [totals_by_day.get((start + timedelta(days=i)).isoformat(), 0.0) for i in range(days)]
+
+
+# ============================================================
+# RETURNS  (market returns — logging only. No disposition here restocks
+# FEFO inventory or BatchTracker; see returns_sheet_sync.py's docstring.
+# Feeds Customer Analytics churn-risk and Commercial Reports return-rate
+# KPI, nothing else.)
+# ============================================================
+def save_return(return_date: date, customer_name: str, cheese_name: str,
+                 quantity_kg: float, reason_code: str = "", condition: str = "",
+                 disposition: str = "", notes: str = "",
+                 customer_id: Optional[int] = None, original_ref: str = "",
+                 sku_description: Optional[str] = None,
+                 quantity_units: Optional[float] = None,
+                 supabase_client=None) -> Optional[int]:
+    """Persists one market return event. sku_description + quantity_units
+    are the raw Sheet values (same reasoning as save_lpo_line) — needed
+    because returns have no natural unique ID like an LPO number, so
+    returns_sheet_sync.py dedups on (return_date, customer_name,
+    sku_description, quantity_units) instead."""
+    date_str = return_date.isoformat() if hasattr(return_date, "isoformat") else str(return_date)
+    row = {
+        "return_date": date_str, "customer_name": customer_name, "customer_id": customer_id,
+        "cheese_name": cheese_name, "quantity_kg": quantity_kg,
+        "reason_code": reason_code, "condition": condition, "disposition": disposition,
+        "original_ref": original_ref, "notes": notes,
+        "sku_description": sku_description, "quantity_units": quantity_units,
+    }
+    if supabase_client:
+        try:
+            result = supabase_client.table("cheese_returns").insert(row).execute()
+            return result.data[0]["id"] if result.data else None
+        except Exception as e:
+            logger.error(f"Supabase save_return failed for '{cheese_name}' on {date_str}, "
+                         f"falling back to SQLite (ephemeral on Streamlit Cloud): {e}")
+    conn = _sqlite()
+    c = conn.cursor()
+    c.execute("""INSERT INTO cheese_returns
+        (return_date, customer_name, customer_id, cheese_name, quantity_kg,
+         reason_code, condition, disposition, original_ref, notes,
+         sku_description, quantity_units, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              (date_str, customer_name, customer_id, cheese_name, quantity_kg,
+               reason_code, condition, disposition, original_ref, notes,
+               sku_description, quantity_units, datetime.now().isoformat()))
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def get_returns(start_date: Optional[date] = None, end_date: Optional[date] = None,
+                 cheese_name: Optional[str] = None, customer_id: Optional[int] = None,
+                 supabase_client=None) -> List[Dict[str, Any]]:
+    """Raw return rows, most recent first — same filter shape as
+    get_sales_history. Omit filters for the full set, used by both the
+    Returns tab's recent-activity table and returns_sheet_sync's dedup
+    check against existing rows."""
+    if supabase_client:
+        try:
+            query = supabase_client.table("cheese_returns").select("*").order("return_date", desc=True)
+            if start_date:
+                query = query.gte("return_date", start_date.isoformat())
+            if end_date:
+                query = query.lte("return_date", end_date.isoformat())
+            if cheese_name:
+                query = query.eq("cheese_name", cheese_name)
+            if customer_id:
+                query = query.eq("customer_id", customer_id)
+            return query.execute().data
+        except Exception:
+            pass
+    conn = _sqlite()
+    conn.row_factory = sqlite3.Row
+    sql = "SELECT * FROM cheese_returns WHERE 1=1"
+    params = []
+    if start_date:
+        sql += " AND return_date >= ?"
+        params.append(start_date.isoformat())
+    if end_date:
+        sql += " AND return_date <= ?"
+        params.append(end_date.isoformat())
+    if cheese_name:
+        sql += " AND cheese_name = ?"
+        params.append(cheese_name)
+    if customer_id:
+        sql += " AND customer_id = ?"
+        params.append(customer_id)
+    sql += " ORDER BY return_date DESC"
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    conn.close()
+    return rows
 
 
 # ============================================================
