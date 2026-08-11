@@ -671,11 +671,14 @@ def _render_commercial_reports_tab(supabase_client) -> None:
         all_lpo = get_lpo_lines(supabase_client=supabase_client)
         lpo_lines = [l for l in all_lpo
                      if start_date.isoformat() <= l["delivery_date"] <= end_date.isoformat()]
-        return build_commercial_report_data(sales, lpo_lines, start_date, end_date)
+        all_returns = get_returns(supabase_client=supabase_client)
+        returns = [r for r in all_returns
+                   if start_date.isoformat() <= r["return_date"] <= end_date.isoformat()]
+        return build_commercial_report_data(sales, lpo_lines, start_date, end_date, returns=returns)
 
     render_report_tab(
         title="📋 Commercial Reports",
-        caption="Freetext customer names may fragment breakdowns until linked in 👥 Customers.",
+        caption="Freetext customer names may fragment revenue and return breakdowns alike until linked in 👥 Customers.",
         session_key="commercial_report",
         build_fn=_build,
         summarize_fn=summarize_commercial_report_data,
@@ -689,6 +692,10 @@ def _render_commercial_reports_tab(supabase_client) -> None:
             KPI("LPO Volume", lambda d: f"{d.lpo_total_kg:,.1f} kg"),
             KPI("LPO Fill Rate", lambda d: f"{d.lpo_fill_rate_pct:.0f}%"),
             KPI("LPOs Cancelled", lambda d: d.lpo_cancelled_count),
+            KPI("Return Value", lambda d: f"KSh {d.total_return_value:,.0f}"
+                                            + ("" if d.return_value_is_exact else " (est.)")),
+            KPI("Return Rate", lambda d: f"{d.return_rate_pct:.1f}%"),
+            KPI("Net Revenue", lambda d: f"KSh {d.net_revenue:,.0f}"),
         ],
         chart_sections=[
             ChartSection(
@@ -712,6 +719,14 @@ def _render_commercial_reports_tab(supabase_client) -> None:
                 lambda d: [{"Customer": r["customer"], "Revenue": f"KSh {r['revenue']:,.0f}",
                             "Kg": f"{r['kg']:,.1f}", "Sales": r["count"]}
                            for r in d.revenue_by_customer],
+            ),
+            TableSection(
+                "Returns by Customer",
+                lambda d: bool(d.returns_by_customer),
+                lambda d: [{"Customer": r["customer"],
+                            "Value": f"KSh {r['return_value']:,.0f}" + ("" if r["all_exact"] else " (est.)"),
+                            "Kg": f"{r['returned_kg']:,.1f}", "Returns": r["count"]}
+                           for r in d.returns_by_customer],
             ),
             TableSection(
                 "LPO Status Breakdown",
