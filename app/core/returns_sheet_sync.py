@@ -17,9 +17,17 @@ entered on the Sheet into kg. No separate item lookup here.
 
 Expected tab layout, added to the same spreadsheet as LPO Register / Sales:
 
-    Returns    Return Date | Customer | Item | Quantity (units) | Reason |
-               Condition | Disposition | Original Ref (optional) |
-               Notes (optional)
+    Returns    Return Date | Customer | Item | Quantity (units) |
+               Price per Unit (KSh) (optional) | Reason | Condition |
+               Disposition | Original Ref (optional) | Notes (optional)
+
+               Price per Unit is optional. When filled in, it's converted
+               to price_per_kg via the same Pack Size mapping as quantity,
+               and the return's value is EXACT. When left blank, the
+               return's value falls back to an estimate in
+               customer_analytics.compute_return_metrics (that customer's
+               own blended avg revenue/kg) -- see that function's
+               docstring.
 
                Customer and Item are dropdowns sourced from the same
                Customers / Items tabs as LPO Register. Quantity is in
@@ -55,6 +63,7 @@ class ReturnsRow(TypedDict):
     customer_name: str
     item_name: str           # raw SKU text from the Sheet
     quantity_units: float    # units/packs returned -- NOT kg
+    price_per_unit: float    # 0.0 if left blank on the Sheet -- means "no price given"
     reason_code: str
     condition: str
     disposition: str
@@ -101,6 +110,7 @@ def get_returns_sheet_rows(sheet_id: str, worksheet_name: str = RETURNS_TAB) -> 
         item_name = str(normalized.get("item", "")).strip()
         return_date = _parse_date(normalized.get("return date"))
         quantity_units = _parse_float(normalized.get("quantity (units)"), default=0.0)
+        price_per_unit = _parse_float(normalized.get("price per unit (ksh)"), default=0.0)
 
         if not customer_name or not item_name or not return_date or quantity_units <= 0:
             continue
@@ -110,6 +120,7 @@ def get_returns_sheet_rows(sheet_id: str, worksheet_name: str = RETURNS_TAB) -> 
             "customer_name": customer_name,
             "item_name": item_name,
             "quantity_units": quantity_units,
+            "price_per_unit": price_per_unit,
             "reason_code": str(normalized.get("reason", "")).strip(),
             "condition": str(normalized.get("condition", "")).strip(),
             "disposition": str(normalized.get("disposition", "")).strip(),
@@ -185,6 +196,10 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
         try:
             customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
             quantity_kg = row["quantity_units"] * pack_size_kg
+            # price_per_unit=0.0 means "left blank on the Sheet" -- keep it
+            # as None rather than 0.0 so save_return/compute_return_metrics
+            # can tell "no price given" apart from "given as zero".
+            price_per_kg = (row["price_per_unit"] / pack_size_kg) if row["price_per_unit"] > 0 else None
             save_return(
                 return_date=row["return_date"], customer_name=row["customer_name"],
                 cheese_name=recipe, quantity_kg=quantity_kg,
@@ -192,6 +207,8 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
                 disposition=row["disposition"], notes=row["notes"],
                 customer_id=customer_id, original_ref=row["original_ref"],
                 sku_description=row["item_name"], quantity_units=row["quantity_units"],
+                price_per_kg=price_per_kg,
+                price_per_unit=row["price_per_unit"] if row["price_per_unit"] > 0 else None,
                 supabase_client=supabase_client,
             )
             created += 1
