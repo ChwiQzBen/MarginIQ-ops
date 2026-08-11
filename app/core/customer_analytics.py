@@ -81,11 +81,12 @@ class CustomerReturnMetrics:
     customer_id: int
     customer_name: str
     total_returned_kg: float
-    estimated_return_value: float  # approximation -- see compute_return_metrics docstring
+    estimated_return_value: float  # exact where returns are priced, estimated where not -- see docstring
     return_count: int
     sales_kg: float
     return_rate_pct: Optional[float]  # None if this customer has no linked sales to rate against
     top_reason: Optional[str]
+    value_is_exact: bool  # True only if every one of this customer's returns carried a real price
 
 
 def _linked_sales(sales: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -288,19 +289,20 @@ def compute_churn_risk(sales: List[Dict[str, Any]], customers: List[Dict[str, An
 
 def compute_return_metrics(sales: List[Dict[str, Any]], returns: List[Dict[str, Any]],
                             customers: List[Dict[str, Any]]) -> List[CustomerReturnMetrics]:
-    """Return rate and estimated return value per customer, matched
-    against that customer's linked sales over the same history passed in.
+    """Return rate and return value per customer, matched against that
+    customer's linked sales over the same history passed in.
 
-    cheese_returns has no price_per_kg column -- a return is logged as a
-    quantity + reason, not a value -- so estimated_return_value here is an
-    approximation: returned_kg x that customer's own blended avg revenue
-    per kg (from compute_ordering_patterns: total_revenue / total_kg
-    across all their linked sales). Good enough to RANK customers by
-    return burden. NOT the number to quote in a negotiation -- for an
-    exact Kshs figure (e.g. the Carrefour monthly return value), either
-    add a price_per_kg column to cheese_returns / the Returns sheet tab,
-    or join each return's original_ref back to the specific sale/LPO
-    line it came from.
+    Value is EXACT for any return row that carries its own price_per_kg
+    (set when the Returns sheet's Price per Unit column is filled in --
+    see returns_sheet_sync.py). For unpriced rows, value falls back to
+    an approximation: returned_kg x that customer's own blended avg
+    revenue per kg (from compute_ordering_patterns). A customer's
+    estimated_return_value can therefore be a mix of exact and estimated
+    amounts across their individual returns -- value_is_exact is True
+    only when every one of that customer's returns had a real price.
+
+    Sorted by value descending: the account costing the most is first,
+    which is the one worth raising in a trade-terms conversation first.
 
     Rows with customer_id=None on either side are excluded, same
     reasoning as _linked_sales.
@@ -324,6 +326,17 @@ def compute_return_metrics(sales: List[Dict[str, Any]], returns: List[Dict[str, 
         sales_kg = sales_kg_by_customer.get(cid, 0.0)
         rate = round(100 * returned_kg / sales_kg, 1) if sales_kg > 0 else None
 
+        total_value = 0.0
+        any_estimated = False
+        for r in rows:
+            r_kg = float(r["quantity_kg"])
+            r_price = r.get("price_per_kg")
+            if r_price:
+                total_value += r_kg * float(r_price)
+            else:
+                total_value += r_kg * avg_price_per_kg.get(cid, 0.0)
+                any_estimated = True
+
         reason_counts: Dict[str, int] = defaultdict(int)
         for r in rows:
             reason_counts[r.get("reason_code") or "unspecified"] += 1
@@ -333,14 +346,15 @@ def compute_return_metrics(sales: List[Dict[str, Any]], returns: List[Dict[str, 
             customer_id=cid,
             customer_name=name_by_id.get(cid, f"Customer #{cid}"),
             total_returned_kg=round(returned_kg, 2),
-            estimated_return_value=round(returned_kg * avg_price_per_kg.get(cid, 0.0), 2),
+            estimated_return_value=round(total_value, 2),
             return_count=len(rows),
             sales_kg=round(sales_kg, 2),
             return_rate_pct=rate,
             top_reason=top_reason,
+            value_is_exact=not any_estimated,
         ))
 
-    results.sort(key=lambda r: (r.return_rate_pct or 0), reverse=True)
+    results.sort(key=lambda r: r.estimated_return_value, reverse=True)
     return results
 
 
@@ -412,20 +426,28 @@ if __name__ == "__main__":
     print("\nTest 6: return metrics")
     returns = [
         {"return_date": "2026-06-10", "customer_id": 2, "cheese_name": "Cheddar",
-         "quantity_kg": 4.0, "reason_code": "near_expiry"},
+         "quantity_kg": 4.0, "reason_code": "near_expiry", "price_per_kg": 700.0},  # priced -- exact
         {"return_date": "2026-06-17", "customer_id": 2, "cheese_name": "Cheddar",
-         "quantity_kg": 2.0, "reason_code": "near_expiry"},
+         "quantity_kg": 2.0, "reason_code": "near_expiry"},  # no price -- estimated
         {"return_date": "2026-06-12", "customer_id": 1, "cheese_name": "Mozzarella",
-         "quantity_kg": 1.0, "reason_code": "damaged_transit"},
+         "quantity_kg": 1.0, "reason_code": "damaged_transit", "price_per_kg": 800.0},  # priced -- exact
     ]
     ret_metrics = compute_return_metrics(sales, returns, customers)
     for r in ret_metrics:
         print(f"  {r.customer_name}: returned={r.total_returned_kg}kg, rate={r.return_rate_pct}%, "
-              f"est_value={r.estimated_return_value}, top_reason={r.top_reason}")
+              f"value={r.estimated_return_value} (exact={r.value_is_exact}), top_reason={r.top_reason}")
     carrefour_ret = next(r for r in ret_metrics if r.customer_name == "Carrefour")
     assert carrefour_ret.total_returned_kg == 6.0
     assert carrefour_ret.return_rate_pct == round(100 * 6.0 / 20.0, 1)
     assert carrefour_ret.top_reason == "near_expiry"
-    assert carrefour_ret.estimated_return_value == round(6.0 * (15000 / 20), 2)
+    # 4kg at its own priced rate (700) + 2kg at Carrefour's blended avg (750) -- a mix
+    assert carrefour_ret.estimated_return_value == round(4.0 * 700.0 + 2.0 * 750.0, 2)
+    assert carrefour_ret.value_is_exact is False, "one unpriced return should make this a mix, not exact"
+
+    java_ret = next(r for r in ret_metrics if r.customer_name == "Java House")
+    assert java_ret.estimated_return_value == 800.0
+    assert java_ret.value_is_exact is True, "single fully-priced return should be exact"
+    assert ret_metrics[0].estimated_return_value >= ret_metrics[-1].estimated_return_value, \
+        "should be sorted by value descending"
 
     print("\nAll customer_analytics checks passed.")
