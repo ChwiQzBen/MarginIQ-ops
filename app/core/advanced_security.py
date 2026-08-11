@@ -16,7 +16,7 @@ import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 import json
 import os
 import time
@@ -602,9 +602,20 @@ class SSOAuth:
 class UserManager:
     """
     User management system with CRUD operations.
+
+    Dual-backend: Supabase primary, users.json fallback -- same pattern as
+    cheese_data_access.py. This matters more here than almost anywhere else
+    in the app: users.json lives on Streamlit Cloud's EPHEMERAL filesystem,
+    wiped on every redeploy/container restart/sleep-wake cycle. Since
+    users.json is gitignored, a fresh container has NO users.json at all --
+    _init_users_file() recreates it from scratch with only the default
+    admin account, silently discarding every user created since the last
+    restart. That was the actual cause of "create a user, works, then next
+    login says invalid" -- the account genuinely no longer existed.
     """
     
-    def __init__(self):
+    def __init__(self, supabase_client: Optional[Any] = None):
+        self.supabase_client = supabase_client
         self.users_file = 'users.json'
         self._init_users_file()
     
@@ -627,7 +638,28 @@ class UserManager:
                 json.dump(default_users, f, indent=2)
     
     def get_users(self) -> Dict:
-        """Get all users."""
+        """Get all users. Supabase first (survives restarts), users.json
+        only as a fallback if Supabase is unreachable -- NOT merged with
+        Supabase results, since a stale local file re-adding a deleted
+        user would be worse than briefly showing none."""
+        if self.supabase_client:
+            try:
+                result = self.supabase_client.table("app_users").select("*").execute()
+                users = {}
+                for row in result.data:
+                    users[row["email"]] = {
+                        'password': row.get('password_hash'),
+                        'role': row.get('role'),
+                        'name': row.get('name'),
+                        'email_verified': row.get('email_verified', False),
+                        '2fa_enabled': row.get('twofa_enabled', False),
+                        'created': row.get('created_at'),
+                        'last_login': row.get('last_login'),
+                    }
+                return users
+            except Exception as e:
+                logger.error(f"Supabase get_users failed, falling back to users.json "
+                             f"(ephemeral on Streamlit Cloud): {e}")
         try:
             with open(self.users_file, 'r') as f:
                 return json.load(f)
@@ -669,26 +701,47 @@ class UserManager:
                 return False
             
             # Create user
+            password_hash = PasswordManager.hash_password(password)
+            created_at = datetime.now().isoformat()
             users[email] = {
-                'password': PasswordManager.hash_password(password),
+                'password': password_hash,
                 'role': role,
                 'name': name,
                 'email_verified': False,
                 '2fa_enabled': False,
-                'created': datetime.now().isoformat(),
+                'created': created_at,
                 'last_login': None
             }
-            
+
+            if self.supabase_client:
+                try:
+                    self.supabase_client.table("app_users").insert({
+                        "email": email, "password_hash": password_hash, "role": role,
+                        "name": name, "email_verified": False, "twofa_enabled": False,
+                        "created_at": created_at, "last_login": None,
+                    }).execute()
+                    logger.info(f"User created in Supabase: {email} ({role})")
+                    return True
+                except Exception as e:
+                    logger.error(f"Supabase create_user failed for {email}, falling back "
+                                 f"to users.json (ephemeral on Streamlit Cloud): {e}")
+
             with open(self.users_file, 'w') as f:
                 json.dump(users, f, indent=2)
-            
-            logger.info(f"👤 User created: {email} ({role})")
+
+            logger.info(f"User created (local fallback): {email} ({role})")
             return True
             
         except Exception as e:
             logger.error(f"User creation error: {e}")
             return False
     
+    _LOCAL_TO_SUPABASE_FIELD = {
+        'password': 'password_hash', 'role': 'role', 'name': 'name',
+        'email_verified': 'email_verified', '2fa_enabled': 'twofa_enabled',
+        'last_login': 'last_login',
+    }
+
     def update_user(self, email: str, **kwargs) -> bool:
         """
         Update user information.
@@ -706,18 +759,30 @@ class UserManager:
             if email not in users:
                 return False
             
-            # Update fields
+            update_row = {}
             for key, value in kwargs.items():
                 if key in users[email]:
                     if key == 'password':
-                        users[email][key] = PasswordManager.hash_password(value)
+                        hashed = PasswordManager.hash_password(value)
+                        users[email][key] = hashed
+                        update_row['password_hash'] = hashed
                     else:
                         users[email][key] = value
-            
+                        update_row[self._LOCAL_TO_SUPABASE_FIELD.get(key, key)] = value
+
+            if self.supabase_client:
+                try:
+                    self.supabase_client.table("app_users").update(update_row).eq("email", email).execute()
+                    logger.info(f"User updated in Supabase: {email}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Supabase update_user failed for {email}, falling back "
+                                 f"to users.json (ephemeral on Streamlit Cloud): {e}")
+
             with open(self.users_file, 'w') as f:
                 json.dump(users, f, indent=2)
             
-            logger.info(f"👤 User updated: {email}")
+            logger.info(f"User updated (local fallback): {email}")
             return True
             
         except Exception as e:
@@ -746,11 +811,20 @@ class UserManager:
                 return False
             
             del users[email]
-            
+
+            if self.supabase_client:
+                try:
+                    self.supabase_client.table("app_users").delete().eq("email", email).execute()
+                    logger.info(f"User deleted from Supabase: {email}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Supabase delete_user failed for {email}, falling back "
+                                 f"to users.json (ephemeral on Streamlit Cloud): {e}")
+
             with open(self.users_file, 'w') as f:
                 json.dump(users, f, indent=2)
             
-            logger.info(f"👤 User deleted: {email}")
+            logger.info(f"User deleted (local fallback): {email}")
             return True
             
         except Exception as e:
@@ -758,33 +832,14 @@ class UserManager:
             return False
     
     def toggle_2fa(self, email: str) -> bool:
-        """
-        Toggle 2FA for a user.
-        
-        Args:
-            email: User email
-        
-        Returns:
-            bool: True if toggled successfully
-        """
-        try:
-            users = self.get_users()
-            
-            if email not in users:
-                return False
-            
-            current = users[email].get('2fa_enabled', False)
-            users[email]['2fa_enabled'] = not current
-            
-            with open(self.users_file, 'w') as f:
-                json.dump(users, f, indent=2)
-            
-            logger.info(f"🔄 2FA toggled for {email}: {not current}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"2FA toggle error: {e}")
+        """Toggle 2FA for a user. Delegates to update_user so both
+        backends stay in sync through one code path, instead of
+        duplicating the write logic here."""
+        users = self.get_users()
+        if email not in users:
             return False
+        current = users[email].get('2fa_enabled', False)
+        return self.update_user(email, **{'2fa_enabled': not current})
     
     def render_user_management(self):
         """
