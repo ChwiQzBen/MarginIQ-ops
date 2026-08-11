@@ -88,6 +88,21 @@ def _parse_date(value) -> Optional[date]:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
+    # Google Sheets can hand back a date cell as a full datetime string
+    # (e.g. "2026-08-11 0:00:00") even when only a date was picked --
+    # depends on the cell's underlying number format, not what was typed.
+    # None of the formats above include a time component, so every such
+    # row failed silently until now. Strip a trailing time/ISO-'T' portion
+    # and retry against the same format list, rather than adding
+    # datetime-shaped formats that would only cover some of the ways a
+    # time suffix can show up.
+    date_only = text.split("T")[0].split(" ")[0]
+    if date_only != text:
+        for fmt in _DATE_FORMATS:
+            try:
+                return datetime.strptime(date_only, fmt).date()
+            except ValueError:
+                continue
     return None
 
 
