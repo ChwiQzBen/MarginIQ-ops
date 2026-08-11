@@ -554,7 +554,7 @@ def _render_inventory_tab() -> None:
                     st.dataframe(abc_summary, use_container_width=True, hide_index=True)
 
                     # Show top A items with download
-                    with st.expander("🔍 View Top A Items (70% Value)", expanded=False):
+                    with st.expander("View Top A Items (70% Value)", expanded=False):
                         top_a = abc_df[abc_df['ABC_CLASS'] == '🔴 A (70% value)'].head(20)
                         st.dataframe(
                             top_a[['ITEM_NAME', 'ITEM_CATEGORY', 'QUANTITY', 'UNIT PRICE', 'ANNUAL_VALUE']],
@@ -646,7 +646,7 @@ def _render_inventory_tab() -> None:
 
             with col1:
                 search = st.text_input(
-                    "🔍 Search Items",
+                    "Search Items",
                     placeholder="Type item name..."
                 )
 
@@ -669,7 +669,7 @@ def _render_inventory_tab() -> None:
                 else:
                     category_filter = "All"
 
-            st.form_submit_button("🔍 Apply Filters")
+            st.form_submit_button("Apply Filters")
 
         # Apply filters
         filtered_df = tab_stock_df.copy()
@@ -1580,7 +1580,7 @@ def _render_visual_inventory_tab(ctx: AllItemsContext) -> None:
             col1, col2, col3 = st.columns([2, 2, 1])
             with col1:
                 heatmap_search = st.text_input(
-                    "🔍 Search Items",
+                    "Search Items",
                     placeholder="Type item name...",
                     key="heatmap_search"
                 )

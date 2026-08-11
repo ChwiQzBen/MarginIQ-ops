@@ -44,7 +44,7 @@ def inventory_filters(items):
 
     with col1:
         search = st.text_input(
-            "🔍 Search Items",
+            "Search Items",
             placeholder="Type item name...",
             key="inventory_search"
         )
@@ -569,7 +569,7 @@ def inventory_heatmap_filters(heatmap_data):
 
     with col1:
         search = st.text_input(
-            "🔍 Search Items",
+            "Search Items",
             placeholder="Type item name...",
             key="heatmap_search"
         )
