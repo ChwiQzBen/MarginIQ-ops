@@ -76,6 +76,18 @@ class CustomerChurnRisk:
     risk_level: str             # "Low" / "Medium" / "High"
 
 
+@dataclass
+class CustomerReturnMetrics:
+    customer_id: int
+    customer_name: str
+    total_returned_kg: float
+    estimated_return_value: float  # approximation -- see compute_return_metrics docstring
+    return_count: int
+    sales_kg: float
+    return_rate_pct: Optional[float]  # None if this customer has no linked sales to rate against
+    top_reason: Optional[str]
+
+
 def _linked_sales(sales: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sales rows with a real customer_id — the only rows these functions
     can group reliably. Call cheese_data_access.reconcile_customers_from_history
@@ -274,6 +286,64 @@ def compute_churn_risk(sales: List[Dict[str, Any]], customers: List[Dict[str, An
     return results
 
 
+def compute_return_metrics(sales: List[Dict[str, Any]], returns: List[Dict[str, Any]],
+                            customers: List[Dict[str, Any]]) -> List[CustomerReturnMetrics]:
+    """Return rate and estimated return value per customer, matched
+    against that customer's linked sales over the same history passed in.
+
+    cheese_returns has no price_per_kg column -- a return is logged as a
+    quantity + reason, not a value -- so estimated_return_value here is an
+    approximation: returned_kg x that customer's own blended avg revenue
+    per kg (from compute_ordering_patterns: total_revenue / total_kg
+    across all their linked sales). Good enough to RANK customers by
+    return burden. NOT the number to quote in a negotiation -- for an
+    exact Kshs figure (e.g. the Carrefour monthly return value), either
+    add a price_per_kg column to cheese_returns / the Returns sheet tab,
+    or join each return's original_ref back to the specific sale/LPO
+    line it came from.
+
+    Rows with customer_id=None on either side are excluded, same
+    reasoning as _linked_sales.
+    """
+    patterns = compute_ordering_patterns(sales, customers)
+    sales_kg_by_customer = {p.customer_id: p.total_kg for p in patterns}
+    avg_price_per_kg = {
+        p.customer_id: (p.total_revenue / p.total_kg) if p.total_kg else 0.0
+        for p in patterns
+    }
+    name_by_id = {c["id"]: c["name"] for c in customers}
+
+    linked_returns = [r for r in returns if r.get("customer_id") is not None]
+    by_customer: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    for r in linked_returns:
+        by_customer[r["customer_id"]].append(r)
+
+    results = []
+    for cid, rows in by_customer.items():
+        returned_kg = sum(float(r["quantity_kg"]) for r in rows)
+        sales_kg = sales_kg_by_customer.get(cid, 0.0)
+        rate = round(100 * returned_kg / sales_kg, 1) if sales_kg > 0 else None
+
+        reason_counts: Dict[str, int] = defaultdict(int)
+        for r in rows:
+            reason_counts[r.get("reason_code") or "unspecified"] += 1
+        top_reason = max(reason_counts, key=reason_counts.get) if reason_counts else None
+
+        results.append(CustomerReturnMetrics(
+            customer_id=cid,
+            customer_name=name_by_id.get(cid, f"Customer #{cid}"),
+            total_returned_kg=round(returned_kg, 2),
+            estimated_return_value=round(returned_kg * avg_price_per_kg.get(cid, 0.0), 2),
+            return_count=len(rows),
+            sales_kg=round(sales_kg, 2),
+            return_rate_pct=rate,
+            top_reason=top_reason,
+        ))
+
+    results.sort(key=lambda r: (r.return_rate_pct or 0), reverse=True)
+    return results
+
+
 if __name__ == "__main__":
     customers = [{"id": 1, "name": "Java House"}, {"id": 2, "name": "Carrefour"}, {"id": 3, "name": "Naivas"}]
     sales = [
@@ -338,5 +408,24 @@ if __name__ == "__main__":
     assert naivas_churn.risk_level == "High", "Naivas hasn't ordered since January, should be High risk"
     carrefour_churn = next(c for c in churn if c.customer_name == "Carrefour")
     assert carrefour_churn.used_default_cadence is True, "single-order customer should use the fallback cadence"
+
+    print("\nTest 6: return metrics")
+    returns = [
+        {"return_date": "2026-06-10", "customer_id": 2, "cheese_name": "Cheddar",
+         "quantity_kg": 4.0, "reason_code": "near_expiry"},
+        {"return_date": "2026-06-17", "customer_id": 2, "cheese_name": "Cheddar",
+         "quantity_kg": 2.0, "reason_code": "near_expiry"},
+        {"return_date": "2026-06-12", "customer_id": 1, "cheese_name": "Mozzarella",
+         "quantity_kg": 1.0, "reason_code": "damaged_transit"},
+    ]
+    ret_metrics = compute_return_metrics(sales, returns, customers)
+    for r in ret_metrics:
+        print(f"  {r.customer_name}: returned={r.total_returned_kg}kg, rate={r.return_rate_pct}%, "
+              f"est_value={r.estimated_return_value}, top_reason={r.top_reason}")
+    carrefour_ret = next(r for r in ret_metrics if r.customer_name == "Carrefour")
+    assert carrefour_ret.total_returned_kg == 6.0
+    assert carrefour_ret.return_rate_pct == round(100 * 6.0 / 20.0, 1)
+    assert carrefour_ret.top_reason == "near_expiry"
+    assert carrefour_ret.estimated_return_value == round(6.0 * (15000 / 20), 2)
 
     print("\nAll customer_analytics checks passed.")

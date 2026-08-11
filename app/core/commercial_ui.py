@@ -13,13 +13,17 @@ from app.core.cheese_shared_state import ensure_cheese_state
 from app.core.cheese_data_access import (
     get_lpo_lines, record_lpo_delivery, cancel_lpo_line,
     get_sales_history, save_customer, get_customers, delete_customer,
-    reconcile_customers_from_history, find_or_create_customer_id,
+    reconcile_customers_from_history, find_or_create_customer_id, get_returns,
 )
 from app.core.lpo_sheet_sync import (
     sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id, LPO_REGISTER_TAB,
 )
+from app.core.returns_sheet_sync import (
+    sync_new_returns_from_sheet, clear_returns_sheet_caches, RETURNS_TAB,
+)
 from app.core.customer_analytics import (
     compute_ordering_patterns, compute_product_mix, compute_rfm, compute_clv, compute_churn_risk,
+    compute_return_metrics,
 )
 
 from app.core.commercial_reports import (
@@ -29,6 +33,7 @@ from app.core.report_ui import render_report_tab, KPI, TableSection, ChartSectio
 
 COMMERCIAL_TAB_NAMES = [
     "📄 LPO Register",
+    "↩️ Returns",
     "💰 Sales",
     "👥 Customers",
     "📊 Customer Analytics",
@@ -47,6 +52,7 @@ def render_commercial_mode(supabase_client=None,
 
     visible = [name for name, perm in {
         "📄 LPO Register": "manage_lpo",
+        "↩️ Returns": "manage_returns",
         "💰 Sales": "record_cheese_sale",
         "👥 Customers": "manage_customers",
         "📊 Customer Analytics": "view_customer_analytics",
@@ -68,6 +74,8 @@ def render_commercial_mode(supabase_client=None,
 
     if active_tab == "📄 LPO Register":
         _render_lpo_register_tab(book, tracker, supabase_client)
+    elif active_tab == "↩️ Returns":
+        _render_returns_tab(book, supabase_client)
     elif active_tab == "💰 Sales":
         _render_sales_tab(book, tracker, supabase_client)
     elif active_tab == "👥 Customers":
@@ -275,6 +283,86 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
                                 mime="text/csv")
         else:
             st.caption("Nothing delivered or cancelled yet.")
+
+
+# ============================================================
+# TAB: RETURNS  (market returns — logging only, entered in the Sheet.
+# No in-app form, same reasoning as LPO intake: the return happens in
+# the field, not at a keyboard. Nothing here restocks FEFO inventory —
+# see returns_sheet_sync.py's docstring.)
+# ============================================================
+def _render_returns_tab(book, supabase_client) -> None:
+    st.markdown("### ↩️ Returns")
+
+    customers = get_customers(supabase_client=supabase_client)
+    sales = get_sales_history(supabase_client=supabase_client)
+    returns = get_returns(supabase_client=supabase_client)
+
+    with st.expander("🔄 Sync from Google Sheet", expanded=not returns):
+        sheet_url = st.secrets.get("LPO_SHEET_URL")
+        if not sheet_url:
+            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync returns.")
+        else:
+            if st.button("🔄 Refresh from Sheet", key="returns_sheet_refresh"):
+                clear_returns_sheet_caches()
+                sheet_id = extract_sheet_id(sheet_url)
+                try:
+                    result = sync_new_returns_from_sheet(
+                        sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
+                    )
+                    if result["created"]:
+                        st.success(f"✅ Synced {result['created']} new return(s) from the Sheet.")
+                    else:
+                        st.info("No new returns to sync — everything in the Sheet is already recorded.")
+                    if result["skipped_invalid"]:
+                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                            for err in result["errors"]:
+                                st.caption(f"- {err}")
+                    st.rerun()
+                except gspread.exceptions.WorksheetNotFound:
+                    st.error(
+                        f"❌ No tab named '{RETURNS_TAB}' found in that spreadsheet. "
+                        f"Check the tab name matches exactly (spelling/case/trailing spaces)."
+                    )
+                except Exception as e:
+                    st.error(f"❌ Could not sync from the Sheet: {e}")
+
+    st.markdown("---")
+    st.markdown("#### Return Burden by Customer")
+    st.caption(
+        "Estimated value = returned kg × that customer's own average revenue/kg — "
+        "a ranking approximation, not an exact Kshs figure. Add a price column to "
+        "the Returns sheet tab for an exact figure per account."
+    )
+    if not returns:
+        st.info("No returns recorded yet.")
+    else:
+        ret_metrics = compute_return_metrics(sales, returns, customers)
+        if ret_metrics:
+            df = pd.DataFrame([{
+                "Customer": r.customer_name,
+                "Returned Kg": f"{r.total_returned_kg:,.1f}",
+                "Return Rate": f"{r.return_rate_pct:.1f}%" if r.return_rate_pct is not None else "—",
+                "Est. Value": f"KSh {r.estimated_return_value:,.0f}",
+                "Return Count": r.return_count,
+                "Top Reason": r.top_reason or "—",
+            } for r in ret_metrics])
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.caption("No customer-linked returns yet — link customers in 👥 Customers.")
+
+    with st.expander("📜 Return History (raw log)", expanded=False):
+        if returns:
+            df = pd.DataFrame(returns)
+            cols = ["return_date", "customer_name", "cheese_name", "quantity_kg",
+                    "reason_code", "condition", "disposition", "notes"]
+            st.dataframe(df[[c for c in cols if c in df.columns]], use_container_width=True, hide_index=True)
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Download Returns CSV", csv,
+                                file_name=f"returns_{date.today().strftime('%Y%m%d')}.csv",
+                                mime="text/csv")
+        else:
+            st.caption("Nothing returned yet.")
 
 
 # ============================================================
