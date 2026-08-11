@@ -104,8 +104,17 @@ def init_cheese_storage(supabase_client=None) -> None:
         customer_name TEXT, customer_id INTEGER, cheese_name TEXT NOT NULL,
         quantity_kg REAL NOT NULL, reason_code TEXT, condition TEXT,
         disposition TEXT, original_ref TEXT, notes TEXT,
-        sku_description TEXT, quantity_units REAL, created_at TEXT
+        sku_description TEXT, quantity_units REAL, created_at TEXT,
+        price_per_kg REAL, price_per_unit REAL
     )""")
+    # Migration: cheese_returns may already exist from before price
+    # tracking was added. ADD COLUMN raises OperationalError if the
+    # column is already there -- safe to run unconditionally on startup.
+    for _col_def in ("price_per_kg REAL", "price_per_unit REAL"):
+        try:
+            c.execute(f"ALTER TABLE cheese_returns ADD COLUMN {_col_def}")
+        except sqlite3.OperationalError:
+            pass
     c.execute("""CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         contact_person TEXT, phone TEXT, email TEXT, address TEXT,
@@ -469,12 +478,18 @@ def save_return(return_date: date, customer_name: str, cheese_name: str,
                  customer_id: Optional[int] = None, original_ref: str = "",
                  sku_description: Optional[str] = None,
                  quantity_units: Optional[float] = None,
+                 price_per_kg: Optional[float] = None,
+                 price_per_unit: Optional[float] = None,
                  supabase_client=None) -> Optional[int]:
     """Persists one market return event. sku_description + quantity_units
     are the raw Sheet values (same reasoning as save_lpo_line) — needed
     because returns have no natural unique ID like an LPO number, so
     returns_sheet_sync.py dedups on (return_date, customer_name,
-    sku_description, quantity_units) instead."""
+    sku_description, quantity_units) instead.
+
+    price_per_kg is None when the Sheet's Price per Unit column was left
+    blank -- compute_return_metrics treats None as "estimate this one",
+    so don't pass 0.0 here to mean "no price"."""
     date_str = return_date.isoformat() if hasattr(return_date, "isoformat") else str(return_date)
     row = {
         "return_date": date_str, "customer_name": customer_name, "customer_id": customer_id,
@@ -482,6 +497,7 @@ def save_return(return_date: date, customer_name: str, cheese_name: str,
         "reason_code": reason_code, "condition": condition, "disposition": disposition,
         "original_ref": original_ref, "notes": notes,
         "sku_description": sku_description, "quantity_units": quantity_units,
+        "price_per_kg": price_per_kg, "price_per_unit": price_per_unit,
     }
     if supabase_client:
         try:
@@ -495,11 +511,12 @@ def save_return(return_date: date, customer_name: str, cheese_name: str,
     c.execute("""INSERT INTO cheese_returns
         (return_date, customer_name, customer_id, cheese_name, quantity_kg,
          reason_code, condition, disposition, original_ref, notes,
-         sku_description, quantity_units, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+         sku_description, quantity_units, price_per_kg, price_per_unit, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
               (date_str, customer_name, customer_id, cheese_name, quantity_kg,
                reason_code, condition, disposition, original_ref, notes,
-               sku_description, quantity_units, datetime.now().isoformat()))
+               sku_description, quantity_units, price_per_kg, price_per_unit,
+               datetime.now().isoformat()))
     new_id = c.lastrowid
     conn.commit()
     conn.close()
