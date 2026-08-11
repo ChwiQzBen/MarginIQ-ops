@@ -50,7 +50,8 @@ from app.core.cheese_data_access import (
 from app.core.lpo_sheet_sync import get_item_master_map
 
 __all__ = [
-    "get_returns_sheet_rows", "clear_returns_sheet_caches", "sync_new_returns_from_sheet",
+    "get_returns_sheet_rows", "get_returns_sheet_diagnostics",
+    "clear_returns_sheet_caches", "sync_new_returns_from_sheet",
 ]
 
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d")
@@ -69,6 +70,11 @@ class ReturnsRow(TypedDict):
     disposition: str
     original_ref: str
     notes: str
+
+
+class DroppedReturnRow(TypedDict):
+    row_summary: str
+    reason: str
 
 
 def _parse_date(value) -> Optional[date]:
@@ -130,12 +136,49 @@ def get_returns_sheet_rows(sheet_id: str, worksheet_name: str = RETURNS_TAB) -> 
     return rows
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_returns_sheet_diagnostics(sheet_id: str, worksheet_name: str = RETURNS_TAB) -> List[DroppedReturnRow]:
+    """Companion to get_returns_sheet_rows -- re-reads the same (small) tab
+    to report WHY rows were silently dropped there: missing customer/item/
+    date, or non-positive quantity. get_returns_sheet_rows stays silent on
+    these so its own return type is a clean List[ReturnsRow]; this exists
+    purely to surface the reason in sync_new_returns_from_sheet's result,
+    instead of a dropped row just vanishing with no trace."""
+    from app.core.lpo_sheet_sync import _get_gspread_client
+    client = _get_gspread_client()
+    worksheet = client.open_by_key(sheet_id).worksheet(worksheet_name)
+    records = worksheet.get_all_records()
+
+    dropped: List[DroppedReturnRow] = []
+    for i, record in enumerate(records, start=2):  # sheet row 2 = first data row
+        normalized = {str(k).strip().lower(): v for k, v in record.items()}
+        customer_name = str(normalized.get("customer", "")).strip()
+        item_name = str(normalized.get("item", "")).strip()
+        raw_date = normalized.get("return date")
+        return_date = _parse_date(raw_date)
+        quantity_units = _parse_float(normalized.get("quantity (units)"), default=0.0)
+
+        if not customer_name or not item_name or not return_date or quantity_units <= 0:
+            reasons = []
+            if not customer_name:
+                reasons.append("Customer blank")
+            if not item_name:
+                reasons.append("Item blank")
+            if not return_date:
+                reasons.append(f"Return Date '{raw_date}' not recognized")
+            if quantity_units <= 0:
+                reasons.append("Quantity (units) missing or zero")
+            dropped.append({"row_summary": f"Sheet row {i}", "reason": "; ".join(reasons)})
+    return dropped
+
+
 def clear_returns_sheet_caches() -> None:
     """Call from a 'Refresh from Sheet' button. Deliberately does NOT
     clear get_item_master_map's cache -- that's lpo_sheet_sync's cache to
     own, shared across LPO and Returns sync; clearing it here would just
     mean two callers stepping on each other's TTL."""
     get_returns_sheet_rows.clear()
+    get_returns_sheet_diagnostics.clear()
 
 
 def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
@@ -153,6 +196,7 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
              "errors": [str, ...]}
     """
     sheet_rows = get_returns_sheet_rows(sheet_id)
+    dropped_rows = get_returns_sheet_diagnostics(sheet_id)
     item_master_map = get_item_master_map(sheet_id)
     existing_returns = get_returns(supabase_client=supabase_client)
     existing_keys = {
@@ -163,8 +207,12 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
 
     created = 0
     skipped_existing = 0
-    skipped_invalid = 0
-    errors: List[str] = []
+    # Rows that never made it into sheet_rows (blank customer/item/date, or
+    # non-positive quantity) surface here now instead of silently vanishing --
+    # this was the actual cause of "No new returns to sync" appearing even
+    # when the Sheet visibly had rows in it.
+    skipped_invalid = len(dropped_rows)
+    errors: List[str] = [f"{d['row_summary']}: {d['reason']} — skipped." for d in dropped_rows]
 
     for row in sheet_rows:
         key = (row["return_date"].isoformat(), row["customer_name"], row["item_name"], row["quantity_units"])

@@ -329,12 +329,6 @@ def _render_returns_tab(book, supabase_client) -> None:
 
     st.markdown("---")
     st.markdown("#### Return Burden by Customer")
-    st.caption(
-        "Sorted by return value, highest first — the account most worth raising in a "
-        "trade-terms conversation is at the top. \"Exact\" means every return for that "
-        "customer carried its own price from the Sheet; \"Est.\" means at least one "
-        "return had no price entered and fell back to that customer's average revenue/kg."
-    )
     if not returns:
         st.info("No returns recorded yet.")
     else:
