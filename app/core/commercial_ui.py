@@ -330,9 +330,10 @@ def _render_returns_tab(book, supabase_client) -> None:
     st.markdown("---")
     st.markdown("#### Return Burden by Customer")
     st.caption(
-        "Estimated value = returned kg × that customer's own average revenue/kg — "
-        "a ranking approximation, not an exact Kshs figure. Add a price column to "
-        "the Returns sheet tab for an exact figure per account."
+        "Sorted by return value, highest first — the account most worth raising in a "
+        "trade-terms conversation is at the top. \"Exact\" means every return for that "
+        "customer carried its own price from the Sheet; \"Est.\" means at least one "
+        "return had no price entered and fell back to that customer's average revenue/kg."
     )
     if not returns:
         st.info("No returns recorded yet.")
@@ -341,9 +342,10 @@ def _render_returns_tab(book, supabase_client) -> None:
         if ret_metrics:
             df = pd.DataFrame([{
                 "Customer": r.customer_name,
-                "Returned Kg": f"{r.total_returned_kg:,.1f}",
+                "Return Value": f"KSh {r.estimated_return_value:,.0f} "
+                                 f"({'Exact' if r.value_is_exact else 'Est.'})",
                 "Return Rate": f"{r.return_rate_pct:.1f}%" if r.return_rate_pct is not None else "—",
-                "Est. Value": f"KSh {r.estimated_return_value:,.0f}",
+                "Returned Kg": f"{r.total_returned_kg:,.1f}",
                 "Return Count": r.return_count,
                 "Top Reason": r.top_reason or "—",
             } for r in ret_metrics])
