@@ -67,8 +67,8 @@ class CheeseDemandForecaster:
                 method="insufficient_data",
                 data_points_used=0,
                 confidence_note=(
-                    f"No sales history yet — using manual estimate ({fallback_mean:.0f}kg) "
-                    f"with a wide {fallback_cv:.0%} CV to reflect that this is a guess, not data."
+                    f"No sales history yet — using a manual estimate ({fallback_mean:.0f}kg), "
+                    f"with extra margin built in since this is a guess, not based on real data."
                 ),
             )
 
@@ -80,7 +80,7 @@ class CheeseDemandForecaster:
                 std=float(std),
                 method="ml_ensemble",
                 data_points_used=n,
-                confidence_note=f"Ensemble forecast from {n} days of history.",
+                confidence_note=f"Advanced forecast based on {n} days of sales history.",
             )
 
         # Rolling-statistics fallback
@@ -90,14 +90,13 @@ class CheeseDemandForecaster:
         std = max(std, mean * 0.05)  # floor so the newsvendor never treats demand as certain
 
         if n < MIN_DAYS_FOR_STABLE_STATS:
-            note = (f"Only {n} days of history — mean/std are noisy. "
+            note = (f"Only {n} days of sales so far — the estimate is still noisy. "
                     f"Treat this as a rough starting point, not a firm number.")
         elif n < MIN_DAYS_FOR_ML:
-            note = (f"{n} days of history — using rolling mean/std. Below the "
-                    f"{MIN_DAYS_FOR_ML}-day floor for ML forecasting (same threshold "
-                    f"already used for Dry Ice).")
+            note = (f"{n} days of sales history — using a simple average-based estimate. "
+                    f"Needs {MIN_DAYS_FOR_ML}+ days before switching to the more advanced forecast.")
         else:
-            note = f"{n} days of history, no ML forecaster wired in — using rolling mean/std."
+            note = f"{n} days of sales history — using a simple average-based estimate."
 
         return DemandForecast(
             cheese_name=cheese_name, mean=mean, std=std,
@@ -144,7 +143,7 @@ if __name__ == "__main__":
     print(f"Mean: {result.mean:.1f}kg  Std: {result.std:.1f}kg")
     print(f"Note: {result.confidence_note}")
     assert result.method == "rolling_stats"
-    assert "Below the" in result.confidence_note
+    assert "Needs" in result.confidence_note
 
     print("\n" + "=" * 60)
     print("Case 3: 90 days of history, no ML forecaster wired in")
@@ -155,7 +154,7 @@ if __name__ == "__main__":
     print(f"Mean: {result.mean:.1f}kg  Std: {result.std:.1f}kg")
     print(f"Note: {result.confidence_note}")
     assert result.method == "rolling_stats"
-    assert "no ML forecaster wired in" in result.confidence_note
+    assert "simple average-based estimate" in result.confidence_note
 
     print("\n" + "=" * 60)
     print("Case 4: 90 days + an ML forecaster IS wired in (dependency injection)")
