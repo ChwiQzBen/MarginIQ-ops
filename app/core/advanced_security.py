@@ -932,13 +932,26 @@ class UserManager:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button(f"🔐 Toggle 2FA", use_container_width=True):
-                    success = self.toggle_2fa(selected_user)
-                    if success:
-                        st.success(f"✅ 2FA toggled for {selected_user}")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to toggle 2FA")
+                # Real 2FA setup (QR code / authenticator app) isn't built
+                # yet -- render_2fa_setup exists but nothing calls it. Toggling
+                # this "on" from here put an account into a state where login
+                # demands a code no one could generate. Only "off" is safe
+                # until real setup exists.
+                selected_user_2fa = users.get(selected_user, {}).get('2fa_enabled', False)
+                if selected_user_2fa:
+                    if st.button("🔓 Turn Off 2FA", use_container_width=True):
+                        success = self.toggle_2fa(selected_user)
+                        if success:
+                            st.success(f"✅ 2FA turned off for {selected_user}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to turn off 2FA")
+                else:
+                    st.button(
+                        "🔐 Toggle 2FA", use_container_width=True, disabled=True,
+                        help="2FA setup isn't available yet — turning this on "
+                             "would lock the account out at next login.",
+                    )
             
             with col2:
                 if st.button("👤 Reset Password", use_container_width=True):
