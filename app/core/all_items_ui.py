@@ -61,6 +61,23 @@ from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
 )
 
+
+def _style_cells(df: pd.DataFrame, style_fn, subset):
+    """Pandas 3.0 compatibility shim: Styler.applymap was removed in
+    pandas 3.0 in favor of Styler.map. Tries .map first, falls back to
+    .applymap for older pinned environments.
+
+    NOTE: per project memory, theme.py already has an equivalent
+    _style_map() shim used elsewhere for this same migration — if
+    that's exported, point this at it instead to avoid a second copy.
+    Added locally here since this file doesn't currently import
+    theme.py's styling helpers."""
+    styler = df.style
+    if hasattr(styler, "map"):
+        return styler.map(style_fn, subset=subset)
+    return styler.applymap(style_fn, subset=subset)
+
+
 @dataclass
 class AllItemsContext:
     """📦 Inventory and 📊 Stock Movements are both self-contained today —
@@ -151,7 +168,15 @@ def _render_inventory_tab() -> None:
         module-level load_inventory_data() used for the KPI dashboard in
         main(). Same name, different return shape; this scoping only
         mattered when this tab lived inline in main.py — kept the rename
-        here anyway for continuity with the original diff history."""
+        here anyway for continuity with the original diff history.
+
+        Falls back to the last successfully loaded snapshot (stored in
+        session_state, not cache_data's own cache) if a fresh Google
+        Sheets call fails or comes back empty — previously any hiccup
+        reaching Google Sheets showed every user an empty tab with zero
+        fallback anywhere. The session_state write only runs when this
+        function body actually executes (a cache miss), which is exactly
+        when we want to refresh "last known good.\""""
         try:
             gsheet = GoogleSheetReader()
 
@@ -160,19 +185,30 @@ def _render_inventory_tab() -> None:
                 current = gsheet.get_current_stock()
                 low = gsheet.get_low_stock_items()
 
-                # Count categories
                 category_count = (
                     stock['ITEM_CATEGORY'].nunique()
                     if 'ITEM_CATEGORY' in stock.columns
                     else 0
                 )
 
+                if not stock.empty:
+                    st.session_state['_ai_inventory_cache'] = (
+                        stock, current, low, category_count, datetime.now()
+                    )
+
                 return stock, current, low, category_count
 
         except Exception as e:
-            st.error(f"Inventory loading error: {e}")
+            logger.error(f"Inventory loading error: {e}")
 
-        # Fallback if authentication fails
+        cached = st.session_state.get('_ai_inventory_cache')
+        if cached:
+            stock, current, low, category_count, cached_at = cached
+            st.warning(f"⚠️ Could not refresh inventory data just now — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
+            return stock, current, low, category_count
+
+        st.error("Could not load inventory data, and no previous data is available to fall back on.")
         return (
             pd.DataFrame(),
             pd.DataFrame(),
@@ -349,7 +385,7 @@ def _render_inventory_tab() -> None:
                             else:
                                 return 'background-color: #d4edda; color: #155724;'
 
-                        styled_cycle_df = cycle_df.style.applymap(style_priority, subset=['Priority'])
+                        styled_cycle_df = _style_cells(cycle_df, style_priority, subset=['Priority'])
 
                         st.dataframe(
                             styled_cycle_df,
@@ -446,9 +482,7 @@ def _render_inventory_tab() -> None:
                             else:
                                 return 'background-color: #d4edda;'
 
-                        styled_replenishment = replenishment_df.style.applymap(
-                            style_abc_class, subset=['ABC Class']
-                        )
+                        styled_replenishment = _style_cells(replenishment_df, style_abc_class, subset=['ABC Class'])
 
                         st.dataframe(
                             styled_replenishment,
@@ -779,12 +813,30 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     @st.cache_data(ttl=300, show_spinner=False)
     def load_movement_data():
-        gsheet = GoogleSheetReader()
-        if gsheet.authenticate():
-            check_in = gsheet.get_check_in()
-            check_out = gsheet.get_check_out()
-            current_stock = gsheet.get_current_stock()
+        """Same last-known-good fallback as load_full_inventory_details
+        above — a failed/empty Google Sheets call no longer wipes out
+        every movement figure on screen."""
+        try:
+            gsheet = GoogleSheetReader()
+            if gsheet.authenticate():
+                check_in = gsheet.get_check_in()
+                check_out = gsheet.get_check_out()
+                current_stock = gsheet.get_current_stock()
+                if not (check_in.empty and check_out.empty and current_stock.empty):
+                    st.session_state['_ai_movement_cache'] = (
+                        check_in, check_out, current_stock, datetime.now()
+                    )
+                return check_in, check_out, current_stock
+        except Exception as e:
+            logger.error(f"Movement data loading error: {e}")
+
+        cached = st.session_state.get('_ai_movement_cache')
+        if cached:
+            check_in, check_out, current_stock, cached_at = cached
+            st.warning(f"⚠️ Could not refresh movement data just now — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
             return check_in, check_out, current_stock
+
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     with st.spinner("📊 Please wait..."):
@@ -920,16 +972,16 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
     # ============================================================
 
     def load_heavy_analytics_data():
-        """Load heavy analytics data only when needed."""
+        """Load heavy analytics data only when needed. Same last-known-good
+        fallback as the Inventory/Stock Movements loaders — LazyLoader's
+        own cache_ttl=600 only helps within its window; this covers the
+        underlying Google Sheets call itself failing after that expires."""
         try:
             logger.info("Loading heavy analytics data...")
             gsheet = GoogleSheetReader()
             if gsheet.authenticate():
                 stock = gsheet.get_stock_with_pricing()
 
-                # ============================================================
-                # 🚀 COMPRESS DATAFRAME TO REDUCE MEMORY USAGE
-                # ============================================================
                 if not stock.empty:
                     original_memory = stock.memory_usage(deep=True).sum() / 1024 / 1024
                     stock = compress_dataframe(stock)
@@ -941,7 +993,6 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                 check_out = gsheet.get_check_out()
                 current_stock = gsheet.get_current_stock()
 
-                # Compress the other DataFrames too
                 if not check_in.empty:
                     check_in = compress_dataframe(check_in)
                 if not check_out.empty:
@@ -950,12 +1001,24 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                     current_stock = compress_dataframe(current_stock)
 
                 logger.info(f"Analytics data loaded: {len(stock)} items")
+                if not stock.empty:
+                    st.session_state['_ai_analytics_cache'] = (
+                        stock, check_in, check_out, current_stock, datetime.now()
+                    )
                 return stock, check_in, check_out, current_stock
             else:
                 logger.warning("Google Sheets authentication failed for analytics")
         except Exception as e:
             logger.error(f"Error loading analytics data: {e}")
-            st.error(f"❌ Error loading analytics data: {str(e)}")
+
+        cached = st.session_state.get('_ai_analytics_cache')
+        if cached:
+            stock, check_in, check_out, current_stock, cached_at = cached
+            st.warning(f"⚠️ Could not refresh analytics data just now — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
+            return stock, check_in, check_out, current_stock
+
+        st.error("❌ Could not load analytics data, and no previous data is available to fall back on.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     # Use lazy loader with caching
@@ -1350,7 +1413,9 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
 
                     if st.button("📊 Run Cost Analysis", key="run_cost_analysis"):
                         cost_results = []
+                        skipped_items = []
                         for _, row in cost_df.iterrows():
+                            item_label = row.get('ITEM_NAME', 'Unknown')
                             try:
                                 eoq_result = calculate_eoq_costs(
                                     current_qty=row['QUANTITY'],
@@ -1361,7 +1426,7 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                                 )
                                 if eoq_result is not None:
                                     cost_results.append({
-                                        'Item': row.get('ITEM_NAME', 'Unknown'),
+                                        'Item': item_label,
                                         'Category': row.get('ITEM_CATEGORY', 'Uncategorized'),
                                         'Current Stock': row['QUANTITY'],
                                         'Unit Price': row['UNIT PRICE'],
@@ -1371,8 +1436,15 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                                         'Optimal Cost': eoq_result.optimal_total_cost,
                                         'Potential Savings': eoq_result.potential_savings,
                                     })
-                            except:
-                                pass
+                                else:
+                                    skipped_items.append(f"{item_label}: calculation returned no result")
+                            except Exception as e:
+                                skipped_items.append(f"{item_label}: {e}")
+
+                        if skipped_items:
+                            with st.expander(f"⚠️ {len(skipped_items)} item(s) skipped from cost analysis"):
+                                for msg in skipped_items:
+                                    st.caption(f"- {msg}")
 
                         if cost_results:
                             cost_df_results = pd.DataFrame(cost_results)
