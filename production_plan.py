@@ -162,22 +162,22 @@ class ProductionPlanner:
                 )
             if line.capacity_applied:
                 reasons.append(
-                    f"Capped by aging-room capacity — newsvendor-optimal quantity was "
+                    f"Capped by aging-room capacity — the ideal amount to produce was "
                     f"higher, but the room doesn't have space for more"
                 )
             if line.floor_applied:
                 reasons.append(
                     f"Raised to {line.confirmed_demand_kg:.0f}kg to cover confirmed LPO "
-                    f"orders — newsvendor-optimal quantity alone was lower"
+                    f"orders — the ideal amount to produce alone was lower"
                 )
             if line.shelf_life_multiplier > 1.05:
                 reasons.append(
                     f"Short shelf life ({recipe.shelf_life_days}d) raises the effective "
-                    f"cost of overproducing ({line.shelf_life_multiplier:.1f}x) — safety "
-                    f"stock trimmed vs. what a longer-shelf-life SKU would carry"
+                    f"cost of overproducing ({line.shelf_life_multiplier:.1f}x) — buffer "
+                    f"stock trimmed vs. what a longer-shelf-life product would carry"
                 )
             if not line.fully_allocated:
-                reasons.append("Milk-constrained — below newsvendor-optimal quantity")
+                reasons.append("Milk-constrained — below the ideal amount to produce")
                 warnings.append(f"{line.cheese}: under-produced due to milk shortage today")
                 if line.confirmed_demand_kg > 0 and line.cheese_produced_kg < line.confirmed_demand_kg:
                     warnings.append(
@@ -201,9 +201,8 @@ class ProductionPlanner:
 
         if result.milk_wasted_l > 0:
             warnings.append(
-                f"{result.milk_wasted_l:.0f}L milk wasted — no cheese line could "
-                f"absorb it profitably (raw milk sale would have been the better option "
-                f"only if price allows)"
+                f"{result.milk_wasted_l:.0f}L milk wasted — no cheese could use it "
+                f"profitably today (selling it as raw milk would only help if the price allows)"
             )
 
         # Joint aging-room check: if MULTIPLE aged cheeses are being produced
