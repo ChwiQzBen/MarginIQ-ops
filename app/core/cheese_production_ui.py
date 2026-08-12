@@ -544,9 +544,9 @@ def _render_production_planning_tab(book: RecipeBook, tracker: BatchTracker, sup
 
     st.markdown("#### Demand & Pricing per Cheese")
     st.caption(
-        "Auto-calculated from 💰 Sales history once a cheese has 60+ days of recorded "
-        "sales (rolling mean/std below that — see demand_forecast.py). Still fully "
-        "editable — click 📈 to snap back to the calculated value after overriding."
+        "Calculated automatically from your sales history once a cheese has 60+ days "
+        "of data. You can always type over it — use 📈 to reset back to the calculated "
+        "number."
     )
     forecaster = CheeseDemandForecaster(
         ml_forecaster=lambda name, sales: _cached_ensemble_demand(name, tuple(sales))
@@ -587,10 +587,8 @@ def _render_production_planning_tab(book: RecipeBook, tracker: BatchTracker, sup
 
             confirmed_kg = confirmed_demand.get(name, 0.0)
             if confirmed_kg > 0:
-                st.caption(f"📄 Confirmed via LPO for {planning_date.strftime('%b %d')}: {confirmed_kg:.1f}kg")
-            confirmed_kg = confirmed_demand.get(name, 0.0)
-            if confirmed_kg > 0:
-                st.caption(f"📄 {confirmed_kg:.1f}kg confirmed via LPO — production won't go below this")
+                st.caption(f"📄 {confirmed_kg:.1f}kg confirmed via LPO for "
+                           f"{planning_date.strftime('%b %d')} — production won't go below this")
             st.caption(f"ℹ️ {fcast.confidence_note}")
             demand_forecast[name] = (mean_kg, std_kg if std_kg > 0 else mean_kg * 0.3)
             selling_prices[name] = price
