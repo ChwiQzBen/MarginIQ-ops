@@ -231,26 +231,37 @@ class AuthManager:
                     'message': '❌ No pending 2FA verification'
                 }
             
-            # TwoFactorAuth is already imported at the top
-            
-            # Check if 2FA is set up
-            secret = st.session_state.get('2fa', {}).get('secret')
-            
+            # Real per-user secret, persisted in app_users.twofa_secret --
+            # NOT st.session_state['2fa']['secret'], which was a single
+            # global slot nothing ever saved anywhere. That gap is why 2FA
+            # demanded a code no one could generate, and separately, why
+            # its fallback silently accepted ANY 6-digit code -- a real
+            # security hole, not just a UX bug.
+            secret = pending['user'].get('2fa_secret')
+
             if secret:
-                # Use the actual 2FA verification
                 two_factor = TwoFactorAuth()
                 if not two_factor.verify_otp(secret, otp):
-                    return {
-                        'success': False,
-                        'message': '❌ Invalid 2FA code'
-                    }
+                    # Real backup code, if one was issued and not yet used
+                    backup_codes = pending['user'].get('2fa_backup_codes') or []
+                    entered = otp.strip().upper()
+                    if entered in backup_codes:
+                        user_manager = UserManager(supabase_client=self.supabase_client)
+                        remaining = [c for c in backup_codes if c != entered]
+                        user_manager.update_user(pending['email'], **{'2fa_backup_codes': remaining})
+                    else:
+                        return {
+                            'success': False,
+                            'message': '❌ Invalid 2FA code'
+                        }
             else:
-                # For demo/backward compatibility, accept any 6-digit code or 123456
-                if len(otp) != 6 or not otp.isdigit() or (otp != '123456' and not True):
-                    return {
-                        'success': False,
-                        'message': '❌ Invalid 2FA code'
-                    }
+                # No secret on record -- fail closed instead of accepting
+                # any code, unlike the previous fallback.
+                return {
+                    'success': False,
+                    'message': '❌ 2FA is enabled but not set up correctly for this '
+                                'account. Contact an administrator.'
+                }
             
             # Complete the login
             email = pending['email']

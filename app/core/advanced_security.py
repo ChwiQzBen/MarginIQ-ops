@@ -647,12 +647,15 @@ class UserManager:
                 result = self.supabase_client.table("app_users").select("*").execute()
                 users = {}
                 for row in result.data:
+                    raw_backup_codes = row.get('twofa_backup_codes')
                     users[row["email"]] = {
                         'password': row.get('password_hash'),
                         'role': row.get('role'),
                         'name': row.get('name'),
                         'email_verified': row.get('email_verified', False),
                         '2fa_enabled': row.get('twofa_enabled', False),
+                        '2fa_secret': row.get('twofa_secret'),
+                        '2fa_backup_codes': raw_backup_codes.split(',') if raw_backup_codes else [],
                         'created': row.get('created_at'),
                         'last_login': row.get('last_login'),
                     }
@@ -707,8 +710,10 @@ class UserManager:
                 'password': password_hash,
                 'role': role,
                 'name': name,
-                'email_verified': False,
+                'email_verified': True,
                 '2fa_enabled': False,
+                '2fa_secret': None,
+                '2fa_backup_codes': [],
                 'created': created_at,
                 'last_login': None
             }
@@ -717,7 +722,8 @@ class UserManager:
                 try:
                     self.supabase_client.table("app_users").insert({
                         "email": email, "password_hash": password_hash, "role": role,
-                        "name": name, "email_verified": False, "twofa_enabled": False,
+                        "name": name, "email_verified": True, "twofa_enabled": False,
+                        "twofa_secret": None, "twofa_backup_codes": None,
                         "created_at": created_at, "last_login": None,
                     }).execute()
                     logger.info(f"User created in Supabase: {email} ({role})")
@@ -739,7 +745,7 @@ class UserManager:
     _LOCAL_TO_SUPABASE_FIELD = {
         'password': 'password_hash', 'role': 'role', 'name': 'name',
         'email_verified': 'email_verified', '2fa_enabled': 'twofa_enabled',
-        'last_login': 'last_login',
+        'last_login': 'last_login', '2fa_secret': 'twofa_secret',
     }
 
     def update_user(self, email: str, **kwargs) -> bool:
@@ -766,6 +772,12 @@ class UserManager:
                         hashed = PasswordManager.hash_password(value)
                         users[email][key] = hashed
                         update_row['password_hash'] = hashed
+                    elif key == '2fa_backup_codes':
+                        # Stored as a comma-joined string in Supabase (plain
+                        # TEXT column, no JSONB dependency); kept as a real
+                        # list everywhere in-app.
+                        users[email][key] = value or []
+                        update_row['twofa_backup_codes'] = ','.join(value) if value else None
                     else:
                         users[email][key] = value
                         update_row[self._LOCAL_TO_SUPABASE_FIELD.get(key, key)] = value
@@ -834,12 +846,59 @@ class UserManager:
     def toggle_2fa(self, email: str) -> bool:
         """Toggle 2FA for a user. Delegates to update_user so both
         backends stay in sync through one code path, instead of
-        duplicating the write logic here."""
+        duplicating the write logic here.
+
+        Superseded for turning 2FA ON by start_2fa_setup/confirm_2fa_setup
+        below -- kept only for the "turn off" path, since that never
+        needs a real secret."""
         users = self.get_users()
         if email not in users:
             return False
         current = users[email].get('2fa_enabled', False)
         return self.update_user(email, **{'2fa_enabled': not current})
+
+    def start_2fa_setup(self, email: str) -> Optional[Dict]:
+        """Generate a real TOTP secret + backup codes and persist them
+        immediately to app_users.twofa_secret / twofa_backup_codes --
+        NOT to st.session_state, which was the actual root cause of "2FA
+        demands a code no one could generate": the old flow stored the
+        secret in a session-scoped slot that was never saved anywhere,
+        so no login attempt from any session could ever match it.
+
+        2fa_enabled stays False until confirm_2fa_setup verifies a real
+        code, so a half-finished setup can never lock the account out."""
+        two_factor = TwoFactorAuth()
+        secret = two_factor.generate_secret()
+        backup_codes = two_factor.generate_backup_codes()
+        success = self.update_user(email, **{
+            '2fa_secret': secret,
+            '2fa_backup_codes': backup_codes,
+        })
+        if not success:
+            return None
+        qr_code = two_factor.generate_qr_code(secret, email)
+        return {'secret': secret, 'qr_code': qr_code, 'backup_codes': backup_codes}
+
+    def confirm_2fa_setup(self, email: str, otp: str) -> bool:
+        """Verify the first real code from the user's authenticator app
+        against the secret start_2fa_setup saved, then flip 2fa_enabled
+        on. This confirmation step was entirely missing before -- nothing
+        in the app ever verified a real code before enabling 2FA."""
+        users = self.get_users()
+        user = users.get(email)
+        if not user or not user.get('2fa_secret'):
+            return False
+        two_factor = TwoFactorAuth()
+        if not two_factor.verify_otp(user['2fa_secret'], otp):
+            return False
+        return self.update_user(email, **{'2fa_enabled': True})
+
+    def cancel_2fa_setup(self, email: str) -> bool:
+        """Clear a half-finished setup (secret generated but never
+        confirmed)."""
+        return self.update_user(email, **{
+            '2fa_secret': None, '2fa_backup_codes': [], '2fa_enabled': False,
+        })
     
     def render_user_management(self):
         """
@@ -930,29 +989,36 @@ class UserManager:
         
         if selected_user and selected_user != "No users":
             col1, col2, col3 = st.columns(3)
-            
+
             with col1:
-                # Real 2FA setup (QR code / authenticator app) isn't built
-                # yet -- render_2fa_setup exists but nothing calls it. Toggling
-                # this "on" from here put an account into a state where login
-                # demands a code no one could generate. Only "off" is safe
-                # until real setup exists.
-                selected_user_2fa = users.get(selected_user, {}).get('2fa_enabled', False)
+                selected_user_data = users.get(selected_user, {})
+                selected_user_2fa = selected_user_data.get('2fa_enabled', False)
+                has_pending_secret = bool(selected_user_data.get('2fa_secret')) and not selected_user_2fa
+
                 if selected_user_2fa:
                     if st.button("🔓 Turn Off 2FA", use_container_width=True):
-                        success = self.toggle_2fa(selected_user)
+                        success = self.update_user(selected_user, **{
+                            '2fa_enabled': False, '2fa_secret': None, '2fa_backup_codes': [],
+                        })
                         if success:
                             st.success(f"✅ 2FA turned off for {selected_user}")
                             st.rerun()
                         else:
                             st.error("❌ Failed to turn off 2FA")
+                elif has_pending_secret:
+                    if st.button("🔐 Resume 2FA Setup", use_container_width=True):
+                        st.session_state['_2fa_setup_target'] = selected_user
+                        st.rerun()
                 else:
-                    st.button(
-                        "🔐 Toggle 2FA", use_container_width=True, disabled=True,
-                        help="2FA setup isn't available yet — turning this on "
-                             "would lock the account out at next login.",
-                    )
-            
+                    if st.button("🔐 Set Up 2FA", use_container_width=True):
+                        setup_data = self.start_2fa_setup(selected_user)
+                        if setup_data:
+                            st.session_state['_2fa_setup_target'] = selected_user
+                            st.session_state['_2fa_setup_data'] = setup_data
+                            st.rerun()
+                        else:
+                            st.error("❌ Could not start 2FA setup")
+
             with col2:
                 if st.button("👤 Reset Password", use_container_width=True):
                     st.session_state._reset_password_for = selected_user
@@ -970,6 +1036,46 @@ class UserManager:
                                 st.error("❌ Failed to delete user")
                     else:
                         st.warning("⚠️ Cannot delete your own account")
+
+        # 2FA setup flow — below the button row so the QR code / backup
+        # codes have room to render properly, not squeezed into a column.
+        setup_target = st.session_state.get('_2fa_setup_target')
+        if setup_target:
+            st.markdown("---")
+            st.markdown(f"#### 🔐 2FA Setup — {setup_target}")
+
+            setup_data = st.session_state.get('_2fa_setup_data')
+            if not setup_data:
+                st.caption("A 2FA secret is already saved for this account. "
+                           "Enter the current code from their authenticator app to finish enabling it.")
+            else:
+                if setup_data.get('qr_code'):
+                    st.image(setup_data['qr_code'], width=200)
+                st.caption(f"Secret key (manual entry): `{setup_data['secret']}`")
+                st.caption("Scan with Google Authenticator or a similar app.")
+                with st.expander("📋 Backup Codes (save these now — shown only once)"):
+                    st.warning("⚠️ Each code works once, as a fallback if the authenticator app is unavailable.")
+                    for code in setup_data['backup_codes']:
+                        st.code(code)
+
+            confirm_otp = st.text_input("6-digit code from the authenticator app",
+                                         key=f"2fa_confirm_{setup_target}")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Confirm & Enable", type="primary", key=f"2fa_confirm_btn_{setup_target}"):
+                    if self.confirm_2fa_setup(setup_target, confirm_otp.strip()):
+                        st.success(f"✅ 2FA enabled for {setup_target}")
+                        st.session_state['_2fa_setup_target'] = None
+                        st.session_state['_2fa_setup_data'] = None
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid code — try again.")
+            with c2:
+                if st.button("❌ Cancel Setup", key=f"2fa_cancel_btn_{setup_target}"):
+                    self.cancel_2fa_setup(setup_target)
+                    st.session_state['_2fa_setup_target'] = None
+                    st.session_state['_2fa_setup_data'] = None
+                    st.rerun()
 
 
 # ============================================================
