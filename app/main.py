@@ -244,7 +244,7 @@ def render_password_reset_form():
             st.session_state.show_password_reset = False
             st.rerun()
     
-    st.sidebar.info("💡 For demo purposes, any valid email will receive a reset link")
+    st.sidebar.info(" If an account exists for that email, a reset link has been sent.")
 
 
 def create_enhanced_charts(df, analyzer, kpis, forecast_data, safety_stock):
@@ -674,7 +674,7 @@ def main():
             # Check authentication
             if not gsheet.authenticate():
                 logger.warning("Google Sheets authentication failed. Using sample data.")
-                st.info("📊 Could not connect to Google Sheets. Using sample data for demonstration.")
+                st.info("📊 Could not connect to the inventory data source right now. Showing sample data for now.")
                 return get_sample_inventory_data(), None
             
             logger.info("Google Sheets authentication successful. Fetching data...")
@@ -696,13 +696,13 @@ def main():
                 logger.info(f"💾 Memory: {original_memory:.1f}MB → {compressed_memory:.1f}MB (↓{reduction:.0f}%)")
             else:
                 logger.warning("Google Sheets returned empty data. Using sample data.")
-                st.info("📊 No data found in Google Sheets. Using sample data for demonstration.")
+                st.info("📊 No inventory data found yet. Showing sample data for now.")
                 return get_sample_inventory_data(), None
             
             # Check if data is empty
             if stock_df.empty:
                 logger.warning("Google Sheets returned empty data. Using sample data.")
-                st.info("📊 No data found in Google Sheets. Using sample data for demonstration.")
+                st.info("📊 No inventory data found yet. Showing sample data for now.")
                 return get_sample_inventory_data(), None
             
             logger.info(f"Retrieved {len(stock_df)} rows from Google Sheets")
@@ -800,7 +800,7 @@ def main():
             # Check if we have any valid items
             if not inventory_items:
                 logger.warning("No valid inventory items found after processing. Using sample data.")
-                st.warning("⚠️ No valid inventory items found in Google Sheets. Using sample data.")
+                st.warning("⚠️ No valid inventory items found. Showing sample data for now.")
                 return get_sample_inventory_data(), None
             
             logger.info(f"Successfully loaded {len(inventory_items)} inventory items")
@@ -820,8 +820,8 @@ def main():
             
         except Exception as e:
             logger.error(f"Unexpected error loading inventory: {e}", exc_info=True)
-            st.warning("⚠️ Could not load from Google Sheets. Using sample data.")
-            st.info("💡 Please check your Google Sheets configuration and try again.")
+            st.warning("⚠️ Could not load inventory data right now. Showing sample data.")
+            st.info("💡 If this continues, contact support.")
             return get_sample_inventory_data(), None
 
     
@@ -1728,7 +1728,7 @@ def main():
                 min_value=0.0,
                 value=float(st.session_state.get('all_items_implementation_cost', constants.ALL_ITEMS_IMPLEMENTATION_COST)),
                 step=1000.0,
-                help="Baseline physical count + Google Sheets data cleanup + staff training + first-cycle supervision + contingency",
+                help="Baseline physical count + data cleanup + staff training + first-cycle supervision + contingency",
                 key="all_items_implementation_cost_input"
             )
             st.session_state.all_items_implementation_cost = all_items_implementation_cost_input
