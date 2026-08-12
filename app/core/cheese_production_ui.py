@@ -138,7 +138,7 @@ def render_cheese_production_mode(supabase_client=None,
 # TAB 1: RECIPES
 # ============================================================
 def _render_recipes_tab(book: RecipeBook, supabase_client) -> None:
-    st.markdown("### 🧀 Cheese Recipes (BOM / Master Data)")
+    st.markdown("### 🧀 Cheese Recipes")
 
     if book.list_names():
         rows = []
