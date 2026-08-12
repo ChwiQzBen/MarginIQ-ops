@@ -426,7 +426,7 @@ def main():
             auth = st.session_state.get('_auth')
             if auth is None:
                 if SECURITY_AVAILABLE:
-                    auth = AuthManager()
+                    auth = AuthManager(supabase_client=init_supabase())
                     st.session_state._auth = auth
                 else:
                     class DummyAuth:
@@ -1841,7 +1841,7 @@ def main():
     # 🔐 SECURITY DASHBOARD
     if st.session_state.get('show_security_dashboard', False):
         from core.security import render_security_dashboard
-        render_security_dashboard()
+        render_security_dashboard(supabase_client=init_supabase())
         st.stop()
 
     # ============================================================
