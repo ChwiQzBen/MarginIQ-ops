@@ -64,8 +64,17 @@ class AuthManager:
         }
     }
     
-    def __init__(self):
-        """Initialize authentication manager."""
+    def __init__(self, supabase_client: Optional[Any] = None):
+        """Initialize authentication manager.
+
+        supabase_client threads through to UserManager so login() reads
+        users from Supabase instead of the ephemeral local users.json --
+        see UserManager's docstring (core/advanced_security.py) for why
+        that gap was the actual cause of "create a user, works, then next
+        login says invalid": login() was building UserManager() with no
+        client at all, so it never saw Supabase even after that class
+        gained Supabase support."""
+        self.supabase_client = supabase_client
         self._init_session_state()
         self._is_rate_limited = False
         self._rate_limit_remaining = None
@@ -118,7 +127,7 @@ class AuthManager:
         """
         try:
             # UserManager and PasswordManager are already imported at the top
-            user_manager = UserManager()
+            user_manager = UserManager(supabase_client=self.supabase_client)
             users = user_manager.get_users()
             
             # Check if user exists
@@ -868,13 +877,17 @@ class ApiKeyManager:
 # SECURITY DASHBOARD UI
 # ============================================================
 
-def render_security_dashboard():
+def render_security_dashboard(supabase_client=None):
     """
     Render enhanced security dashboard for admin users with User Management.
+
+    supabase_client threads to every UserManager() built here -- without
+    it, User Management (create/delete/toggle 2FA) would write to the
+    same ephemeral users.json login() used to read from.
     """
     st.markdown("### 🔐 Security Dashboard")
     
-    auth = AuthManager()
+    auth = AuthManager(supabase_client=supabase_client)
     
     # Only show to admin
     if not auth.is_authenticated or auth.current_role != 'admin':
@@ -909,7 +922,7 @@ def render_security_dashboard():
         
         with col1:
             # UserManager is already imported at the top
-            user_manager = UserManager()
+            user_manager = UserManager(supabase_client=supabase_client)
             users = user_manager.get_users()
             st.metric("👤 Total Users", len(users))
         
@@ -943,7 +956,7 @@ def render_security_dashboard():
     
     with security_tab2:
         # User Management (UserManager is already imported at the top)
-        user_manager = UserManager()
+        user_manager = UserManager(supabase_client=supabase_client)
         user_manager.render_user_management()
     
     with security_tab3:
