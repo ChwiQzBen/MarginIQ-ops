@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 CHEESE_SQLITE_FILE = "cheese_production.db"
 DEFAULT_AGING_ROOM_CAPACITY_KG = 500.0
+DEFAULT_SHELF_LIFE_GATE_FRACTION = 0.33  # retailers commonly reject stock below ~1/3 shelf life remaining
 
 
 # ============================================================
@@ -90,6 +91,9 @@ def init_cheese_storage(supabase_client=None) -> None:
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS aging_room_config (
         room_name TEXT PRIMARY KEY, max_capacity_kg REAL, notes TEXT
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS shelf_life_gate_config (
+        config_name TEXT PRIMARY KEY, min_shelf_life_fraction REAL, notes TEXT
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS lpo_lines (
         id INTEGER PRIMARY KEY AUTOINCREMENT, lpo_number TEXT, customer_name TEXT,
@@ -145,6 +149,9 @@ def init_cheese_storage(supabase_client=None) -> None:
     c.execute("""INSERT OR IGNORE INTO aging_room_config (room_name, max_capacity_kg, notes)
                  VALUES ('default', ?, 'Set this to your real aging room capacity in kg')""",
               (DEFAULT_AGING_ROOM_CAPACITY_KG,))
+    c.execute("""INSERT OR IGNORE INTO shelf_life_gate_config (config_name, min_shelf_life_fraction, notes)
+                 VALUES ('default', ?, 'Minimum fraction of shelf life that must remain at dispatch')""",
+              (DEFAULT_SHELF_LIFE_GATE_FRACTION,))
     conn.commit()
     conn.close()
 
@@ -796,6 +803,45 @@ def check_aging_room_capacity(tracker: BatchTracker, additional_kg: float,
     remaining = capacity - used
     ok = additional_kg <= remaining
     return ok, used, capacity, remaining
+
+
+# ============================================================
+# SHELF-LIFE DISPATCH GATE  (prevents a return before it happens, rather
+# than only measuring it afterward -- see sales_service.py's
+# check_shelf_life_before_dispatch for the actual FEFO preview logic
+# this config feeds into)
+# ============================================================
+def get_shelf_life_gate_fraction(config_name: str = "default", supabase_client=None) -> float:
+    if supabase_client:
+        try:
+            result = supabase_client.table("shelf_life_gate_config").select("*") \
+                .eq("config_name", config_name).execute()
+            if result.data:
+                return float(result.data[0]["min_shelf_life_fraction"])
+        except Exception:
+            pass
+    conn = _sqlite()
+    row = conn.execute("SELECT min_shelf_life_fraction FROM shelf_life_gate_config WHERE config_name = ?",
+                        (config_name,)).fetchone()
+    conn.close()
+    return float(row[0]) if row else DEFAULT_SHELF_LIFE_GATE_FRACTION
+
+
+def set_shelf_life_gate_fraction(fraction: float, config_name: str = "default",
+                                   notes: str = "", supabase_client=None) -> None:
+    row = {"config_name": config_name, "min_shelf_life_fraction": fraction, "notes": notes}
+    if supabase_client:
+        try:
+            supabase_client.table("shelf_life_gate_config").upsert(row).execute()
+            return
+        except Exception:
+            pass
+    conn = _sqlite()
+    conn.execute("INSERT OR REPLACE INTO shelf_life_gate_config (config_name, min_shelf_life_fraction, notes) "
+                 "VALUES (?, ?, ?)", (config_name, fraction, notes))
+    conn.commit()
+    conn.close()
+
 
 @st.cache_data(ttl=60)
 def get_weighted_milk_cost_for_date(target_date: date) -> float:

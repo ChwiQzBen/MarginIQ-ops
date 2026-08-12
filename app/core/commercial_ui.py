@@ -8,12 +8,15 @@ import streamlit as st
 import pandas as pd
 import gspread
 from app.core.sales_sheet_sync import sync_new_sales_from_sheet, clear_sales_sheet_caches, DAILY_SALES_TAB
-from app.core.sales_service import dispatch_and_record_sale, available_stock_kg
+from app.core.sales_service import (
+    dispatch_and_record_sale, available_stock_kg, check_shelf_life_before_dispatch,
+)
 from app.core.cheese_shared_state import ensure_cheese_state
 from app.core.cheese_data_access import (
     get_lpo_lines, record_lpo_delivery, cancel_lpo_line,
     get_sales_history, save_customer, get_customers, delete_customer,
     reconcile_customers_from_history, find_or_create_customer_id, get_returns,
+    get_shelf_life_gate_fraction, set_shelf_life_gate_fraction,
 )
 from app.core.lpo_sheet_sync import (
     sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id, LPO_REGISTER_TAB,
@@ -115,6 +118,42 @@ def _resolve_customer_id(customer_id, customer_name, supabase_client):
     return None
 
 
+def _execute_lpo_delivery(line: dict, deliver_now_kg: float, delivery_price_per_kg: float,
+                           already_delivered_kg: float, tracker, supabase_client) -> None:
+    """The actual dispatch + persistence, factored out so both the normal
+    path and the shelf-life override path below call the exact same
+    logic instead of two copies drifting apart."""
+    try:
+        resolved_customer_id = find_or_create_customer_id(
+            line["customer_name"], supabase_client=supabase_client
+        )
+        sale_result = dispatch_and_record_sale(
+            tracker, line["cheese_name"], deliver_now_kg,
+            delivery_price_per_kg, date.today(), line["customer_name"],
+            f"LPO delivery — {line['lpo_number']}", supabase_client,
+            customer_id=resolved_customer_id,
+        )
+        cumulative_delivered = already_delivered_kg + sale_result.allocated_kg
+        record_lpo_delivery(line["id"], cumulative_delivered, supabase_client)
+
+        if sale_result.shortfall_kg > 0:
+            st.warning(
+                f"⚠️ Only {sale_result.allocated_kg:.1f}kg of the "
+                f"{deliver_now_kg:.1f}kg requested was in stock. Recorded "
+                f"as delivered for {sale_result.allocated_kg:.1f}kg — "
+                f"{sale_result.shortfall_kg:.1f}kg stays outstanding on "
+                f"this LPO until more stock is released."
+            )
+        st.success(
+            f"Recorded delivery for {line['lpo_number']} — "
+            f"{sale_result.allocated_kg:.1f}kg dispatched, "
+            f"KSh {sale_result.revenue:,.0f} booked."
+        )
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Could not record delivery: {e}")
+
+
 # ============================================================
 # TAB: LPO REGISTER
 # ============================================================
@@ -171,6 +210,22 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
                     )
                 except Exception as e:
                     st.error(f"❌ Could not sync from the Sheet: {e}")
+
+    with st.expander("⚙️ Shelf-Life Dispatch Gate", expanded=False):
+        st.caption(
+            "Before a delivery is recorded, BCPOS checks whether the stock it would "
+            "dispatch has enough shelf life left for the retailer. Below this threshold, "
+            "you'll see a warning and need to confirm before it ships."
+        )
+        current_fraction = get_shelf_life_gate_fraction(supabase_client=supabase_client)
+        new_fraction_pct = st.slider(
+            "Minimum shelf life remaining at dispatch (%)",
+            min_value=0, max_value=90, value=int(round(current_fraction * 100)), step=1,
+        )
+        if st.button("Save Threshold", key="save_shelf_life_gate"):
+            set_shelf_life_gate_fraction(new_fraction_pct / 100, supabase_client=supabase_client)
+            st.success(f"✅ Shelf-life gate set to {new_fraction_pct}% of each cheese's total shelf life.")
+            st.rerun()
 
     st.markdown("---")
     st.markdown("#### Pending LPOs")
@@ -231,43 +286,57 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
                         elif delivery_price_per_kg <= 0:
                             st.error("Enter a price per kg to book this delivery.")
                         else:
-                            try:
-                                resolved_customer_id = find_or_create_customer_id(
-                                    line["customer_name"], supabase_client=supabase_client
-                                )
-                                sale_result = dispatch_and_record_sale(
-                                    tracker, line["cheese_name"], deliver_now_kg,
-                                    delivery_price_per_kg, date.today(), line["customer_name"],
-                                    f"LPO delivery — {line['lpo_number']}", supabase_client,
-                                    customer_id=resolved_customer_id,
-                                )
-                                # Record delivered kg as what was ACTUALLY dispatched, not what
-                                # was requested — keeps the LPO's remaining balance honest if
-                                # stock runs short mid-delivery.
-                                cumulative_delivered = already_delivered_kg + sale_result.allocated_kg
-                                record_lpo_delivery(line["id"], cumulative_delivered, supabase_client)
-
-                                if sale_result.shortfall_kg > 0:
-                                    st.warning(
-                                        f"⚠️ Only {sale_result.allocated_kg:.1f}kg of the "
-                                        f"{deliver_now_kg:.1f}kg requested was in stock. Recorded "
-                                        f"as delivered for {sale_result.allocated_kg:.1f}kg — "
-                                        f"{sale_result.shortfall_kg:.1f}kg stays outstanding on "
-                                        f"this LPO until more stock is released."
-                                    )
-                                st.success(
-                                    f"Recorded delivery for {line['lpo_number']} — "
-                                    f"{sale_result.allocated_kg:.1f}kg dispatched, "
-                                    f"KSh {sale_result.revenue:,.0f} booked."
+                            recipe = book.get(line["cheese_name"]) if line["cheese_name"] in book else None
+                            shelf_life_days = recipe.shelf_life_days if recipe else 30
+                            gate_fraction = get_shelf_life_gate_fraction(supabase_client=supabase_client)
+                            check = check_shelf_life_before_dispatch(
+                                tracker, line["cheese_name"], deliver_now_kg, date.today(),
+                                shelf_life_days, gate_fraction,
+                            )
+                            if check.all_pass:
+                                _execute_lpo_delivery(line, deliver_now_kg, delivery_price_per_kg,
+                                                       already_delivered_kg, tracker, supabase_client)
+                            else:
+                                # Stored in session_state (not just shown inline) so the
+                                # warning survives the rerun that follows this click,
+                                # instead of vanishing the way the existing "confirm large
+                                # receipt" checkbox pattern elsewhere in the app does.
+                                st.session_state[f"shelf_life_pending_{line['id']}"] = (
+                                    deliver_now_kg, delivery_price_per_kg, check,
                                 )
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Could not record delivery: {e}")
                 with c4:
                     if st.button("🚫 Cancel", key=f"cancel_{line['id']}"):
                         cancel_lpo_line(line["id"], supabase_client)
                         st.warning(f"Cancelled {line['lpo_number']}.")
                         st.rerun()
+
+                pending_key = f"shelf_life_pending_{line['id']}"
+                if pending_key in st.session_state:
+                    pend_kg, pend_price, check = st.session_state[pending_key]
+                    st.warning(
+                        f"⚠️ Short shelf life: dispatching {pend_kg:.1f}kg of {line['cheese_name']} "
+                        f"today would draw on stock with as little as {check.worst_days_remaining}d "
+                        f"left before expiry — below the {check.min_required_days}d minimum this "
+                        f"business ships with. The retailer may reject or return stock like this."
+                    )
+                    with st.expander("View affected batches"):
+                        for l in check.lines:
+                            flag = "🟢" if l.passes else "🔴"
+                            st.caption(f"{flag} Batch {l.batch_id}: {l.quantity_kg:.1f}kg, "
+                                       f"expires {l.expiry_date} — {l.days_remaining}d remaining "
+                                       f"(needs {l.min_required_days}d)")
+                    oc1, oc2 = st.columns(2)
+                    with oc1:
+                        if st.button("⚠️ Dispatch Anyway", key=f"override_deliver_{line['id']}"):
+                            del st.session_state[pending_key]
+                            _execute_lpo_delivery(line, pend_kg, pend_price, already_delivered_kg,
+                                                   tracker, supabase_client)
+                    with oc2:
+                        if st.button("Cancel Delivery", key=f"cancel_override_{line['id']}"):
+                            del st.session_state[pending_key]
+                            st.rerun()
+
                 st.markdown("---")
 
     with st.expander("📜 LPO History (delivered / cancelled)", expanded=False):

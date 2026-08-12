@@ -31,6 +31,73 @@ class SaleResult:
     sale_id: Optional[int]
 
 
+@dataclass
+class ShelfLifeLineCheck:
+    batch_id: str
+    quantity_kg: float
+    expiry_date: date
+    days_remaining: int
+    min_required_days: int
+    passes: bool
+
+
+@dataclass
+class ShelfLifeCheckResult:
+    cheese_name: str
+    requested_kg: float
+    allocated_kg: float
+    shortfall_kg: float
+    min_required_days: int
+    lines: List[ShelfLifeLineCheck]
+    all_pass: bool
+    worst_days_remaining: Optional[int]
+
+
+def check_shelf_life_before_dispatch(tracker: BatchTracker,
+                                      cheese_name: str,
+                                      quantity_kg: float,
+                                      dispatch_date: date,
+                                      shelf_life_days: int,
+                                      min_shelf_life_fraction: float) -> ShelfLifeCheckResult:
+    """Previews (does NOT commit) which FEFO batches a dispatch of this size
+    would actually draw on, and checks each one's remaining shelf life
+    against min_shelf_life_fraction of the cheese's total shelf life.
+
+    This is the piece that PREVENTS a return rather than just measuring
+    one after the fact: call this before dispatch_and_record_sale, and if
+    all_pass is False, surface the warning and require explicit
+    confirmation before calling dispatch_and_record_sale for real.
+
+    Uses the same FEFOInventory.allocate(commit=False) preview mechanism
+    the Manufacturing FEFO Inventory tab's "Simulate an Order" already
+    uses -- no new allocation logic, just a shelf-life read on top of the
+    existing preview.
+    """
+    fefo = FEFOInventory(tracker)
+    preview = fefo.allocate(cheese_name, quantity_kg, commit=False)
+    min_required_days = max(1, round(shelf_life_days * min_shelf_life_fraction))
+
+    lines = []
+    for l in preview.lines:
+        expiry = l.expiry_date.date() if hasattr(l.expiry_date, "date") else l.expiry_date
+        days_remaining = (expiry - dispatch_date).days
+        lines.append(ShelfLifeLineCheck(
+            batch_id=l.batch_id, quantity_kg=l.quantity_kg, expiry_date=expiry,
+            days_remaining=days_remaining, min_required_days=min_required_days,
+            passes=days_remaining >= min_required_days,
+        ))
+
+    all_pass = all(line.passes for line in lines) if lines else True
+    worst = min((line.days_remaining for line in lines), default=None)
+
+    return ShelfLifeCheckResult(
+        cheese_name=cheese_name, requested_kg=quantity_kg,
+        allocated_kg=preview.allocated_kg, shortfall_kg=preview.shortfall_kg,
+        min_required_days=min_required_days, lines=lines, all_pass=all_pass,
+        worst_days_remaining=worst,
+    )
+
+
 def dispatch_and_record_sale(tracker: BatchTracker,
                               cheese_name: str,
                               quantity_kg: float,
