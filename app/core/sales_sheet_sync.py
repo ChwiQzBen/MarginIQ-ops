@@ -109,12 +109,13 @@ def sync_new_sales_from_sheet(sheet_id: str, tracker, valid_cheese_names: List[s
     cheese_sales_history directly.
 
     Returns {"created": int, "skipped_existing": int, "skipped_invalid": int,
-             "shortfalls": [str, ...], "errors": [str, ...]}
+             "shortfalls": [str, ...], "errors": [str, ...], "duplicate_warnings": [str, ...]}
     """
     sheet_rows = get_daily_sales_sheet_rows(sheet_id)
     item_master_map = get_item_master_map(sheet_id)
     existing_sales = get_sales_history(supabase_client=supabase_client)
     customer_cache = build_customer_name_cache(supabase_client)
+    duplicate_warnings: List[str] = []
 
     existing_keys = {
         (
@@ -176,7 +177,10 @@ def sync_new_sales_from_sheet(sheet_id: str, tracker, valid_cheese_names: List[s
             continue
 
         try:
-            customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
+            customer_id = find_or_create_customer_id(
+                row["customer_name"], customer_cache, supabase_client,
+                duplicate_warnings=duplicate_warnings,
+            )
             result = dispatch_and_record_sale(
                 tracker, recipe, quantity_kg, price_per_kg, row["sale_date"],
                 row["customer_name"], row["notes"] or f"Synced from Daily Sales sheet ({row['item_name']})",
@@ -194,4 +198,5 @@ def sync_new_sales_from_sheet(sheet_id: str, tracker, valid_cheese_names: List[s
             errors.append(f"{row['sale_date']} — {row['customer_name']} / {row['item_name']}: {e}")
 
     return {"created": created, "skipped_existing": skipped_existing,
-             "skipped_invalid": skipped_invalid, "shortfalls": shortfalls, "errors": errors}
+             "skipped_invalid": skipped_invalid, "shortfalls": shortfalls, "errors": errors,
+             "duplicate_warnings": duplicate_warnings}

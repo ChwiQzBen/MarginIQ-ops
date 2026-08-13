@@ -391,6 +391,7 @@ def _render_returns_tab(book, supabase_client) -> None:
                     result = sync_new_returns_from_sheet(
                         sheet_id, valid_cheese_names=book.list_names(), supabase_client=supabase_client,
                     )
+
                     if result["created"]:
                         st.success(f"✅ Synced {result['created']} new return(s) from the Sheet.")
                     else:
@@ -400,14 +401,11 @@ def _render_returns_tab(book, supabase_client) -> None:
                                           expanded=True):
                             for err in result["errors"]:
                                 st.caption(f"- {err}")
-                    # Only rerun when rows actually landed -- that's the only
-                    # case where the table below needs fresh data. st.rerun()
-                    # tears down this run immediately, so calling it
-                    # unconditionally wiped the success/info message AND the
-                    # "row(s) need a fix" expander off the screen before the
-                    # browser could render them. This was the real cause of
-                    # the message "flashing and disappearing" with no visible
-                    # expander -- not a rendering glitch.
+                    if result.get("duplicate_warnings"):
+                        with st.expander(f"🔀 {len(result['duplicate_warnings'])} possible duplicate "
+                                          f"customer(s) — review in 👥 Customers", expanded=True):
+                            for warning in result["duplicate_warnings"]:
+                                st.caption(f"- {warning}")
                     if result["created"]:
                         st.rerun()
                 except gspread.exceptions.WorksheetNotFound:
@@ -481,14 +479,26 @@ def _render_sales_tab(book, tracker, supabase_client) -> None:
                     else:
                         st.info("No new sales to sync — everything in the Sheet is already recorded.")
                     if result["shortfalls"]:
-                        with st.expander(f"⚠️ {len(result['shortfalls'])} sale(s) short on stock"):
+                        with st.expander(f"⚠️ {len(result['shortfalls'])} sale(s) short on stock",
+                                          expanded=True):
                             for msg in result["shortfalls"]:
                                 st.caption(f"- {msg}")
                     if result["skipped_invalid"]:
-                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet",
+                                          expanded=True):
                             for err in result["errors"]:
                                 st.caption(f"- {err}")
-                    st.rerun()
+                    if result.get("duplicate_warnings"):
+                        with st.expander(f"🔀 {len(result['duplicate_warnings'])} possible duplicate "
+                                          f"customer(s) — review in 👥 Customers", expanded=True):
+                            for warning in result["duplicate_warnings"]:
+                                st.caption(f"- {warning}")
+                    # Same unconditional-rerun bug as Returns/LPO: this
+                    # block always called st.rerun(), which tore the page
+                    # down before any of the expanders above could ever
+                    # actually be seen. Only rerun when rows landed.
+                    if result["created"]:
+                        st.rerun()
                 except gspread.exceptions.WorksheetNotFound:
                     st.error(
                         f"❌ No tab named '{DAILY_SALES_TAB}' found in that spreadsheet. "

@@ -208,7 +208,7 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
     it ever collides, add a row-UUID column to the Sheet.
 
     Returns {"created": int, "skipped_existing": int, "skipped_invalid": int,
-             "errors": [str, ...]}
+             "errors": [str, ...], "duplicate_warnings": [str, ...]}
     """
     sheet_rows = get_returns_sheet_rows(sheet_id)
     dropped_rows = get_returns_sheet_diagnostics(sheet_id)
@@ -219,6 +219,7 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
         for r in existing_returns
     }
     customer_cache = build_customer_name_cache(supabase_client)
+    duplicate_warnings: List[str] = []
 
     created = 0
     skipped_existing = 0
@@ -257,7 +258,10 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
             continue
 
         try:
-            customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
+            customer_id = find_or_create_customer_id(
+                row["customer_name"], customer_cache, supabase_client,
+                duplicate_warnings=duplicate_warnings,
+            )
             quantity_kg = row["quantity_units"] * pack_size_kg
             # price_per_unit=0.0 means "left blank on the Sheet" -- keep it
             # as None rather than 0.0 so save_return/compute_return_metrics
@@ -280,4 +284,5 @@ def sync_new_returns_from_sheet(sheet_id: str, valid_cheese_names: List[str],
             errors.append(f"Return ({row['customer_name']}, {row['item_name']}): {e}")
 
     return {"created": created, "skipped_existing": skipped_existing,
-             "skipped_invalid": skipped_invalid, "errors": errors}
+             "skipped_invalid": skipped_invalid, "errors": errors,
+             "duplicate_warnings": duplicate_warnings}
