@@ -252,6 +252,7 @@ def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
     existing_lines = get_lpo_lines(supabase_client=supabase_client)
     existing_keys = {(l["lpo_number"], l.get("sku_description")) for l in existing_lines}
     customer_cache = build_customer_name_cache(supabase_client)
+    duplicate_warnings: List[str] = []
 
     created = 0
     skipped_existing = 0
@@ -291,7 +292,10 @@ def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
             continue
 
         try:
-            customer_id = find_or_create_customer_id(row["customer_name"], customer_cache, supabase_client)
+            customer_id = find_or_create_customer_id(
+                row["customer_name"], customer_cache, supabase_client,
+                duplicate_warnings=duplicate_warnings,
+            )
             quantity_kg = row["quantity_units"] * pack_size_kg
             price_per_kg = (row["price_per_unit"] / pack_size_kg) if row["price_per_unit"] else 0.0
             save_lpo_line(
@@ -309,4 +313,5 @@ def sync_new_lpo_lines_from_sheet(sheet_id: str, valid_cheese_names: List[str],
             errors.append(f"LPO {row['lpo_number']}: {e}")
 
     return {"created": created, "skipped_existing": skipped_existing,
-             "skipped_invalid": skipped_invalid, "errors": errors}
+             "skipped_invalid": skipped_invalid, "errors": errors,
+             "duplicate_warnings": duplicate_warnings}
