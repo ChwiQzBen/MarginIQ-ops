@@ -31,6 +31,8 @@ from dataclasses import asdict
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 import json
+import re
+import difflib
 import sqlite3
 import streamlit as st
 
@@ -1072,8 +1074,53 @@ def build_customer_name_cache(supabase_client=None) -> Dict[str, int]:
     return {c["name"].strip().lower(): c["id"] for c in get_customers(supabase_client)}
 
 
+_CUSTOMER_NAME_SUFFIXES = (
+    "ltd", "limited", "supermarket", "supermarkets", "stores", "store",
+    "co", "company", "kenya", "ke", "inc", "plc",
+)
+
+
+def _normalize_customer_name(name: str) -> str:
+    """Strips punctuation and common corporate suffixes so "Naivas" and
+    "Naivas Supermarket Ltd" reduce to the same normalized form. Used only
+    for the possible-duplicate WARNING below -- never for the actual
+    lookup key, which stays exact-match (build_customer_name_cache) so
+    genuinely different customers never silently collapse into one."""
+    text = re.sub(r"[^a-z0-9\s]", " ", name.strip().lower())
+    tokens = [t for t in text.split() if t not in _CUSTOMER_NAME_SUFFIXES]
+    return " ".join(tokens) if tokens else text.strip()
+
+
+def find_possible_duplicate_customers(name: str, cache: Dict[str, int], threshold: float = 0.72) -> List[str]:
+    """Returns existing customer names that look like they MIGHT be the
+    same business as `name` but don't match exactly -- e.g. "Naivas" vs
+    "Naivas Supermarket Ltd", or "Chandarana" vs "Chandarana Foodplus".
+
+    Deliberately a WARNING, never an auto-merge: a normalized-name
+    heuristic can false-positive on two genuinely different businesses
+    that happen to share a generic word (e.g. "City Bakery" vs "City
+    Supermarket"). A human confirms via merge_customers() below; this
+    function only surfaces the possibility."""
+    normalized_new = _normalize_customer_name(name)
+    if not normalized_new:
+        return []
+    matches = []
+    for existing_key in cache.keys():
+        if existing_key == name.strip().lower():
+            continue  # exact match -- not a "possible duplicate", handled elsewhere
+        normalized_existing = _normalize_customer_name(existing_key)
+        if not normalized_existing:
+            continue
+        is_substring = normalized_new in normalized_existing or normalized_existing in normalized_new
+        ratio = difflib.SequenceMatcher(None, normalized_new, normalized_existing).ratio()
+        if is_substring or ratio >= threshold:
+            matches.append(existing_key)
+    return matches
+
+
 def find_or_create_customer_id(name: str, cache: Optional[Dict[str, int]] = None,
-                                 supabase_client=None) -> Optional[int]:
+                                 supabase_client=None,
+                                 duplicate_warnings: Optional[List[str]] = None) -> Optional[int]:
     """Case-insensitive, trimmed match against `cache` — creates a new
     customer record on miss and writes the new id back into `cache`
     immediately, so a second row naming the same brand-new customer within
@@ -1089,7 +1136,14 @@ def find_or_create_customer_id(name: str, cache: Optional[Dict[str, int]] = None
     closure. The sheet-sync versions had a real bug — a snapshot customer
     list that never updated mid-loop could create two customer records for
     one new name appearing on two rows of a single sync batch. This fixes
-    that by mutating `cache` on every create, not just reading it."""
+    that by mutating `cache` on every create, not just reading it.
+
+    duplicate_warnings: optional list to append a human-readable note to
+    when a NEW customer is created and its name looks similar to an
+    existing one -- never blocks or auto-merges the creation, just flags
+    it for review via merge_customers(). Pass a list from a sync loop to
+    collect these across a whole batch; omit for one-off call sites (e.g.
+    a UI form submit) where this check isn't worth the extra lookups."""
     name = (name or "").strip()
     if not name:
         return None
@@ -1098,6 +1152,16 @@ def find_or_create_customer_id(name: str, cache: Optional[Dict[str, int]] = None
         cache = build_customer_name_cache(supabase_client)
     if key in cache:
         return cache[key]
+
+    if duplicate_warnings is not None:
+        possible_dupes = find_possible_duplicate_customers(name, cache)
+        if possible_dupes:
+            duplicate_warnings.append(
+                f"Created new customer '{name}' — similar existing name(s): "
+                f"{', '.join(possible_dupes)}. If this is the same business, "
+                f"merge them in 👥 Customers."
+            )
+
     new_id = save_customer(name=name, supabase_client=supabase_client)
     cache[key] = new_id
     return new_id
@@ -1114,7 +1178,45 @@ def delete_customer(customer_id: int, supabase_client=None) -> None:
     conn.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
     conn.commit()
     conn.close()
-    
+
+
+def merge_customers(keep_id: int, merge_id: int, supabase_client=None) -> Dict[str, int]:
+    """Reassigns every cheese_sales/lpo_lines/cheese_returns row pointing
+    at merge_id over to keep_id, then deletes the merge_id customer
+    record. This is the human-confirmed action that resolves what
+    find_possible_duplicate_customers only ever flags -- never called
+    automatically, since two names LOOKING similar is not proof they're
+    the same business.
+
+    Returns {'sales_updated': N, 'lpo_updated': N, 'returns_updated': N}."""
+    if keep_id == merge_id:
+        raise ValueError("keep_id and merge_id must be different customers")
+
+    counts = {"sales_updated": 0, "lpo_updated": 0, "returns_updated": 0}
+    for table, count_key in (
+        ("cheese_sales", "sales_updated"),
+        ("lpo_lines", "lpo_updated"),
+        ("cheese_returns", "returns_updated"),
+    ):
+        if supabase_client:
+            try:
+                result = supabase_client.table(table).update({"customer_id": keep_id}) \
+                    .eq("customer_id", merge_id).execute()
+                counts[count_key] = len(result.data) if result.data else 0
+                continue
+            except Exception as e:
+                logger.error(f"Supabase merge_customers failed updating {table}: {e}")
+        conn = _sqlite()
+        cur = conn.execute(f"UPDATE {table} SET customer_id = ? WHERE customer_id = ?",
+                            (keep_id, merge_id))
+        counts[count_key] = cur.rowcount
+        conn.commit()
+        conn.close()
+
+    delete_customer(merge_id, supabase_client)
+    return counts
+
+
 def reconcile_customers_from_history(supabase_client=None) -> Dict[str, int]:
     """One-time (safe to re-run) backfill: matches freetext customer names in
     cheese_sales.customer and lpo_lines.customer_name to a customers row —
