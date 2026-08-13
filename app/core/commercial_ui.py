@@ -17,6 +17,7 @@ from app.core.cheese_data_access import (
     get_sales_history, save_customer, get_customers, delete_customer,
     reconcile_customers_from_history, find_or_create_customer_id, get_returns,
     get_shelf_life_gate_fraction, set_shelf_life_gate_fraction,
+    find_possible_duplicate_customers, merge_customers,
 )
 from app.core.lpo_sheet_sync import (
     sync_new_lpo_lines_from_sheet, clear_lpo_sheet_caches, extract_sheet_id, LPO_REGISTER_TAB,
@@ -199,10 +200,21 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
                     else:
                         st.info("No new LPO lines to sync — everything in the Sheet is already recorded.")
                     if result["skipped_invalid"]:
-                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet"):
+                        with st.expander(f"⚠️ {result['skipped_invalid']} row(s) need a fix in the Sheet",
+                                          expanded=True):
                             for err in result["errors"]:
                                 st.caption(f"- {err}")
-                    st.rerun()
+                    if result.get("duplicate_warnings"):
+                        with st.expander(f"🔀 {len(result['duplicate_warnings'])} possible duplicate "
+                                          f"customer(s) — review in 👥 Customers", expanded=True):
+                            for warning in result["duplicate_warnings"]:
+                                st.caption(f"- {warning}")
+                    # Only rerun when rows actually landed -- same fix as
+                    # the Returns tab's sync, applied here now that this
+                    # block also needs its expanders visible before the
+                    # page tears down and rebuilds.
+                    if result["created"]:
+                        st.rerun()
                 except gspread.exceptions.WorksheetNotFound:
                     st.error(
                         f"❌ No tab named '{LPO_REGISTER_TAB}' found in that spreadsheet. "
@@ -618,6 +630,37 @@ def _render_customers_tab(supabase_client) -> None:
                 f"LPO(s); created {result['customers_created']} new customer record(s)."
             )
             st.rerun()
+
+    with st.expander("🔀 Merge Duplicate Customers", expanded=False):
+        st.caption(
+            "Combines two customer records into one — every past sale, LPO, and return "
+            "under the record being merged away moves to the record you keep. Use this "
+            "when a sync warning flags two names as possibly the same business "
+            "(e.g. \"Naivas\" vs \"Naivas Supermarket Ltd\")."
+        )
+        if len(customers) < 2:
+            st.caption("Need at least two customers to merge.")
+        else:
+            customer_names = [c["name"] for c in customers]
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                keep_name = st.selectbox("Keep this record", customer_names, key="merge_keep")
+            with mc2:
+                merge_options = [n for n in customer_names if n != keep_name]
+                merge_name = st.selectbox("Merge this one into it", merge_options, key="merge_away")
+            if st.button("🔀 Merge", key="confirm_merge_customers"):
+                keep_id = next(c["id"] for c in customers if c["name"] == keep_name)
+                merge_id = next(c["id"] for c in customers if c["name"] == merge_name)
+                try:
+                    counts = merge_customers(keep_id, merge_id, supabase_client=supabase_client)
+                    st.success(
+                        f"✅ Merged '{merge_name}' into '{keep_name}' — moved "
+                        f"{counts['sales_updated']} sale(s), {counts['lpo_updated']} LPO line(s), "
+                        f"{counts['returns_updated']} return(s)."
+                    )
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Could not merge: {e}")
 
 
 # ============================================================
