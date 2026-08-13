@@ -60,7 +60,7 @@ from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS
 from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
 )
-
+from app.core.inventory_cache import save_snapshot, load_snapshot
 
 def _style_cells(df: pd.DataFrame, style_fn, subset):
     """Pandas 3.0 compatibility shim: Styler.applymap was removed in
@@ -94,6 +94,7 @@ class AllItemsContext:
     constants: Any = None
     kpis: Any = None
     inventory_tracker: Any = None
+    supabase_client: Any = None
 
 
 def render_all_items_mode(ctx: AllItemsContext,
@@ -117,7 +118,7 @@ def render_all_items_mode(ctx: AllItemsContext,
     st.markdown("---")
 
     if active_tab == "📦 Inventory":
-        _render_inventory_tab()
+        _render_inventory_tab(ctx)
     elif active_tab == "📊 Stock Movements":
         _render_stock_movements_tab(ctx)
     elif active_tab == "📈 All Items Analytics":
@@ -135,8 +136,8 @@ def render_all_items_mode(ctx: AllItemsContext,
 # ============================================================
 # FULLY PORTED — 📦 Inventory
 # ============================================================
-def _render_inventory_tab() -> None:
-    st.markdown("## 📦 Company Inventory (Google Sheets)")
+def _render_inventory_tab(ctx: AllItemsContext) -> None:
+    st.markdown("## 📦 Company Inventory")
 
     # --- HIDE SEARCH ONLY IN THIS TAB ---
     st.markdown("""
@@ -170,13 +171,12 @@ def _render_inventory_tab() -> None:
         mattered when this tab lived inline in main.py — kept the rename
         here anyway for continuity with the original diff history.
 
-        Falls back to the last successfully loaded snapshot (stored in
-        session_state, not cache_data's own cache) if a fresh Google
-        Sheets call fails or comes back empty — previously any hiccup
-        reaching Google Sheets showed every user an empty tab with zero
-        fallback anywhere. The session_state write only runs when this
-        function body actually executes (a cache miss), which is exactly
-        when we want to refresh "last known good.\""""
+        Three-layer fallback if the live data source can't be reached:
+        1. st.session_state — covers a hiccup within this running session.
+        2. inventory_cache (Supabase) — covers a cold start after a
+           container restart/redeploy, when session_state is empty too.
+        Only if BOTH are empty (truly first-ever run with no source
+        available) does this show the hard error below."""
         try:
             gsheet = GoogleSheetReader()
 
@@ -195,6 +195,12 @@ def _render_inventory_tab() -> None:
                     st.session_state['_ai_inventory_cache'] = (
                         stock, current, low, category_count, datetime.now()
                     )
+                    save_snapshot(
+                        "full_inventory",
+                        {"stock": stock, "current": current, "low": low},
+                        scalars={"category_count": category_count},
+                        supabase_client=ctx.supabase_client,
+                    )
 
                 return stock, current, low, category_count
 
@@ -207,6 +213,14 @@ def _render_inventory_tab() -> None:
             st.warning(f"⚠️ Could not refresh inventory data just now — showing the last "
                        f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
             return stock, current, low, category_count
+
+        snapshot = load_snapshot("full_inventory", supabase_client=ctx.supabase_client)
+        if snapshot:
+            frames, scalars, cached_at = snapshot
+            st.warning(f"⚠️ Could not reach the inventory data source — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')} "
+                       f"(from before the app last restarted).")
+            return frames["stock"], frames["current"], frames["low"], scalars.get("category_count", 0)
 
         st.error("Could not load inventory data, and no previous data is available to fall back on.")
         return (
@@ -790,10 +804,7 @@ def _render_inventory_tab() -> None:
                 )
 
     else:
-        st.info(
-            "📊 No inventory data found. "
-            "Please check your Google Sheets connection."
-        )
+        st.info("📊 No inventory data found yet.")
 
 
 # ============================================================
@@ -807,15 +818,14 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
         if st.button("🔄 Refresh Movements", use_container_width=True):
             st.cache_data.clear()
     with col2:
-        st.caption(f"Data source: Google Sheets | Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     st.divider()
 
     @st.cache_data(ttl=300, show_spinner=False)
     def load_movement_data():
-        """Same last-known-good fallback as load_full_inventory_details
-        above — a failed/empty Google Sheets call no longer wipes out
-        every movement figure on screen."""
+        """Same three-layer fallback (session_state, then Supabase
+        snapshot via inventory_cache) as load_full_inventory_details."""
         try:
             gsheet = GoogleSheetReader()
             if gsheet.authenticate():
@@ -825,6 +835,11 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
                 if not (check_in.empty and check_out.empty and current_stock.empty):
                     st.session_state['_ai_movement_cache'] = (
                         check_in, check_out, current_stock, datetime.now()
+                    )
+                    save_snapshot(
+                        "movement_data",
+                        {"check_in": check_in, "check_out": check_out, "current_stock": current_stock},
+                        supabase_client=ctx.supabase_client,
                     )
                 return check_in, check_out, current_stock
         except Exception as e:
@@ -836,6 +851,14 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             st.warning(f"⚠️ Could not refresh movement data just now — showing the last "
                        f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
             return check_in, check_out, current_stock
+
+        snapshot = load_snapshot("movement_data", supabase_client=ctx.supabase_client)
+        if snapshot:
+            frames, _, cached_at = snapshot
+            st.warning(f"⚠️ Could not reach the movement data source — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')} "
+                       f"(from before the app last restarted).")
+            return frames["check_in"], frames["check_out"], frames["current_stock"]
 
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
@@ -929,7 +952,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
         if ctx.inventory_items:
             stock_take_interface(ctx.inventory_items)
         else:
-            st.warning("⚠️ No inventory data available. Please load inventory from Google Sheets first.")
+            st.warning("⚠️ No inventory data available yet.")
             st.info("Go to the 📦 Inventory tab and refresh to load data.")
 
             if st.button("📥 Load Sample Inventory Data", key="stock_take_load_sample"):
@@ -965,17 +988,18 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
     constants = ctx.constants
 
     st.markdown("## 📈 All Items Analytics")
-    st.markdown("Comprehensive analysis for all inventory items using Google Sheets data")
+    st.markdown("Comprehensive analysis across all inventory items")
 
     # ============================================================
     # 🎯 LAZY LOADING FOR HEAVY ANALYTICS DATA
     # ============================================================
 
     def load_heavy_analytics_data():
-        """Load heavy analytics data only when needed. Same last-known-good
-        fallback as the Inventory/Stock Movements loaders — LazyLoader's
-        own cache_ttl=600 only helps within its window; this covers the
-        underlying Google Sheets call itself failing after that expires."""
+        """Load heavy analytics data only when needed. Same three-layer
+        fallback (session_state, then Supabase snapshot) as the other two
+        loaders -- LazyLoader's own cache_ttl=600 only covers its own
+        window; this covers the underlying data source failing after
+        that expires, or a cold start after a restart."""
         try:
             logger.info("Loading heavy analytics data...")
             gsheet = GoogleSheetReader()
@@ -1005,6 +1029,12 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                     st.session_state['_ai_analytics_cache'] = (
                         stock, check_in, check_out, current_stock, datetime.now()
                     )
+                    save_snapshot(
+                        "analytics_data",
+                        {"stock": stock, "check_in": check_in, "check_out": check_out,
+                         "current_stock": current_stock},
+                        supabase_client=ctx.supabase_client,
+                    )
                 return stock, check_in, check_out, current_stock
             else:
                 logger.warning("Google Sheets authentication failed for analytics")
@@ -1017,6 +1047,14 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
             st.warning(f"⚠️ Could not refresh analytics data just now — showing the last "
                        f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
             return stock, check_in, check_out, current_stock
+
+        snapshot = load_snapshot("analytics_data", supabase_client=ctx.supabase_client)
+        if snapshot:
+            frames, _, cached_at = snapshot
+            st.warning(f"⚠️ Could not reach the analytics data source — showing the last "
+                       f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')} "
+                       f"(from before the app last restarted).")
+            return frames["stock"], frames["check_in"], frames["check_out"], frames["current_stock"]
 
         st.error("❌ Could not load analytics data, and no previous data is available to fall back on.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -1043,7 +1081,7 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
 
         # Verify data was loaded successfully
         if analytics_stock_df is None or analytics_stock_df.empty:
-            st.warning("⚠️ No analytics data available. Please check your Google Sheets connection.")
+            st.warning("⚠️ No analytics data available right now.")
         else:
             # ============================================================
             # 🎯 SECTION 1: ORDER ANALYSIS FOR ALL ITEMS

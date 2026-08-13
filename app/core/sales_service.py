@@ -135,3 +135,54 @@ def available_stock_kg(tracker: BatchTracker, cheese_name: str) -> float:
     """Read-only stock check — used by the Sales form to show available
     stock without duplicating FEFOInventory construction in UI code."""
     return FEFOInventory(tracker).total_available_kg(cheese_name)
+
+
+# ============================================================
+# SELF-TEST
+# ============================================================
+if __name__ == "__main__":
+    from datetime import datetime, timedelta
+    from production_tracking import BatchTracker, DEFAULT_PRODUCTION_CHECKPOINTS
+
+    print("=" * 60)
+    print("Shelf-life gate: passes when plenty of shelf life remains")
+    print("=" * 60)
+    tracker = BatchTracker()
+    pb = tracker.start_production("Mozzarella", "v1.0", 20.0, ["MILK-TEST"], "Test Operator")
+    for stage in DEFAULT_PRODUCTION_CHECKPOINTS:
+        tracker.record_production_checkpoint(pb.batch_id, stage, passed=True)
+    tracker.release_fresh_to_finished(pb.batch_id, shelf_life_days=30)
+
+    result = check_shelf_life_before_dispatch(
+        tracker, "Mozzarella", 10.0, date.today(), shelf_life_days=30,
+        min_shelf_life_fraction=0.33,
+    )
+    print(f"all_pass={result.all_pass}, worst_days_remaining={result.worst_days_remaining}, "
+          f"min_required_days={result.min_required_days}")
+    assert result.all_pass is True, "fresh batch with full shelf life should pass"
+    assert result.min_required_days == round(30 * 0.33)
+
+    print("\n" + "=" * 60)
+    print("Shelf-life gate: fails when a batch is close to expiry")
+    print("=" * 60)
+    # release_fresh_to_finished always sets expiry = today + shelf_life_days,
+    # so a genuinely short-dated batch is simulated here by editing the
+    # FinishedGoodBatch's expiry_date directly after release.
+    short_pb = tracker.start_production("Mozzarella", "v1.0", 5.0, ["MILK-TEST-2"], "Test Operator")
+    for stage in DEFAULT_PRODUCTION_CHECKPOINTS:
+        tracker.record_production_checkpoint(short_pb.batch_id, stage, passed=True)
+    short_fg = tracker.release_fresh_to_finished(short_pb.batch_id, shelf_life_days=30)
+    short_fg.expiry_date = datetime.combine(date.today() + timedelta(days=3), datetime.min.time())
+
+    # FEFO dispatches the soonest-expiring batch first, so requesting a
+    # quantity the short-dated batch alone can cover should draw on IT,
+    # not the 20kg batch with a full 30 days remaining.
+    result2 = check_shelf_life_before_dispatch(
+        tracker, "Mozzarella", 5.0, date.today(), shelf_life_days=30,
+        min_shelf_life_fraction=0.33,
+    )
+    print(f"all_pass={result2.all_pass}, worst_days_remaining={result2.worst_days_remaining}, "
+          f"min_required_days={result2.min_required_days}")
+    assert result2.all_pass is False, "batch expiring in 3 days should fail a 33%-of-30-days gate (~10 days needed)"
+
+    print("\nAll sales_service checks passed.")

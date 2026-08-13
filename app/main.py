@@ -1938,6 +1938,7 @@ def main():
             constants=constants,
             kpis=kpis,
             inventory_tracker=inventory_tracker,
+            supabase_client=init_supabase(),
         )
         render_all_items_mode(all_items_ctx, has_permission=has_permission)
 

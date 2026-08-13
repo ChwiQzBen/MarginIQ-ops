@@ -47,14 +47,15 @@ from app.core.cheese_data_access import (
     get_confirmed_demand_for_date,
 )
 
+
 CHEESE_TAB_NAMES = [
     "🧀 Recipes",
     "🥛 Milk Receipts",
-    " Production Planning",
+    "📋 Production Planning",
     "🏭 Batch Tracking & QC",
     "🧊 Aging Room",
     "📦 FEFO Inventory",
-    "📄 Reports",
+    "📄 Production Reports",
 ]
 
 
