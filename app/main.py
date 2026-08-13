@@ -244,7 +244,7 @@ def render_password_reset_form():
             st.session_state.show_password_reset = False
             st.rerun()
     
-    st.sidebar.info(" If an account exists for that email, a reset link has been sent.")
+    st.sidebar.info("💡 If an account exists for that email, a reset link has been sent.")
 
 
 def create_enhanced_charts(df, analyzer, kpis, forecast_data, safety_stock):
@@ -1551,7 +1551,7 @@ def main():
                             kpis=kpis
                         )
                     else:
-                        st.sidebar.error("No inventory data available. Please load from Google Sheets.")
+                        st.sidebar.error("No inventory data available yet.")
                 
                 elif report_type == "📋 Low Stock Report":
                     if inventory_items:

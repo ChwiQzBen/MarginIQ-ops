@@ -156,10 +156,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
             st.cache_data.clear()
 
     with col2:
-        st.caption(
-            f"Data source: Google Sheets | Updated: "
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        )
+        st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     st.divider()
 
