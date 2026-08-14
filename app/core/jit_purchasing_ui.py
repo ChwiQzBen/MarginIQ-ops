@@ -188,8 +188,11 @@ def _pick_supplier(item_suppliers: pd.DataFrame, name_col: str, lead_time_col: O
     )
 
 
-def render_jit_purchasing_tab(constants=None) -> None:
+def render_jit_purchasing_tab(constants=None, has_permission=None) -> None:
     st.markdown("## 🔄 JIT Purchasing")
+
+    def _allowed(permission: str) -> bool:
+        return has_permission(permission) if has_permission else True
 
     col1, col2 = st.columns([1, 4])
     with col1:
@@ -233,18 +236,28 @@ def render_jit_purchasing_tab(constants=None) -> None:
             "⚠️ No supplier data found yet. Add supplier information (lead time, "
             "minimum order quantity, cost) to get full ordering recommendations."
         )
-        with st.expander("Why is this empty?", expanded=True):
-            d = supplier_diagnostics
-            st.markdown(f"**Local file** — expected at `{d['csv_path']}`")
-            st.caption(f"File exists at that location: {'✅ yes' if d['csv_path_exists'] else '❌ no'}")
-            if d['csv_path_exists']:
-                st.caption(f"Rows loaded: {d['csv_raw_rows']} · Columns: {d['csv_raw_columns']}")
-            else:
-                st.caption("This is the most common cause — the file exists somewhere in the project, just not at this exact location.")
-            st.markdown("**Shared spreadsheet**")
-            st.caption(f"Connected: {'✅ yes' if d['gsheet_authenticated'] else '❌ no'} · Rows loaded: {d['gsheet_raw_rows']}")
-            if d['gsheet_raw_rows'] > 0:
-                st.caption(f"Columns: {d['gsheet_raw_columns']}")
+        # Admin-only: file paths and raw column names are a setup/debugging
+        # aid for whoever maintains supplier data, not something a warehouse
+        # user needs -- especially auto-expanded on a tab most staff will
+        # land on before any supplier data exists yet. Reuses
+        # edit_system_params, the same permission already gating the
+        # analogous "Inventory Parameters" config expander in main.py's
+        # sidebar -- both are admin-only setup/config surfaces.
+        if _allowed('edit_system_params'):
+            with st.expander("Why is this empty?", expanded=True):
+                d = supplier_diagnostics
+                st.markdown(f"**Local file** — expected at `{d['csv_path']}`")
+                st.caption(f"File exists at that location: {'✅ yes' if d['csv_path_exists'] else '❌ no'}")
+                if d['csv_path_exists']:
+                    st.caption(f"Rows loaded: {d['csv_raw_rows']} · Columns: {d['csv_raw_columns']}")
+                else:
+                    st.caption("This is the most common cause — the file exists somewhere in the project, just not at this exact location.")
+                st.markdown("**Shared spreadsheet**")
+                st.caption(f"Connected: {'✅ yes' if d['gsheet_authenticated'] else '❌ no'} · Rows loaded: {d['gsheet_raw_rows']}")
+                if d['gsheet_raw_rows'] > 0:
+                    st.caption(f"Columns: {d['gsheet_raw_columns']}")
+        else:
+            st.caption("An administrator can help set this up.")
 
     item_code_col = detect_column(stock_df, ITEM_NAME_KEYWORDS)
     item_label_col = 'ITEM_NAME' if 'ITEM_NAME' in stock_df.columns else None

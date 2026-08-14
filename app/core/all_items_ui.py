@@ -128,7 +128,7 @@ def render_all_items_mode(ctx: AllItemsContext,
     elif active_tab == "🤖 Advanced Analytics":
         _render_advanced_analytics_tab(ctx)
     elif active_tab == "🔄 JIT Purchasing":
-        render_jit_purchasing_tab(ctx.constants)
+        render_jit_purchasing_tab(ctx.constants, has_permission=has_permission)
     elif active_tab == "🔒 Checkout Reconciliation":
         _render_checkout_reconciliation_tab(ctx)
 
