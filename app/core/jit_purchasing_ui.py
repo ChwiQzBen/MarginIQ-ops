@@ -203,7 +203,7 @@ def render_jit_purchasing_tab(constants=None) -> None:
     suppliers_df, supplier_diagnostics = _load_suppliers()
 
     if stock_df.empty:
-        st.info("No stock data available. Check your Google Sheets connection.")
+        st.info("No stock data available yet.")
         return
 
     with st.expander("⚙️ JIT Settings", expanded=False):
@@ -212,6 +212,8 @@ def render_jit_purchasing_tab(constants=None) -> None:
             service_level = st.select_slider(
                 "Target Service Level", options=[0.80, 0.85, 0.90, 0.95, 0.975, 0.98, 0.99],
                 value=0.95, format_func=lambda x: f"{x * 100:.1f}%", key="jit_service_level",
+                help="How often you want to avoid running out before the next delivery "
+                     "arrives — 95% means stocking out is expected about 1 order cycle in 20.",
             )
         with c2:
             order_cost = st.number_input(
@@ -229,18 +231,18 @@ def render_jit_purchasing_tab(constants=None) -> None:
     if suppliers_df.empty:
         st.warning(
             "⚠️ No supplier data found yet. Add supplier information (lead time, "
-            "MOQ, cost) to get full ordering recommendations."
+            "minimum order quantity, cost) to get full ordering recommendations."
         )
-        with st.expander("🔍 Why is this empty?", expanded=True):
+        with st.expander("Why is this empty?", expanded=True):
             d = supplier_diagnostics
-            st.markdown(f"**CSV** — expected at `{d['csv_path']}`")
-            st.caption(f"File exists at that path: {'✅ yes' if d['csv_path_exists'] else '❌ no'}")
+            st.markdown(f"**Local file** — expected at `{d['csv_path']}`")
+            st.caption(f"File exists at that location: {'✅ yes' if d['csv_path_exists'] else '❌ no'}")
             if d['csv_path_exists']:
                 st.caption(f"Rows loaded: {d['csv_raw_rows']} · Columns: {d['csv_raw_columns']}")
             else:
-                st.caption("This is the most common cause — the CSV exists somewhere in the repo, just not at this exact path.")
-            st.markdown("**Google Sheets**")
-            st.caption(f"Authenticated: {'✅ yes' if d['gsheet_authenticated'] else '❌ no'} · Rows loaded: {d['gsheet_raw_rows']}")
+                st.caption("This is the most common cause — the file exists somewhere in the project, just not at this exact location.")
+            st.markdown("**Shared spreadsheet**")
+            st.caption(f"Connected: {'✅ yes' if d['gsheet_authenticated'] else '❌ no'} · Rows loaded: {d['gsheet_raw_rows']}")
             if d['gsheet_raw_rows'] > 0:
                 st.caption(f"Columns: {d['gsheet_raw_columns']}")
 
@@ -355,8 +357,8 @@ def render_jit_purchasing_tab(constants=None) -> None:
     with st.expander("🔗 Item/Supplier Links (Historical Deliveries)", expanded=False):
         st.caption(
             "Shows which suppliers have delivered each item historically. "
-            "Use this to identify which supplier relationships need lead time, MOQ, "
-            "cost, and reliability data added."
+            "Use this to identify which supplier relationships need lead time, minimum "
+            "order quantity, cost, and reliability data added."
         )
         links = _load_supplier_links()
         if not links.empty:
@@ -368,4 +370,4 @@ def render_jit_purchasing_tab(constants=None) -> None:
                 key="jit_links_download",
             )
         else:
-            st.caption("No item/supplier links found in CHECK_IN history.")
+            st.caption("No item/supplier links found in past receiving records.")
