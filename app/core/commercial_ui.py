@@ -178,7 +178,7 @@ def _render_lpo_register_tab(book, tracker, supabase_client) -> None:
     with st.expander("🔄 Sync from Google Sheet", expanded=not tomorrow_open):
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
-            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync LPOs.")
+            st.error("⚠️ The LPO spreadsheet isn't connected yet — ask an administrator to set it up.")
         else:
             # Sync now runs ONLY inside this button click — it previously ran
             # unconditionally on every render of this tab, and called
@@ -382,7 +382,7 @@ def _render_returns_tab(book, supabase_client) -> None:
     with st.expander("🔄 Sync from Google Sheet", expanded=not returns):
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
-            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync returns.")
+            st.error("⚠️ The returns spreadsheet isn't connected yet — ask an administrator to set it up.")
         else:
             if st.button("🔄 Refresh from Sheet", key="returns_sheet_refresh"):
                 clear_returns_sheet_caches()
@@ -464,7 +464,7 @@ def _render_sales_tab(book, tracker, supabase_client) -> None:
     with st.expander("🔄 Sync from Google Sheet", expanded=False):
         sheet_url = st.secrets.get("LPO_SHEET_URL")
         if not sheet_url:
-            st.error("No `LPO_SHEET_URL` set in Streamlit secrets — can't sync sales.")
+            st.error("⚠️ The sales spreadsheet isn't connected yet — ask an administrator to set it up.")
         else:
             if st.button("🔄 Refresh from Sheet", key="sales_sheet_refresh"):
                 clear_sales_sheet_caches()
@@ -738,7 +738,11 @@ def _render_customer_analytics_tab(supabase_client) -> None:
             st.caption("No purchase history for this customer.")
 
     st.markdown("---")
-    st.markdown("#### RFM Segments")
+    st.markdown("#### RFM Segments (Recency / Frequency / Monetary)")
+    st.caption(
+        "R, F, and M each score a customer 1 (lowest) to 5 (highest) on how recently, "
+        "how often, and how much they buy, relative to your other customers."
+    )
     rfm = compute_rfm(sales, customers)
     if rfm:
         rfm_df = pd.DataFrame([{
@@ -804,7 +808,7 @@ def _render_commercial_reports_tab(supabase_client) -> None:
 
     render_report_tab(
         title="📋 Commercial Reports",
-        caption="Freetext customer names may fragment revenue and return breakdowns alike until linked in 👥 Customers.",
+        caption="Customer names typed in manually may fragment revenue and return breakdowns until linked in 👥 Customers.",
         session_key="commercial_report",
         build_fn=_build,
         summarize_fn=summarize_commercial_report_data,
