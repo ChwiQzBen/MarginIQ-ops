@@ -1442,8 +1442,7 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                             key="cost_analysis_holding_rate"
                         ) / 100
                     st.caption(
-                        "Defaults are general-inventory assumptions, independent of the "
-                        "Dry Ice tier's transport cost / holding rate — adjust freely."
+                        "Defaults are general-inventory assumptions, - adjust freely."
                     )
 
                     if st.button("📊 Run Cost Analysis", key="run_cost_analysis"):
