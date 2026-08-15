@@ -24,6 +24,16 @@ their own args and st.session_state, so they lifted out cleanly with no
 circular-import issues — same story as the forecasting extraction
 (app/core/forecasting.py) that unblocked 📈 All Items Analytics.
 """
+import sys
+import os
+# all_items_ui.py previously had no path bootstrap, unlike commercial_ui.py
+# and cheese_production_ui.py which both insert the repo root here -- it
+# silently relied on main.py having already done this before importing
+# this module. Fine in production (main.py always runs first), but it
+# meant this module couldn't be imported standalone by anything else --
+# confirmed by AppTest failing on "No module named 'core'" when testing
+# this file directly. Matches the sibling files' existing pattern exactly.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 from datetime import datetime
