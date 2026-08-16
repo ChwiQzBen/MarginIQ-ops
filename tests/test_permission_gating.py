@@ -40,10 +40,40 @@ def has_permission(perm):
     return script
 
 
+def _run_app(script) -> "AppTest":
+    """AppTest's default timeout (3s) is tuned for a lightweight script --
+    too tight for the first import of this app's heavy dependency graph
+    (gspread, google-auth, production_tracking, newsvendor_engine, etc.)
+    in a fresh process. 30s absorbs a genuinely cold import without
+    masking an actual hang, which would still exceed 30s."""
+    at = AppTest.from_file(str(script), default_timeout=30)
+    at.run(timeout=30)
+    return at
+
+
+def _write_all_items_harness(tmp_path, allowed_permission: str | None):
+    """render_all_items_mode's signature genuinely differs from the other
+    two entry points -- it takes an AllItemsContext object as its first
+    argument, not a bare supabase_client kwarg (all_items_ui.py's tabs
+    pull their data through one context object). Every AllItemsContext
+    field defaults to None, which is fine for this test: the permission
+    check runs and returns before any field on ctx is ever touched."""
+    script = tmp_path / "harness.py"
+    script.write_text(f"""
+from app.core.all_items_ui import render_all_items_mode, AllItemsContext
+
+def has_permission(perm):
+    return perm == {allowed_permission!r}
+
+ctx = AllItemsContext()
+render_all_items_mode(ctx, has_permission=has_permission)
+""")
+    return script
+
+
 def test_commercial_mode_shows_warning_with_no_permissions(tmp_path):
     script = _write_harness(tmp_path, "app.core.commercial_ui", "render_commercial_mode", None)
-    at = AppTest.from_file(str(script))
-    at.run()
+    at = _run_app(script)
     assert not at.exception, f"render_commercial_mode raised: {at.exception}"
     assert any("isn't available for your current role" in w.value for w in at.warning)
     # No radio should render at all -- nothing to pick between
@@ -52,8 +82,7 @@ def test_commercial_mode_shows_warning_with_no_permissions(tmp_path):
 
 def test_commercial_mode_shows_only_permitted_tab(tmp_path):
     script = _write_harness(tmp_path, "app.core.commercial_ui", "render_commercial_mode", "manage_lpo")
-    at = AppTest.from_file(str(script))
-    at.run()
+    at = _run_app(script)
     assert not at.exception, f"render_commercial_mode raised: {at.exception}"
     assert len(at.radio) == 1, "exactly one tab selector should render"
     assert at.radio[0].options == ["📄 LPO Register"], (
@@ -62,16 +91,14 @@ def test_commercial_mode_shows_only_permitted_tab(tmp_path):
 
 
 def test_all_items_mode_shows_warning_with_no_permissions(tmp_path):
-    script = _write_harness(tmp_path, "app.core.all_items_ui", "render_all_items_mode", None)
-    at = AppTest.from_file(str(script))
-    at.run()
+    script = _write_all_items_harness(tmp_path, None)
+    at = _run_app(script)
     assert not at.exception, f"render_all_items_mode raised: {at.exception}"
     assert any("isn't available for your current role" in w.value for w in at.warning)
 
 
 def test_cheese_production_mode_shows_warning_with_no_permissions(tmp_path):
     script = _write_harness(tmp_path, "app.core.cheese_production_ui", "render_cheese_production_mode", None)
-    at = AppTest.from_file(str(script))
-    at.run()
+    at = _run_app(script)
     assert not at.exception, f"render_cheese_production_mode raised: {at.exception}"
     assert any("isn't available for your current role" in w.value for w in at.warning)
