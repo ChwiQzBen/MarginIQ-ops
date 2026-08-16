@@ -26,14 +26,43 @@ circular-import issues — same story as the forecasting extraction
 """
 import sys
 import os
-# all_items_ui.py previously had no path bootstrap, unlike commercial_ui.py
-# and cheese_production_ui.py which both insert the repo root here -- it
-# silently relied on main.py having already done this before importing
-# this module. Fine in production (main.py always runs first), but it
-# meant this module couldn't be imported standalone by anything else --
-# confirmed by AppTest failing on "No module named 'core'" when testing
-# this file directly. Matches the sibling files' existing pattern exactly.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def _bootstrap_repo_root_on_syspath() -> None:
+    """all_items_ui.py previously had no path bootstrap at all, unlike
+    commercial_ui.py and cheese_production_ui.py which both insert the
+    repo root here -- it silently relied on main.py having already done
+    this before importing this module. Fine in production (main.py
+    always runs first), but it meant this module couldn't be imported
+    standalone -- confirmed by AppTest failing on "No module named
+    'core'" when testing this file directly.
+
+    Walks upward from this file's location looking for the directory
+    that contains core/error_handling.py -- NOT just any folder named
+    "core", since this file's own folder (app/core/) unfortunately
+    shares that exact name with the different, top-level core/ package
+    it needs to find. An earlier version of this check matched the
+    file's own containing folder by mistake for exactly that reason;
+    checking for a specific known file inside the real target avoids
+    the collision."""
+    current = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(6):  # generous bound, just avoids an infinite loop on a bad layout
+        if os.path.isfile(os.path.join(current, "core", "error_handling.py")):
+            if current not in sys.path:
+                sys.path.insert(0, current)
+            return
+        parent = os.path.dirname(current)
+        if parent == current:  # reached filesystem root without finding it
+            break
+        current = parent
+    raise RuntimeError(
+        "Could not locate a 'core/error_handling.py' above app/core/all_items_ui.py -- "
+        "check that the repo layout matches what this bootstrap expects."
+    )
+
+
+_bootstrap_repo_root_on_syspath()
+
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 from datetime import datetime
