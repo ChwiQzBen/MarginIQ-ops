@@ -71,6 +71,9 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from app.core.transfer_reconciliation import (
+    init_transfer_storage, record_transfer, get_transfers, receive_transfer_blind,
+)
 from app.core.performance import LazyLoader, compress_dataframe
 from core.error_handling import logger
 from app.core.google_sheet_reader import GoogleSheetReader
@@ -98,6 +101,9 @@ from app.core.jit_purchasing_ui import render_jit_purchasing_tab
 from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS
 from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
+)
+from app.core.transfer_reconciliation import (
+    init_transfer_storage, record_transfer, get_transfers, receive_transfer_blind,
 )
 from app.core.inventory_cache import save_snapshot, load_snapshot
 
@@ -170,6 +176,8 @@ def render_all_items_mode(ctx: AllItemsContext,
         render_jit_purchasing_tab(ctx.constants, has_permission=has_permission)
     elif active_tab == "🔒 Checkout Reconciliation":
         _render_checkout_reconciliation_tab(ctx)
+    elif active_tab == "🔁 Transfer Reconciliation":
+        _render_transfer_reconciliation_tab(ctx)
 
 
 # ============================================================
@@ -1963,6 +1971,174 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext) -> None:
             csv = df.to_csv(index=False).encode("utf-8")
             st.download_button("📥 Download Reconciled CSV", csv,
                                 file_name=f"reconciled_checkouts_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv")
+        else:
+            st.caption("None yet.")
+
+
+# ============================================================
+# 🔁 TRANSFER RECONCILIATION (blind check, issuing -> receiving)
+# ============================================================
+_TRANSFER_LOCATIONS = [
+    "Manufacturing", "Cold Store", "Commercial / Sales Floor",
+    "Dry Ice Storage", "Warehouse", "Other (type below)",
+]
+
+
+def _location_picker(label: str, key: str) -> str:
+    choice = st.selectbox(label, _TRANSFER_LOCATIONS, key=f"{key}_select")
+    if choice == "Other (type below)":
+        return st.text_input(f"{label} — specify", key=f"{key}_custom").strip()
+    return choice
+
+
+def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
+    st.markdown("### 🔁 Transfer Reconciliation")
+    st.caption(
+        "Blind check for internal transfers between locations/departments. "
+        "The issuing location records what was sent. The receiving department "
+        "then enters what they physically counted and the reference number on "
+        "the transfer note — **without seeing the issued quantity or reference "
+        "first.** The system compares both independently and flags any mismatch."
+    )
+
+    supabase_client = None
+    try:
+        from app.core.supabase_client import init_supabase
+        supabase_client = init_supabase()
+    except Exception:
+        pass
+    init_transfer_storage(supabase_client)
+
+    all_transfers = get_transfers(supabase_client=supabase_client)
+    pending = [t for t in all_transfers if t["status"] == "Pending"]
+    matched = [t for t in all_transfers if t["status"] == "Received-Matched"]
+    mismatched = [t for t in all_transfers if t["status"] == "Received-Mismatch"]
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("⏳ Pending Receipt", len(pending))
+    m2.metric("✅ Matched", len(matched))
+    m3.metric("🚫 Mismatched", len(mismatched))
+
+    if mismatched:
+        st.error(f"⚠️ {len(mismatched)} transfer(s) failed the blind check and need investigation — see below.")
+
+    st.markdown("---")
+    st.markdown("#### 📤 Issue a Transfer (issuing location)")
+    item_options = sorted((ctx.inventory_items or {}).keys())
+    with st.form("record_transfer_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            transfer_date = st.date_input("Transfer Date", value=datetime.now().date())
+            item_name = st.selectbox("Item", item_options) if item_options else st.text_input("Item")
+            quantity_issued = st.number_input("Quantity Issued", min_value=0.0, value=1.0, step=1.0)
+            unit = st.text_input("Unit", value="kg")
+        with col2:
+            from_location = _location_picker("From (issuing location)", "from_loc")
+            to_location = _location_picker("To (receiving department)", "to_loc")
+            transfer_ref_number = st.text_input(
+                "Transfer Reference / Waybill #",
+                help="Written on the physical transfer note. The receiver will be asked to read this back blind.",
+            )
+            issued_by = st.text_input("Issued By")
+        issue_notes = st.text_input("Notes (optional)")
+
+        if st.form_submit_button("📤 Record Transfer", type="primary"):
+            if not item_name:
+                st.error("Select or enter an item.")
+            elif quantity_issued <= 0:
+                st.error("Enter a quantity greater than 0.")
+            elif not from_location or not to_location:
+                st.error("Both From and To locations are required.")
+            elif not transfer_ref_number.strip():
+                st.error("Transfer reference / waybill number is required for the blind check.")
+            else:
+                new_id = record_transfer(
+                    transfer_date=transfer_date, item_name=item_name, quantity_issued=quantity_issued,
+                    from_location=from_location, to_location=to_location,
+                    transfer_ref_number=transfer_ref_number.strip(), issued_by=issued_by,
+                    unit=unit, issue_notes=issue_notes, supabase_client=supabase_client,
+                )
+                st.success(f"✅ Transfer #{new_id} recorded as **Pending**. "
+                           f"The receiving department will blind-check it on arrival.")
+                st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 📥 Receive a Transfer — Blind Check")
+    if not pending:
+        st.info("Nothing pending — every transfer has been received and checked.")
+    else:
+        for t in pending:
+            with st.container():
+                # BLIND: quantity_issued and transfer_ref_number are
+                # deliberately NOT displayed here.
+                st.markdown(
+                    f"**#{t['id']}** — {t['item_name']} — {t['from_location']} → {t['to_location']} "
+                    f"— {t['transfer_date']} — issued by {t.get('issued_by') or '—'}"
+                )
+                if t.get("issue_notes"):
+                    st.caption(f"Issuing notes: {t['issue_notes']}")
+
+                with st.form(f"blind_receive_form_{t['id']}"):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        received_by = st.text_input("Your name", key=f"recv_by_{t['id']}")
+                    with c2:
+                        blind_qty = st.number_input(
+                            "Quantity you counted", min_value=0.0, step=1.0, key=f"recv_qty_{t['id']}",
+                        )
+                    with c3:
+                        blind_ref = st.text_input(
+                            "Ref # you see on the note", key=f"recv_ref_{t['id']}",
+                        )
+                    condition_notes = st.text_input(
+                        "Condition notes (optional — e.g. damaged packaging)",
+                        key=f"recv_notes_{t['id']}",
+                    )
+                    submitted = st.form_submit_button("🔍 Submit Blind Check")
+
+                if submitted:
+                    if not received_by.strip():
+                        st.error("Enter your name before submitting.")
+                    elif not blind_ref.strip():
+                        st.error("Enter the reference number on the physical transfer note.")
+                    else:
+                        result = receive_transfer_blind(
+                            transfer_id=t["id"], received_by=received_by.strip(),
+                            quantity_received=blind_qty, received_ref_number=blind_ref.strip(),
+                            condition_notes=condition_notes, supabase_client=supabase_client,
+                        )
+                        if result["matched"]:
+                            st.success(f"✅ #{t['id']} matched — {result['notes']}")
+                        else:
+                            st.warning(f"🚫 #{t['id']} mismatched — flagged for investigation.")
+                        st.rerun()
+
+                st.markdown("---")
+
+    with st.expander(f"🚫 Mismatched ({len(mismatched)}) — needs investigation", expanded=bool(mismatched)):
+        if mismatched:
+            for t in mismatched:
+                st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
+                st.caption(
+                    f"Issued: {t['quantity_issued']} {t['unit']} / ref '{t['transfer_ref_number']}'  \n"
+                    f"Received: {t['quantity_received']} {t['unit']} / ref '{t['received_ref_number']}'  \n"
+                    f"{t['reconciliation_notes']}"
+                )
+                st.markdown("---")
+        else:
+            st.caption("None.")
+
+    with st.expander(f"✅ Matched history ({len(matched)})"):
+        if matched:
+            df = pd.DataFrame(matched)[
+                ["id", "transfer_date", "item_name", "from_location", "to_location",
+                 "quantity_issued", "received_by", "received_at"]
+            ]
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Download Matched CSV", csv,
+                                file_name=f"matched_transfers_{datetime.now().strftime('%Y%m%d')}.csv",
                                 mime="text/csv")
         else:
             st.caption("None yet.")
