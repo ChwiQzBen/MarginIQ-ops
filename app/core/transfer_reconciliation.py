@@ -67,36 +67,39 @@ def _next_fallback_id() -> int:
 
 
 def _generate_transfer_ref(supabase_client: Any = None) -> str:
-    """Auto-generates a sequential reference (TR-0001, TR-0002, ...) instead
-    of relying on manual entry -- removes typo risk from one of the two
-    fields the blind check compares. Shown back to the issuer once, right
-    after sending, so it can be written on the physical transfer note --
-    the receiver still only ever sees it via that note, never via the app,
-    so the blind check itself is unaffected."""
+    """Auto-generates a sequential reference (TR-0001, TR-0002, ...) for a
+    whole consignment -- one Send action gets one reference, regardless of
+    how many item lines are in it. Counts unique existing reference
+    numbers rather than raw rows, so a 3-item batch doesn't skip three
+    numbers ahead for the next single-item transfer."""
     existing = get_transfers(supabase_client=supabase_client)
-    return f"TR-{len(existing) + 1:04d}"
+    unique_refs = {t["transfer_ref_number"] for t in existing}
+    return f"TR-{len(unique_refs) + 1:04d}"
 
 
-def record_transfer(
+def record_transfer_batch(
     transfer_date,
-    item_name: str,
-    quantity_issued: float,
+    items: list,
     from_location: str,
     to_location: str,
     issued_by: str,
-    unit: str = "kg",
     issue_notes: str = "",
     supabase_client: Any = None,
 ):
-    """Issuing side. Records what was sent. Returns (new_id,
-    transfer_ref_number) so the caller can show the generated reference
-    back to the issuer for writing on the physical note."""
+    """Issuing side -- one or more items under a single shared reference
+    number. Covers both a single-item transfer (a batch of one) and a
+    genuine bulk consignment, e.g. one truck run carrying several
+    different items under one waybill.
+
+    items: list of dicts, each {"item_name": str, "quantity_issued": float,
+    "unit": str}. Every item in the batch shares the same auto-generated
+    transfer_ref_number.
+
+    Returns (transfer_ref_number, [new_ids]) -- one id per item line.
+    """
     transfer_ref_number = _generate_transfer_ref(supabase_client=supabase_client)
-    record = {
+    base = {
         "transfer_date": str(transfer_date),
-        "item_name": item_name,
-        "quantity_issued": float(quantity_issued),
-        "unit": unit,
         "from_location": from_location,
         "to_location": to_location,
         "transfer_ref_number": transfer_ref_number,
@@ -110,19 +113,29 @@ def record_transfer(
         "reconciliation_notes": None,
         "created_at": datetime.now().isoformat(),
     }
+    rows = []
+    for item in items:
+        row = dict(base)
+        row["item_name"] = item["item_name"]
+        row["quantity_issued"] = float(item["quantity_issued"])
+        row["unit"] = item.get("unit") or "kg"
+        rows.append(row)
 
     if supabase_client is not None:
         try:
-            result = supabase_client.table(_SUPABASE_TABLE).insert(record).execute()
-            return result.data[0]["id"], transfer_ref_number
+            result = supabase_client.table(_SUPABASE_TABLE).insert(rows).execute()
+            new_ids = [r["id"] for r in result.data]
+            return transfer_ref_number, new_ids
         except Exception as e:
-            logger.error(f"Supabase insert failed for location_transfers, falling back: {e}")
+            logger.error(f"Supabase batch insert failed for location_transfers, falling back: {e}")
 
     store = _fallback_store()
-    record["id"] = _next_fallback_id()
-    store.append(record)
-    return record["id"], transfer_ref_number
-
+    new_ids = []
+    for row in rows:
+        row["id"] = _next_fallback_id()
+        store.append(row)
+        new_ids.append(row["id"])
+    return transfer_ref_number, new_ids
 
 def get_transfers(supabase_client: Any = None) -> list:
     if supabase_client is not None:
@@ -143,56 +156,42 @@ def _get_transfer_by_id(transfer_id: int, supabase_client: Any = None) -> Option
     return None
 
 
-def receive_transfer_blind(
+def receive_transfer_item(
     transfer_id: int,
     received_by: str,
     quantity_received: float,
-    received_ref_number: str,
     condition_notes: str = "",
     quantity_tolerance: float = 0.01,
     supabase_client: Any = None,
 ) -> dict:
-    """Receiving side -- the blind entry point. Caller must NOT have shown
-    the receiver quantity_issued or transfer_ref_number before calling this;
-    those are only read here, server-side, for comparison.
-
-    Returns {"matched": bool, "notes": str} so the UI can react without
-    needing to re-derive the comparison itself.
+    """Receiving side, per item line. The reference number is no longer
+    independently entered here -- it's shown to the receiver as an
+    identifier so they know which consignment they're receiving, not
+    blind-typed for comparison. Quantity remains the one blind-compared
+    field: it's the one thing a receiver could be tempted to just confirm
+    without actually counting, so it's the one worth protecting.
     """
     original = _get_transfer_by_id(transfer_id, supabase_client=supabase_client)
     if original is None:
         return {"matched": False, "notes": "Transfer record not found."}
 
     qty_match = abs(float(quantity_received) - float(original["quantity_issued"])) <= quantity_tolerance
-    ref_match = (
-        received_ref_number.strip().lower()
-        == str(original["transfer_ref_number"]).strip().lower()
-    )
-    matched = qty_match and ref_match
 
-    if matched:
-        notes = "Blind check matched — quantity and transfer reference both correct."
+    if qty_match:
+        notes = "Quantity matched."
     else:
-        parts = []
-        if not qty_match:
-            parts.append(
-                f"quantity: issued {original['quantity_issued']} {original['unit']} "
-                f"vs received {quantity_received} {original['unit']}"
-            )
-        if not ref_match:
-            parts.append(
-                f"ref #: issued note read '{original['transfer_ref_number']}' "
-                f"vs receiver read '{received_ref_number.strip()}'"
-            )
-        notes = "Blind check MISMATCH — " + "; ".join(parts)
-        if condition_notes.strip():
-            notes += f" | Receiver notes: {condition_notes.strip()}"
+        notes = (
+            f"Quantity MISMATCH — issued {original['quantity_issued']} {original['unit']} "
+            f"vs received {quantity_received} {original['unit']}"
+        )
+    if condition_notes.strip():
+        notes += f" | Receiver notes: {condition_notes.strip()}"
 
-    status = "Received-Matched" if matched else "Received-Mismatch"
+    status = "Received-Matched" if qty_match else "Received-Mismatch"
     updates = {
         "status": status,
         "quantity_received": float(quantity_received),
-        "received_ref_number": received_ref_number.strip(),
+        "received_ref_number": original["transfer_ref_number"],
         "received_by": received_by,
         "received_at": datetime.now().isoformat(),
         "reconciliation_notes": notes,
@@ -201,7 +200,7 @@ def receive_transfer_blind(
     if supabase_client is not None:
         try:
             supabase_client.table(_SUPABASE_TABLE).update(updates).eq("id", transfer_id).execute()
-            return {"matched": matched, "notes": notes}
+            return {"matched": qty_match, "notes": notes}
         except Exception as e:
             logger.error(f"Supabase update failed for location_transfers, falling back: {e}")
 
@@ -211,4 +210,4 @@ def receive_transfer_blind(
             r.update(updates)
             break
 
-    return {"matched": matched, "notes": notes}
+    return {"matched": qty_match, "notes": notes}

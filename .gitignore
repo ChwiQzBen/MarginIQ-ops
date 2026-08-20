@@ -168,3 +168,5 @@ users.json
 users.json
 !app/data/suppliers.csv
 .streamlit/secrets.toml
+*.bak
+fix_reconciliation.sh

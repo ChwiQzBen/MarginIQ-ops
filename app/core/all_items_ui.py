@@ -71,9 +71,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from app.core.transfer_reconciliation import (
-    init_transfer_storage, record_transfer, get_transfers, receive_transfer_blind,
-)
 from app.core.performance import LazyLoader, compress_dataframe
 from core.error_handling import logger
 from app.core.google_sheet_reader import GoogleSheetReader
@@ -103,7 +100,7 @@ from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
 )
 from app.core.transfer_reconciliation import (
-    init_transfer_storage, record_transfer, get_transfers, receive_transfer_blind,
+    init_transfer_storage, record_transfer_batch, get_transfers, receive_transfer_item,
 )
 from app.core.inventory_cache import save_snapshot, load_snapshot
 
@@ -2056,6 +2053,22 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
         pass
     init_transfer_storage(supabase_client)
 
+    # Persistent confirmation banner -- survives the st.rerun() below instead
+    # of being wiped before it ever renders. st.success() called right
+    # before st.rerun() never actually reaches the screen; reading it back
+    # from session_state on the next run does, and it stays until dismissed,
+    # giving time to actually write the reference down.
+    last_sent = st.session_state.get("_last_sent_transfer")
+    if last_sent:
+        st.success(
+            f"✅ Transfer sent. Reference: **{last_sent['ref']}** "
+            f"({last_sent['count']} item{'s' if last_sent['count'] != 1 else ''}) "
+            f"— write this on the transfer note."
+        )
+        if st.button("Got it, dismiss", key="dismiss_transfer_banner"):
+            del st.session_state["_last_sent_transfer"]
+            st.rerun()
+
     all_transfers = get_transfers(supabase_client=supabase_client)
     pending = [t for t in all_transfers if t["status"] == "Pending"]
 
@@ -2063,35 +2076,57 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
 
     st.markdown("---")
     st.markdown("#### 📤 Send a Transfer")
+    st.caption("Add one row per item — everything you add here ships under one shared reference number.")
     item_options = sorted((ctx.inventory_items or {}).keys())
+
     with st.form("record_transfer_form"):
         col1, col2 = st.columns(2)
         with col1:
             transfer_date = st.date_input("Transfer Date", value=datetime.now().date())
-            item_name = st.selectbox("Item", item_options) if item_options else st.text_input("Item")
-            quantity_issued = st.number_input("Quantity", min_value=0.0, value=1.0, step=1.0)
-            unit = st.text_input("Unit", value="kg")
-        with col2:
             from_location = _location_picker("From", "from_loc")
+        with col2:
             to_location = _location_picker("To", "to_loc")
             issued_by = st.text_input("Sent By")
+
+        if item_options:
+            item_col_config = st.column_config.SelectboxColumn("Item", options=item_options, required=True)
+        else:
+            item_col_config = st.column_config.TextColumn("Item", required=True)
+
+        items_df = st.data_editor(
+            pd.DataFrame({"item_name": [None], "quantity_issued": [0.0], "unit": ["kg"]}),
+            num_rows="dynamic",
+            column_config={
+                "item_name": item_col_config,
+                "quantity_issued": st.column_config.NumberColumn("Quantity", min_value=0.0, step=1.0, required=True),
+                "unit": st.column_config.TextColumn("Unit", default="kg"),
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="transfer_items_editor",
+        )
+
         issue_notes = st.text_input("Notes (optional)")
 
         if st.form_submit_button("📤 Send", type="primary"):
-            if not item_name:
-                st.error("Select or enter an item.")
-            elif quantity_issued <= 0:
-                st.error("Enter a quantity greater than 0.")
+            valid_items = items_df[
+                items_df["item_name"].notna()
+                & (items_df["item_name"].astype(str).str.strip() != "")
+                & (items_df["quantity_issued"] > 0)
+            ]
+            if valid_items.empty:
+                st.error("Add at least one item with a quantity greater than 0.")
             elif not from_location or not to_location:
                 st.error("Both From and To locations are required.")
             else:
-                new_id, ref_number = record_transfer(
-                    transfer_date=transfer_date, item_name=item_name, quantity_issued=quantity_issued,
+                ref_number, new_ids = record_transfer_batch(
+                    transfer_date=transfer_date,
+                    items=valid_items.to_dict("records"),
                     from_location=from_location, to_location=to_location,
-                    issued_by=issued_by, unit=unit, issue_notes=issue_notes,
+                    issued_by=issued_by, issue_notes=issue_notes,
                     supabase_client=supabase_client,
                 )
-                st.success(f"✅ Transfer #{new_id} sent. Reference: **{ref_number}** — write this on the transfer note.")
+                st.session_state["_last_sent_transfer"] = {"ref": ref_number, "count": len(new_ids)}
                 st.rerun()
 
     st.markdown("---")
@@ -2099,40 +2134,42 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
     if not pending:
         st.info("Nothing pending right now.")
     else:
+        pending_by_ref = {}
         for t in pending:
+            pending_by_ref.setdefault(t["transfer_ref_number"], []).append(t)
+
+        for ref, items_in_ref in pending_by_ref.items():
+            first = items_in_ref[0]
             with st.container():
                 st.markdown(
-                    f"**#{t['id']}** — {t['item_name']} — {t['from_location']} → {t['to_location']} "
-                    f"— {t['transfer_date']} — sent by {t.get('issued_by') or '—'}"
+                    f"**{ref}** — {first['from_location']} → {first['to_location']} "
+                    f"— {first['transfer_date']} — sent by {first.get('issued_by') or '—'}"
                 )
-                if t.get("issue_notes"):
-                    st.caption(f"Notes: {t['issue_notes']}")
+                if first.get("issue_notes"):
+                    st.caption(f"Notes: {first['issue_notes']}")
 
-                with st.form(f"receive_transfer_form_{t['id']}"):
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        received_by = st.text_input("Your name", key=f"recv_by_{t['id']}")
-                    with c2:
-                        received_qty = st.number_input(
-                            "Quantity Received", min_value=0.0, step=1.0, key=f"recv_qty_{t['id']}",
+                with st.form(f"receive_ref_form_{ref}"):
+                    received_by = st.text_input("Your name", key=f"recv_by_{ref}")
+                    received_qtys = {}
+                    for t in items_in_ref:
+                        received_qtys[t["id"]] = st.number_input(
+                            f"{t['item_name']} — Quantity Received ({t['unit']})",
+                            min_value=0.0, step=1.0, key=f"recv_qty_{t['id']}",
                         )
-                    with c3:
-                        received_ref = st.text_input("Transfer Reference #", key=f"recv_ref_{t['id']}")
-                    condition_notes = st.text_input("Notes (optional)", key=f"recv_notes_{t['id']}")
+                    condition_notes = st.text_input("Notes (optional)", key=f"recv_notes_{ref}")
                     submitted = st.form_submit_button("📥 Confirm Receipt")
 
                 if submitted:
                     if not received_by.strip():
                         st.error("Enter your name before submitting.")
-                    elif not received_ref.strip():
-                        st.error("Enter the reference number on the transfer note.")
                     else:
-                        receive_transfer_blind(
-                            transfer_id=t["id"], received_by=received_by.strip(),
-                            quantity_received=received_qty, received_ref_number=received_ref.strip(),
-                            condition_notes=condition_notes, supabase_client=supabase_client,
-                        )
-                        st.success(f"✅ Transfer #{t['id']} received.")
+                        for t in items_in_ref:
+                            receive_transfer_item(
+                                transfer_id=t["id"], received_by=received_by.strip(),
+                                quantity_received=received_qtys[t["id"]],
+                                condition_notes=condition_notes, supabase_client=supabase_client,
+                            )
+                        st.success(f"✅ {ref} received.")
                         st.rerun()
 
                 st.markdown("---")
