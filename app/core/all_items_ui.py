@@ -2074,7 +2074,6 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
         with col2:
             from_location = _location_picker("From", "from_loc")
             to_location = _location_picker("To", "to_loc")
-            transfer_ref_number = st.text_input("Transfer Reference / Waybill #")
             issued_by = st.text_input("Sent By")
         issue_notes = st.text_input("Notes (optional)")
 
@@ -2085,16 +2084,14 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
                 st.error("Enter a quantity greater than 0.")
             elif not from_location or not to_location:
                 st.error("Both From and To locations are required.")
-            elif not transfer_ref_number.strip():
-                st.error("Transfer reference / waybill number is required.")
             else:
-                new_id = record_transfer(
+                new_id, ref_number = record_transfer(
                     transfer_date=transfer_date, item_name=item_name, quantity_issued=quantity_issued,
                     from_location=from_location, to_location=to_location,
-                    transfer_ref_number=transfer_ref_number.strip(), issued_by=issued_by,
-                    unit=unit, issue_notes=issue_notes, supabase_client=supabase_client,
+                    issued_by=issued_by, unit=unit, issue_notes=issue_notes,
+                    supabase_client=supabase_client,
                 )
-                st.success(f"✅ Transfer #{new_id} sent.")
+                st.success(f"✅ Transfer #{new_id} sent. Reference: **{ref_number}** — write this on the transfer note.")
                 st.rerun()
 
     st.markdown("---")

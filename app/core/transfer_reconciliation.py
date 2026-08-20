@@ -66,22 +66,32 @@ def _next_fallback_id() -> int:
     return (max((r["id"] for r in store), default=0)) + 1
 
 
+def _generate_transfer_ref(supabase_client: Any = None) -> str:
+    """Auto-generates a sequential reference (TR-0001, TR-0002, ...) instead
+    of relying on manual entry -- removes typo risk from one of the two
+    fields the blind check compares. Shown back to the issuer once, right
+    after sending, so it can be written on the physical transfer note --
+    the receiver still only ever sees it via that note, never via the app,
+    so the blind check itself is unaffected."""
+    existing = get_transfers(supabase_client=supabase_client)
+    return f"TR-{len(existing) + 1:04d}"
+
+
 def record_transfer(
     transfer_date,
     item_name: str,
     quantity_issued: float,
     from_location: str,
     to_location: str,
-    transfer_ref_number: str,
     issued_by: str,
     unit: str = "kg",
     issue_notes: str = "",
     supabase_client: Any = None,
-) -> int:
-    """Issuing side. Records what was sent. transfer_ref_number should be
-    whatever physical reference travels with the goods (waybill / internal
-    transfer note number) -- it's the second independent field the blind
-    check compares, alongside quantity."""
+):
+    """Issuing side. Records what was sent. Returns (new_id,
+    transfer_ref_number) so the caller can show the generated reference
+    back to the issuer for writing on the physical note."""
+    transfer_ref_number = _generate_transfer_ref(supabase_client=supabase_client)
     record = {
         "transfer_date": str(transfer_date),
         "item_name": item_name,
@@ -89,7 +99,7 @@ def record_transfer(
         "unit": unit,
         "from_location": from_location,
         "to_location": to_location,
-        "transfer_ref_number": transfer_ref_number.strip(),
+        "transfer_ref_number": transfer_ref_number,
         "issued_by": issued_by,
         "issue_notes": issue_notes,
         "status": "Pending",
@@ -104,14 +114,14 @@ def record_transfer(
     if supabase_client is not None:
         try:
             result = supabase_client.table(_SUPABASE_TABLE).insert(record).execute()
-            return result.data[0]["id"]
+            return result.data[0]["id"], transfer_ref_number
         except Exception as e:
             logger.error(f"Supabase insert failed for location_transfers, falling back: {e}")
 
     store = _fallback_store()
     record["id"] = _next_fallback_id()
     store.append(record)
-    return record["id"]
+    return record["id"], transfer_ref_number
 
 
 def get_transfers(supabase_client: Any = None) -> list:
