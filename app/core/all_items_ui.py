@@ -1845,7 +1845,7 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
 # ============================================================
 # 🔒 CHECKOUT RECONCILIATION
 # ============================================================
-def _render_checkout_reconciliation_tab(ctx: AllItemsContext) -> None:
+def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=None) -> None:
     st.markdown("### 🔒 Checkout Reconciliation")
     st.caption(
         "Security control: every check-out recorded here starts as **Pending** and is "
