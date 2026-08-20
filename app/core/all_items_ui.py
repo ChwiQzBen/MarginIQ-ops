@@ -98,7 +98,7 @@ from app.core.visual_inventory import (
 )
 from app.core.stock_take import stock_take_interface
 from app.core.jit_purchasing_ui import render_jit_purchasing_tab
-from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS
+from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS, Permission
 from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
 )
@@ -175,8 +175,8 @@ def render_all_items_mode(ctx: AllItemsContext,
     elif active_tab == "🔄 JIT Purchasing":
         render_jit_purchasing_tab(ctx.constants, has_permission=has_permission)
     elif active_tab == "🔒 Checkout Reconciliation":
-        _render_checkout_reconciliation_tab(ctx)
-    elif active_tab == "🔁 Transfer Reconciliation":
+        _render_checkout_reconciliation_tab(ctx, has_permission=has_permission)
+    elif active_tab == "🔁 Transfers":
         _render_transfer_reconciliation_tab(ctx)
 
 

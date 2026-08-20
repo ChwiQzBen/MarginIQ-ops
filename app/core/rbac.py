@@ -67,7 +67,8 @@ class Permission(str, Enum):
     VIEW_CUSTOMER_ANALYTICS = "view_customer_analytics"
     MANAGE_PURCHASING = "manage_purchasing"
     RECONCILE_CHECKOUTS = "reconcile_checkouts"
-    RECONCILE_TRANSFERS = "reconcile_transfers"
+    RECORD_TRANSFERS = "record_transfers"
+    REVIEW_RECONCILIATION = "review_reconciliation"
 
 
 ROLE_PERMISSIONS = {
@@ -78,7 +79,7 @@ ROLE_PERMISSIONS = {
         Permission.VIEW_ANALYTICS, Permission.VIEW_FORECASTS, Permission.VIEW_COST_DATA,
         Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE, Permission.MANAGE_PURCHASING,
         Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS, Permission.RECONCILE_CHECKOUTS,
-        Permission.RECONCILE_TRANSFERS,
+        Permission.RECORD_TRANSFERS, Permission.REVIEW_RECONCILIATION,
         # --- cheese: full operational access ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -89,7 +90,7 @@ ROLE_PERMISSIONS = {
     "user": {
         Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
         Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
-        Permission.RECONCILE_CHECKOUTS, Permission.RECONCILE_TRANSFERS,
+        Permission.RECONCILE_CHECKOUTS, Permission.RECORD_TRANSFERS,
         # --- cheese: day-to-day recording only, no planning/batch release ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -111,7 +112,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
     "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
-    "🔁 Transfer Reconciliation": Permission.RECONCILE_TRANSFERS,
+    "🔁 Transfers": Permission.RECORD_TRANSFERS,
 }
 
 DRY_ICE_TAB_REQUIREMENTS = {
