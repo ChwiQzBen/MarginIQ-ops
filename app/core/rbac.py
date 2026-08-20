@@ -111,8 +111,8 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🖼️ Visual Inventory": Permission.VIEW_ANALYTICS,
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
-    "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
     "🔁 Transfers": Permission.RECORD_TRANSFERS,
+    "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
 }
 
 DRY_ICE_TAB_REQUIREMENTS = {
