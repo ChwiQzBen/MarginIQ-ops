@@ -72,6 +72,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from app.core.price_tracking import record_price_changes
+from app.core.data_integrity import detect_and_log_disappearances, get_open_alerts, acknowledge_alert
 from app.core.performance import LazyLoader, compress_dataframe
 from core.error_handling import logger
 from app.core.google_sheet_reader import GoogleSheetReader
@@ -237,6 +238,12 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                 )
 
                 if not stock.empty:
+                    disappeared = detect_and_log_disappearances(
+                        stock, supabase_client=ctx.supabase_client,
+                    )
+                    if disappeared:
+                        st.session_state['_recent_disappearances'] = disappeared
+
                     st.session_state['_ai_inventory_cache'] = (
                         stock, current, low, category_count, datetime.now()
                     )
@@ -2055,6 +2062,39 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
 
     if not can_review:
         return
+
+    open_alerts = get_open_alerts(supabase_client=supabase_client)
+    if open_alerts:
+        st.error(f" {len(open_alerts)} item(s) disappeared from the inventory sheet between two loads — needs review.")
+        with st.expander(f" Missing Items ({len(open_alerts)})", expanded=True):
+            st.caption(
+                "Present in a previous successful load, now gone from the sheet "
+                "entirely. This is a diffing signal, not proof of anything — a row "
+                "can vanish for innocent reasons too. Worth a look, not an accusation."
+            )
+            for alert in open_alerts:
+                st.markdown(f"**{alert['item_name']}**")
+                st.caption(
+                    f"Last seen: {alert.get('last_seen_quantity')} units @ "
+                    f"KSh {alert.get('last_seen_price')} — as of {(alert.get('last_seen_at') or '')[:16]}. "
+                    f"Detected missing: {(alert.get('detected_at') or '')[:16]}."
+                )
+                with st.form(f"ack_alert_form_{alert['id']}"):
+                    acker = st.text_input("Reviewed by", key=f"ack_by_{alert['id']}")
+                    ack_notes = st.text_area(
+                        "What did you find?", key=f"ack_notes_{alert['id']}",
+                        placeholder="e.g. Confirmed with warehouse — item was discontinued, sheet cleanup.",
+                    )
+                    if st.form_submit_button("✅ Mark Reviewed"):
+                        if not acker.strip():
+                            st.error("Enter who reviewed this.")
+                        elif not ack_notes.strip():
+                            st.error("Enter what you found before dismissing this.")
+                        else:
+                            acknowledge_alert(alert['id'], acker.strip(), ack_notes.strip(), supabase_client=supabase_client)
+                            st.success("✅ Marked reviewed.")
+                            st.rerun()
+                st.markdown("---")
 
     st.markdown("---")
     st.caption(

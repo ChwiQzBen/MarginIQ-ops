@@ -955,7 +955,14 @@ class UserManager:
         
         with col2:
             new_password = st.text_input("Password", type="password", placeholder="••••••••")
-            new_role = st.selectbox("Role", ['viewer', 'user', 'manager', 'admin'])
+            # Pulled from rbac.py instead of hardcoded here -- this exact
+            # hardcoded list is why all_items_manager/all_items_user/
+            # all_items_viewer existed in rbac.py but were never
+            # selectable. Local import avoids a circular import (rbac.py
+            # -> core.security -> core.advanced_security), same reason
+            # AuthManager is imported locally a few lines above.
+            from app.core.rbac import ROLE_PERMISSIONS
+            new_role = st.selectbox("Role", sorted(ROLE_PERMISSIONS.keys()))
         
         # Show password requirements
         with st.expander("🔑 Password Requirements"):
