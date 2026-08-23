@@ -524,9 +524,20 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
+    from app.core.rbac import MODE_REQUIREMENTS
+    if auth_check and auth_check.is_authenticated:
+        available_modes = [name for name, perm in MODE_REQUIREMENTS.items() if has_permission(perm)]
+        if not available_modes:
+            available_modes = ["📦 All Items Mode"]
+    else:
+        available_modes = list(MODE_REQUIREMENTS.keys())
+
+    if st.session_state.get("inventory_mode") not in available_modes:
+        st.session_state.inventory_mode = available_modes[0]
+
     inventory_mode = st.sidebar.radio(
         "Select inventory view:",
-        ["📦 All Items Mode", "🧀 BCPOS Mode", "❄️ Dry Ice Mode"],
+        available_modes,
         help="Switch between general inventory management, Cheese Production Optimization, or Dry Ice analysis",
         key="inventory_mode"
     )

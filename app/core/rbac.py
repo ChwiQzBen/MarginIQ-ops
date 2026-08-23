@@ -69,6 +69,9 @@ class Permission(str, Enum):
     RECONCILE_CHECKOUTS = "reconcile_checkouts"
     RECORD_TRANSFERS = "record_transfers"
     REVIEW_RECONCILIATION = "review_reconciliation"
+    ACCESS_ALL_ITEMS_MODE = "access_all_items_mode"
+    ACCESS_BCPOS_MODE = "access_bcpos_mode"
+    ACCESS_DRY_ICE_MODE = "access_dry_ice_mode"
 
 
 ROLE_PERMISSIONS = {
@@ -80,6 +83,7 @@ ROLE_PERMISSIONS = {
         Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE, Permission.MANAGE_PURCHASING,
         Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS, Permission.RECONCILE_CHECKOUTS,
         Permission.RECORD_TRANSFERS, Permission.REVIEW_RECONCILIATION,
+        Permission.ACCESS_ALL_ITEMS_MODE, Permission.ACCESS_BCPOS_MODE,
         # --- cheese: full operational access ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -91,6 +95,7 @@ ROLE_PERMISSIONS = {
         Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
         Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
         Permission.RECONCILE_CHECKOUTS, Permission.RECORD_TRANSFERS,
+        Permission.ACCESS_ALL_ITEMS_MODE, Permission.ACCESS_BCPOS_MODE,
         # --- cheese: day-to-day recording only, no planning/batch release ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.RECORD_MILK_RECEIPT, Permission.RECORD_CHEESE_SALE,
@@ -98,9 +103,29 @@ ROLE_PERMISSIONS = {
     },
     "viewer": {
         Permission.VIEW_STOCK, Permission.VIEW_ANALYTICS, Permission.VIEW_REPORTS,
+        Permission.ACCESS_ALL_ITEMS_MODE, Permission.ACCESS_BCPOS_MODE,
         # --- cheese: read-only ---
         Permission.VIEW_CHEESE_PRODUCTION, Permission.VIEW_CHEESE_RECIPES,
         Permission.VIEW_COMMERCIAL_REPORTS, Permission.VIEW_CUSTOMER_ANALYTICS,
+    },
+    "all_items_manager": {
+        Permission.ACCESS_ALL_ITEMS_MODE,
+        Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
+        Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
+        Permission.VIEW_ANALYTICS, Permission.VIEW_FORECASTS, Permission.VIEW_COST_DATA,
+        Permission.VIEW_STRATEGY, Permission.VIEW_MAINTENANCE, Permission.MANAGE_PURCHASING,
+        Permission.GENERATE_REPORTS, Permission.VIEW_REPORTS,
+        Permission.RECONCILE_CHECKOUTS, Permission.RECORD_TRANSFERS, Permission.REVIEW_RECONCILIATION,
+    },
+    "all_items_user": {
+        Permission.ACCESS_ALL_ITEMS_MODE,
+        Permission.VIEW_STOCK, Permission.VIEW_STOCK_TAKE,
+        Permission.RECORD_USAGE, Permission.RECORD_RECEIPT, Permission.RUN_STOCK_TAKE,
+        Permission.RECONCILE_CHECKOUTS, Permission.RECORD_TRANSFERS,
+    },
+    "all_items_viewer": {
+        Permission.ACCESS_ALL_ITEMS_MODE,
+        Permission.VIEW_STOCK, Permission.VIEW_ANALYTICS, Permission.VIEW_REPORTS,
     },
 }
 
@@ -113,6 +138,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
     "🔁 Transfers": Permission.RECORD_TRANSFERS,
     "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
+    "📊 Stock Variance": Permission.REVIEW_RECONCILIATION,
 }
 
 DRY_ICE_TAB_REQUIREMENTS = {
@@ -123,6 +149,12 @@ DRY_ICE_TAB_REQUIREMENTS = {
     "📋 Recommendations": Permission.VIEW_STRATEGY,
     "🏗️ Storage Capacity": Permission.VIEW_MAINTENANCE,
     "📜 Transaction History": Permission.VIEW_REPORTS,
+}
+
+MODE_REQUIREMENTS = {
+    "📦 All Items Mode": Permission.ACCESS_ALL_ITEMS_MODE,
+    "🧀 BCPOS Mode": Permission.ACCESS_BCPOS_MODE,
+    "❄️ Dry Ice Mode": Permission.ACCESS_DRY_ICE_MODE,
 }
 
 

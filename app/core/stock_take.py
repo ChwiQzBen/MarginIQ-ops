@@ -455,9 +455,10 @@ def new_count_form(inventory_items):
         )
     
     with col2:
+        from app.core.locations import COMPANY_LOCATIONS
         warehouse = st.selectbox(
             "Warehouse/Location",
-            ["All", "Warehouse A", "Warehouse B", "Storage Unit #1", "Storage Unit #2"],
+            COMPANY_LOCATIONS,
             key="count_warehouse_input"
         )
         num_sheets = st.number_input(

@@ -1397,7 +1397,65 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
         # the score happens to be 0 — that reason is the whole diagnostic
         # signal for why the metric reads 0%.
         st.metric("📈 Forecast Accuracy", f"{forecast_accuracy:.1f}%", accuracy_message)
-    
+
+    # ============================================================
+    # INACTIVE ITEMS BREAKDOWN -- "inactive" here means exactly what
+    # load_inventory_data() (main.py) actually does: an item only makes
+    # it into inventory_items if its parsed QUANTITY is > 0. Nothing
+    # about discontinuation or any other business meaning -- just naming
+    # what the filter already does.
+    # ============================================================
+    if stock_df is not None and not stock_df.empty and inventory_items:
+        item_col = None
+        for col in ['ITEM_NAME', 'Item', 'item_name', 'Name', 'name', 'PRODUCT_NAME']:
+            if col in stock_df.columns:
+                item_col = col
+                break
+
+        if item_col:
+            active_names = set(inventory_items.keys())
+            inactive_rows = []
+            for _, row in stock_df.iterrows():
+                name = row.get(item_col)
+                if not name or str(name).strip() == '' or name in active_names:
+                    continue
+                qty_raw = row.get('QUANTITY', None)
+                try:
+                    qty = float(qty_raw) if qty_raw not in (None, '') else None
+                except (ValueError, TypeError):
+                    qty = None
+                if qty is None:
+                    reason = "Blank or non-numeric quantity"
+                elif qty <= 0:
+                    reason = "Zero or negative stock"
+                else:
+                    reason = "Unknown (present in sheet, absent from active list)"
+                inactive_rows.append({
+                    'Item': name,
+                    'Category': row.get('ITEM_CATEGORY', 'Uncategorized'),
+                    'Quantity (raw)': qty_raw,
+                    'Likely Reason': reason,
+                })
+
+            if inactive_rows:
+                inactive_df = pd.DataFrame(inactive_rows)
+                with st.expander(f"🔍 View {len(inactive_df)} Inactive Items", expanded=False):
+                    st.caption(
+                        "The item exists in the sheet but was excluded from active "
+                        "inventory -- almost always a zero, negative, or blank quantity."
+                    )
+                    reason_counts = inactive_df['Likely Reason'].value_counts()
+                    cols = st.columns(len(reason_counts))
+                    for c, (reason, count) in zip(cols, reason_counts.items()):
+                        c.metric(reason, count)
+                    st.dataframe(inactive_df, use_container_width=True, height=400, hide_index=True)
+                    csv = inactive_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "📥 Download Inactive Items CSV", csv,
+                        file_name=f"inactive_items_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                    )
+
     st.divider()
     
     # ============================================================
