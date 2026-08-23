@@ -21,7 +21,7 @@ from core.advanced_security import rate_limited
 
 
 @rate_limited(max_calls=5, period=300)  # 5 reports per 5 minutes
-def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None):
+def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None, report_type="All Inventory"):
     """
     Generate an enhanced PDF report for ALL inventory items
     
@@ -46,7 +46,8 @@ def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None):
         from datetime import datetime
         
         # Create the report
-        report_path = f"inventory_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        _type_slug = report_type.replace(' ', '_').lower()
+        report_path = f"inventory_report_{_type_slug}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         doc = SimpleDocTemplate(report_path, pagesize=letter, 
                                 rightMargin=72, leftMargin=72, 
                                 topMargin=72, bottomMargin=72)
@@ -75,7 +76,12 @@ def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None):
         # ============================================================
         # 1. TITLE & HEADER
         # ============================================================
-        elements.append(Paragraph("Inventory Management Report", title_style))
+        _report_titles = {
+            "All Inventory": "Inventory Management Report",
+            "Low Stock": "Low Stock Report",
+            "Valuable Items": "Valuable Items Report",
+        }
+        elements.append(Paragraph(_report_titles.get(report_type, "Inventory Management Report"), title_style))
         elements.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", 
                                  styles['Normal']))
         elements.append(Spacer(1, 20))
@@ -232,7 +238,7 @@ def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None):
                     'category': details.get('category', 'Uncategorized')
                 })
         
-        if valuable_items:
+        if valuable_items and report_type != "Low Stock":
             elements.append(Paragraph("Top 10 Most Valuable Items", heading_style))
             
             valuable_items.sort(key=lambda x: x['value'], reverse=True)
@@ -283,7 +289,7 @@ def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None):
                     'unit': details.get('unit', 'units')
                 })
         
-        if low_items:
+        if low_items and report_type != "Valuable Items":
             elements.append(Paragraph(f"⚠️ Items Below Reorder Point ({len(low_items)} items)", heading_style))
             
             low_items.sort(key=lambda x: x['deficit'], reverse=True)

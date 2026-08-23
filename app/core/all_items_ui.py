@@ -101,6 +101,7 @@ from app.core.checkout_reconciliation import (
 )
 from app.core.transfer_reconciliation import (
     init_transfer_storage, record_transfer_batch, get_transfers, receive_transfer_item,
+    resolve_transfer_mismatch,
 )
 from app.core.inventory_cache import save_snapshot, load_snapshot
 
@@ -1838,11 +1839,6 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
     else:
         st.warning("No data available for advanced analytics")
 
-
-# ============================================================
-# 🔒 CHECKOUT RECONCILIATION
-# ============================================================
-
 # ============================================================
 # 🔒 CHECKOUT RECONCILIATION (now also reviews transfers)
 # ============================================================
@@ -1871,6 +1867,7 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     all_transfers = get_transfers(supabase_client=supabase_client)
     transfers_matched = [t for t in all_transfers if t["status"] == "Received-Matched"]
     transfers_mismatched = [t for t in all_transfers if t["status"] == "Received-Mismatch"]
+    transfers_resolved = [t for t in all_transfers if t["status"] == "Resolved"]
 
     st.markdown("#### 📝 Record a Check-Out")
     item_options = sorted((ctx.inventory_items or {}).keys())
@@ -1916,12 +1913,13 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
         "figures until reconciled against the physical dispatch slip / gate pass number."
     )
 
-    m1, m2, m3, m4, m5 = st.columns(5)
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("⏳ Pending", len(pending))
     m2.metric("✅ Reconciled", len(reconciled))
     m3.metric("🚫 Blocked", len(blocked))
     m4.metric("↔️ Transfers Matched", len(transfers_matched))
     m5.metric("↔️ Transfers Mismatched", len(transfers_mismatched))
+    m6.metric("↔️ Transfers Resolved", len(transfers_resolved))
 
     st.markdown("#### ⏳ Pending Reconciliation — Check-Outs")
     if not pending:
@@ -2006,9 +2004,39 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                     f"by {t.get('received_by') or '—'}  \n"
                     f"{t['reconciliation_notes']}"
                 )
+                with st.form(f"resolve_transfer_form_{t['id']}"):
+                    resolver = st.text_input("Resolved by", key=f"resolver_{t['id']}")
+                    resolution_notes = st.text_area(
+                        "What happened / how was this resolved?",
+                        key=f"resolution_notes_{t['id']}",
+                        placeholder="e.g. Recounted — 1kg was left on the truck, delivered separately.",
+                    )
+                    if st.form_submit_button("✅ Mark Resolved"):
+                        if not resolver.strip():
+                            st.error("Enter who resolved this before submitting.")
+                        elif not resolution_notes.strip():
+                            st.error("Enter a resolution note before submitting.")
+                        else:
+                            resolve_transfer_mismatch(
+                                transfer_id=t["id"], resolved_by=resolver.strip(),
+                                resolution_notes=resolution_notes.strip(),
+                                supabase_client=supabase_client,
+                            )
+                            st.success(f"✅ #{t['id']} marked resolved.")
+                            st.rerun()
                 st.markdown("---")
         else:
             st.caption("None.")
+
+    with st.expander(f"✅ Resolved ({len(transfers_resolved)})"):
+        if transfers_resolved:
+            for t in transfers_resolved:
+                st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
+                st.caption(f"Resolved by {t.get('resolved_by') or '—'} on {(t.get('resolved_at') or '')[:10]}")
+                st.caption(t.get('reconciliation_notes', ''))
+                st.markdown("---")
+        else:
+            st.caption("None yet.")
 
     with st.expander(f"✅ Matched ({len(transfers_matched)})"):
         if transfers_matched:

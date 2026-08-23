@@ -1548,7 +1548,8 @@ def main():
                         report_path = generate_enhanced_pdf_report(
                             inventory_items=inventory_items,
                             stock_df=stock_df if 'stock_df' in locals() else None,
-                            kpis=kpis
+                            kpis=kpis,
+                            report_type="All Inventory",
                         )
                     else:
                         st.sidebar.error("No inventory data available yet.")
@@ -1566,7 +1567,8 @@ def main():
                             report_path = generate_enhanced_pdf_report(
                                 inventory_items=low_stock_items,
                                 stock_df=stock_df if 'stock_df' in locals() else None,
-                                kpis=kpis
+                                kpis=kpis,
+                                report_type="Low Stock",
                             )
                         else:
                             st.sidebar.success("✅ No low stock items found!")
@@ -1586,7 +1588,8 @@ def main():
                             report_path = generate_enhanced_pdf_report(
                                 inventory_items=valuable_items,
                                 stock_df=stock_df if 'stock_df' in locals() else None,
-                                kpis=kpis
+                                kpis=kpis,
+                                report_type="Valuable Items",
                             )
                         else:
                             st.sidebar.warning("No items with price data found.")

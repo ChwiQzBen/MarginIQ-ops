@@ -211,3 +211,41 @@ def receive_transfer_item(
             break
 
     return {"matched": qty_match, "notes": notes}
+
+def resolve_transfer_mismatch(
+    transfer_id: int,
+    resolved_by: str,
+    resolution_notes: str,
+    supabase_client: Any = None,
+) -> bool:
+    """Closes out a Received-Mismatch transfer once someone has actually
+    investigated it. Appends the resolution note to whatever comparison
+    note is already on the record rather than overwriting it, so the
+    original mismatch detail stays visible alongside how it was resolved."""
+    original = _get_transfer_by_id(transfer_id, supabase_client=supabase_client)
+    if original is None:
+        return False
+
+    existing_notes = original.get("reconciliation_notes") or ""
+    combined_notes = f"{existing_notes}\nResolved by {resolved_by}: {resolution_notes.strip()}"
+
+    updates = {
+        "status": "Resolved",
+        "resolved_by": resolved_by,
+        "resolved_at": datetime.now().isoformat(),
+        "reconciliation_notes": combined_notes,
+    }
+
+    if supabase_client is not None:
+        try:
+            supabase_client.table(_SUPABASE_TABLE).update(updates).eq("id", transfer_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Supabase update failed for location_transfers, falling back: {e}")
+
+    store = _fallback_store()
+    for r in store:
+        if r["id"] == transfer_id:
+            r.update(updates)
+            break
+    return True
