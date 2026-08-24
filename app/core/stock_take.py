@@ -951,18 +951,14 @@ def assign_sheets_interface(count_id):
     # Team members list
     team_members = ["Unassigned", "John Doe", "Jane Smith", "Mike Johnson", "Sarah Wilson", "David Brown"]
     
-    for sheet_id in count['sheets']:
+    sheet_ids = [sid for sid in count['sheets'] if st.session_state.count_sheets.get(sid)]
+    cols = st.columns(3)
+    for idx, sheet_id in enumerate(sheet_ids):
         sheet = st.session_state.count_sheets.get(sheet_id, {})
-        if not sheet:
-            continue
-        
-        col1, col2, col3 = st.columns([2, 2, 1])
-        
-        with col1:
+        with cols[idx % 3]:
             st.markdown(f"**{sheet.get('name', 'Unknown')}**")
             st.caption(f"{sheet.get('counted_items', 0)}/{sheet.get('total_items', 0)} items")
-        
-        with col2:
+
             current_assign = sheet.get('assigned_to', 'Unassigned')
             selected_user = st.selectbox(
                 "Assign to",
@@ -971,14 +967,12 @@ def assign_sheets_interface(count_id):
                 key=f"assign_{sheet_id}",
                 label_visibility="collapsed"
             )
-            
             if selected_user != current_assign and selected_user != "Unassigned":
                 if assign_sheet_to_user(sheet_id, selected_user):
                     st.success(f"✅ Assigned to {selected_user}")
-                    
-        
-        with col3:
+
             st.caption(f"Status: {sheet.get('status', 'Pending')}")
+            st.markdown("---")
     
     if st.button("← Back"):
         st.session_state.stock_take_menu = "📋 Active Counts"

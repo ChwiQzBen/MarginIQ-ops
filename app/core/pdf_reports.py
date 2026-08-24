@@ -329,43 +329,78 @@ def generate_enhanced_pdf_report(inventory_items, stock_df=None, kpis=None, repo
         # 7. RECOMMENDATIONS
         # ============================================================
         elements.append(Paragraph("Recommendations", heading_style))
-        
+
         recommendations = []
-        
-        if critical_items > 0:
-            recommendations.append(f"• 🔴 {critical_items} items are OUT OF STOCK - Order immediately")
-        
-        if low_stock_items > 0:
-            recommendations.append(f"• ⚠️ {low_stock_items} items are below reorder point - Review and replenish")
-        
-        if overstocked_items > 0:
-            recommendations.append(f"• 📦 {overstocked_items} items are overstocked - Consider reducing orders")
-        
-        if healthy_items < total_items * 0.5:
-            recommendations.append("• 📊 Overall inventory health is below 50% - Review all items")
-        
-        if len(categories) > 1:
-            category_issues = {}
-            for item_name, details in inventory_items.items():
-                category = details.get('category', 'Uncategorized')
-                stock = details.get('stock', 0)
-                reorder = details.get('reorder', 0)
-                
-                if category not in category_issues:
-                    category_issues[category] = {'low': 0, 'total': 0}
-                category_issues[category]['total'] += 1
-                if stock < reorder:
-                    category_issues[category]['low'] += 1
-            
-            for cat, data in category_issues.items():
-                if data['low'] > 0:
-                    recommendations.append(f"• 📂 {cat}: {data['low']}/{data['total']} items need attention")
-        
+
+        if report_type == "Valuable Items":
+            # Value-concentration insight, not stock-level triage -- shortage
+            # counts don't belong in a report about what's worth the most.
+            if valuable_items:
+                total_val = sum(i['value'] for i in valuable_items)
+                top3_val = sum(i['value'] for i in valuable_items[:3])
+                if total_val > 0:
+                    concentration = top3_val / total_val * 100
+                    recommendations.append(
+                        f"• 💰 Your top 3 items account for {concentration:.0f}% of total tracked "
+                        f"value here — prioritize these for cycle counts and price accuracy checks."
+                    )
+            no_price_count = sum(1 for d in inventory_items.values() if not d.get('price') or d.get('price') <= 0)
+            if no_price_count > 0:
+                recommendations.append(
+                    f"• ⚠️ {no_price_count} item(s) here have no price recorded — total value "
+                    f"is understated until those are filled in."
+                )
+            recommendations.append("• 📋 Recheck unit prices periodically — stale prices distort this report's totals.")
+
+        elif report_type == "Low Stock":
+            if critical_items > 0:
+                recommendations.append(f"• 🔴 {critical_items} of these are completely OUT OF STOCK — order immediately.")
+            if low_items:
+                worst = sorted(low_items, key=lambda x: x['deficit'], reverse=True)[:3]
+                worst_list = ', '.join(f"{i['name']} ({i['deficit']:.0f} {i['unit']} short)" for i in worst)
+                recommendations.append(f"• 📉 Largest deficits: {worst_list}")
+            if len(categories) > 1:
+                category_counts = {}
+                for item_name, details in inventory_items.items():
+                    category = details.get('category', 'Uncategorized')
+                    category_counts[category] = category_counts.get(category, 0) + 1
+                for cat, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
+                    recommendations.append(f"• 📂 {cat}: {count} item(s) short")
+            recommendations.append(
+                "• 📋 A shortage list this size may mean reorder thresholds are set too high, "
+                "or replenishment is lagging demand — worth reviewing both."
+            )
+
+        else:  # "All Inventory" -- unchanged, full picture
+            if critical_items > 0:
+                recommendations.append(f"• 🔴 {critical_items} items are OUT OF STOCK - Order immediately")
+            if low_stock_items > 0:
+                recommendations.append(f"• ⚠️ {low_stock_items} items are below reorder point - Review and replenish")
+            if overstocked_items > 0:
+                recommendations.append(f"• 📦 {overstocked_items} items are overstocked - Consider reducing orders")
+            if healthy_items < total_items * 0.5:
+                recommendations.append("• 📊 Overall inventory health is below 50% - Review all items")
+            if len(categories) > 1:
+                category_issues = {}
+                for item_name, details in inventory_items.items():
+                    category = details.get('category', 'Uncategorized')
+                    stock = details.get('stock', 0)
+                    reorder = details.get('reorder', 0)
+                    if category not in category_issues:
+                        category_issues[category] = {'low': 0, 'total': 0}
+                    category_issues[category]['total'] += 1
+                    if stock < reorder:
+                        category_issues[category]['low'] += 1
+                for cat, data in category_issues.items():
+                    if data['low'] > 0:
+                        recommendations.append(f"• 📂 {cat}: {data['low']}/{data['total']} items need attention")
+            if not recommendations:
+                recommendations.append("• ✅ All inventory items are well-stocked. Continue monitoring.")
+            recommendations.append("• 📋 Review reorder points regularly based on demand patterns")
+            recommendations.append("• 📊 Consider ABC analysis to prioritize high-value items")
+
         if not recommendations:
-            recommendations.append("• ✅ All inventory items are well-stocked. Continue monitoring.")
-        
-        recommendations.append("• 📋 Review reorder points regularly based on demand patterns")
-        recommendations.append("• 📊 Consider ABC analysis to prioritize high-value items")
+            recommendations.append("• ✅ Nothing further to flag for this report.")
         
         for rec in recommendations:
             elements.append(Paragraph(rec, styles['Normal']))

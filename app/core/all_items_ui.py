@@ -1127,7 +1127,7 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
 
     # Show load status
     if not analytics_loader.is_loaded:
-        st.info("💡 Click the button below to load analytics data. This may take a moment.")
+        st.info(" Click the button below to load analytics data. This may take a moment.")
 
     # Render load button (or show loaded status)
     analytics_loader.render_load_button("📊 Load Analytics Data")
@@ -1604,8 +1604,6 @@ def _render_analytics_tab(ctx: AllItemsContext) -> None:
                     st.warning("No valid data with both quantity and price found.")
             else:
                 st.warning("Required columns (UNIT PRICE, QUANTITY) not found in stock data.")
-    else:
-        st.info("💡 Click 'Load Analytics Data' to view the analysis.")
 
 
 # ============================================================
@@ -2205,11 +2203,9 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
             for t in transfers_mismatched:
                 st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
                 st.caption(
-                    f"Issued: {t['quantity_issued']} {t['unit']} / ref '{t['transfer_ref_number']}' "
-                    f"by {t.get('issued_by') or '—'}  \n"
-                    f"Received: {t['quantity_received']} {t['unit']} / ref '{t['received_ref_number']}' "
-                    f"by {t.get('received_by') or '—'}  \n"
-                    f"{t['reconciliation_notes']}"
+                    f"Issued: {t['quantity_issued']} {t['unit']} by {t.get('issued_by') or '—'}  \n"
+                    f"Received: {t['quantity_received']} {t['unit']} by {t.get('received_by') or '—'}  \n"
+                    f"Reference: {t['transfer_ref_number']}"
                 )
                 with st.form(f"resolve_transfer_form_{t['id']}"):
                     resolver = st.text_input("Resolved by", key=f"resolver_{t['id']}")
@@ -2258,6 +2254,43 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                                 mime="text/csv")
         else:
             st.caption("None yet.")
+
+    st.markdown("---")
+    st.markdown("#### 📅 Transfer Trends Report")
+    st.caption("Pull every transfer in a date range, across all statuses, for trend review.")
+    tcol1, tcol2, tcol3 = st.columns([1, 1, 1])
+    with tcol1:
+        trend_start = st.date_input("From", key="transfer_trend_start")
+    with tcol2:
+        trend_end = st.date_input("To", value=datetime.now().date(), key="transfer_trend_end")
+    with tcol3:
+        st.write("")
+        st.write("")
+        generate_trend = st.button("📊 Generate Report")
+
+    if generate_trend:
+        start_dt = pd.to_datetime(trend_start)
+        end_dt = pd.to_datetime(trend_end)
+        window = [
+            t for t in all_transfers
+            if pd.notna(pd.to_datetime(t.get('transfer_date'), errors='coerce'))
+            and start_dt <= pd.to_datetime(t.get('transfer_date'), errors='coerce') <= end_dt
+        ]
+        if not window:
+            st.info("No transfers found in that date range.")
+        else:
+            trend_df = pd.DataFrame(window)[
+                ["id", "transfer_date", "transfer_ref_number", "item_name", "from_location", "to_location",
+                 "quantity_issued", "quantity_received", "status", "issued_by", "received_by",
+                 "received_at", "resolved_by", "resolved_at"]
+            ]
+            st.dataframe(trend_df, use_container_width=True, hide_index=True)
+            csv = trend_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Download Transfer Trends CSV", csv,
+                file_name=f"transfer_trends_{trend_start}_{trend_end}.csv",
+                mime="text/csv",
+            )
 
 
 # ============================================================
