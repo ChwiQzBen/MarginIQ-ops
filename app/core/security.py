@@ -451,7 +451,7 @@ class AuthManager:
                     ✅ {user['name']}
                 </div>
                 <div style="font-size: 11px; color: #666;">
-                    🏷️ {user['role'].title()}
+                    #🏷️ {user['role'].title()}
                 </div>
             </div>
             """, unsafe_allow_html=True)
