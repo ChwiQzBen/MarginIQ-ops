@@ -414,7 +414,9 @@ def main():
     # ============================================================
     auth_check = st.session_state.get('_auth')
     if auth_check and auth_check.is_authenticated:
-        st.sidebar.markdown("🟢 Logged in")
+        _user = auth_check.current_user
+        st.sidebar.markdown(f"✅ **{_user['name']}**")
+        st.sidebar.caption(f"🏷️ {_user['role'].title()}")
     else:
         st.sidebar.markdown("🔴 Logged out")
 
@@ -1505,10 +1507,19 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    # Report type selection
+    # Report type selection -- Dry Ice Report (Legacy) only offered to
+    # whoever can see Dry Ice Mode itself (currently admin only), same
+    # permission that already gates the mode selector above.
+    report_type_options = ["📊 All Inventory Report", "📋 Low Stock Report", "💰 Valuable Items Report"]
+    if has_permission(Permission.ACCESS_DRY_ICE_MODE):
+        report_type_options = ["❄️ Dry Ice Report (Legacy)"] + report_type_options
+
+    if st.session_state.get("report_type_sidebar") not in report_type_options:
+        st.session_state.report_type_sidebar = report_type_options[0]
+
     report_type = st.sidebar.selectbox(
         "Report Type",
-        ["❄️ Dry Ice Report (Legacy)", "📊 All Inventory Report", "📋 Low Stock Report", "💰 Valuable Items Report"],
+        report_type_options,
         key="report_type_sidebar"
     )
 

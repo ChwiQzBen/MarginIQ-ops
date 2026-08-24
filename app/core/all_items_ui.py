@@ -1856,26 +1856,31 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
     else:
         st.warning("No data available for advanced analytics")
 
-def _compute_stock_variance(supabase_client=None):
-    """Opening + Check-In + Transfers In - Check-Out - Transfers Out =
-    Expected book stock; Physical - Expected = Variance.
+LOCATION_KEYWORDS = ["LOCATION", "WAREHOUSE", "SITE", "STORE", "OUTLET"]
 
-    WORKING ASSUMPTION (unconfirmed): every check-in/check-out record and
-    every Stock Take belongs to Main Factory Stores, since neither the
-    Google Sheet nor Stock Take actually records a location today. Only
-    Transfers are genuinely location-aware. If any of this data actually
-    belongs to Tigoni Warehouse or Inside Factory Stores, this report is
-    wrong for those items until a location column exists upstream.
-    """
-    completed = [c for c in st.session_state.get('stock_takes', {}).values() if c['status'] == 'Completed']
+
+def _compute_stock_variance(location: str, supabase_client=None):
+    """Opening + Check-In + Transfers In - Check-Out - Transfers Out =
+    Expected book stock; Physical - Expected = Variance. Computed per
+    location -- every term is filtered to `location` specifically, since
+    check-in/check-out/transfers/stock takes all happen at every location,
+    not just one."""
+    completed = [
+        c for c in st.session_state.get('stock_takes', {}).values()
+        if c['status'] == 'Completed' and c.get('warehouse') == location
+    ]
     completed.sort(key=lambda c: c.get('completed', ''))
 
     if len(completed) < 2:
-        return None, f"Need at least 2 completed Stock Takes to compute variance -- you currently have {len(completed)}."
+        return None, (
+            f"Need at least 2 completed Stock Takes labeled '{location}' to compute "
+            f"variance here -- currently have {len(completed)}. When creating a count, "
+            f"set Warehouse/Location to '{location}' and select only the items actually "
+            f"physically at that location."
+        )
 
     previous, latest = completed[-2], completed[-1]
     window_start, window_end = previous.get('completed', ''), latest.get('completed', '')
-    LOCATION = "Main Factory Stores"
 
     try:
         gsheet = GoogleSheetReader()
@@ -1887,7 +1892,23 @@ def _compute_stock_variance(supabase_client=None):
     except Exception:
         check_in_df, check_out_df = pd.DataFrame(), pd.DataFrame()
 
-    def _sum_in_window(df, item_name, start, end):
+    check_in_loc_col = detect_column(check_in_df, LOCATION_KEYWORDS) if not check_in_df.empty else None
+    check_out_loc_col = detect_column(check_out_df, LOCATION_KEYWORDS) if not check_out_df.empty else None
+
+    if not check_in_df.empty and not check_in_loc_col:
+        return None, (
+            "Check-In data doesn't have a Location column yet, so it can't be split "
+            f"by location. Add one to the Check-In sheet (e.g. named 'LOCATION') with "
+            f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
+        )
+    if not check_out_df.empty and not check_out_loc_col:
+        return None, (
+            "Check-Out data doesn't have a Location column yet, so it can't be split "
+            f"by location. Add one to the Check-Out sheet (e.g. named 'LOCATION') with "
+            f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
+        )
+
+    def _sum_in_window(df, loc_col, item_name, start, end):
         if df is None or df.empty:
             return 0.0
         item_col = detect_column(df, ITEM_NAME_KEYWORDS)
@@ -1895,7 +1916,7 @@ def _compute_stock_variance(supabase_client=None):
         qty_col = next((c for c in df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
         if not item_col or not date_col or not qty_col:
             return 0.0
-        sub = df[df[item_col] == item_name].copy()
+        sub = df[(df[item_col] == item_name) & (df[loc_col].astype(str).str.strip() == location)].copy()
         if sub.empty:
             return 0.0
         sub['_DATE'] = pd.to_datetime(sub[date_col], errors='coerce')
@@ -1915,12 +1936,12 @@ def _compute_stock_variance(supabase_client=None):
             if t.get('item_name') != item_name:
                 continue
             if direction == 'out':
-                if t.get('from_location') != LOCATION:
+                if t.get('from_location') != location:
                     continue
                 d = pd.to_datetime(t.get('transfer_date'), errors='coerce')
                 qty = float(t.get('quantity_issued') or 0)
             else:
-                if t.get('to_location') != LOCATION or t.get('status') not in ('Received-Matched', 'Received-Mismatch'):
+                if t.get('to_location') != location or t.get('status') not in ('Received-Matched', 'Received-Mismatch'):
                     continue
                 d = pd.to_datetime(t.get('received_at'), errors='coerce')
                 qty = float(t.get('quantity_received') or 0)
@@ -1939,8 +1960,8 @@ def _compute_stock_variance(supabase_client=None):
         prev_details = previous['items'].get(item_name)
         opening = prev_details.get('counted_qty', 0) if prev_details else latest_details.get('system_qty', 0)
 
-        check_in = _sum_in_window(check_in_df, item_name, window_start, window_end)
-        check_out = _sum_in_window(check_out_df, item_name, window_start, window_end)
+        check_in = _sum_in_window(check_in_df, check_in_loc_col, item_name, window_start, window_end)
+        check_out = _sum_in_window(check_out_df, check_out_loc_col, item_name, window_start, window_end)
         transfers_out = _transfer_total(item_name, window_start, window_end, 'out')
         transfers_in = _transfer_total(item_name, window_start, window_end, 'in')
 
@@ -1953,7 +1974,7 @@ def _compute_stock_variance(supabase_client=None):
         })
 
     result_df = pd.DataFrame(rows)
-    meta = {'location': LOCATION, 'previous_count': previous['name'], 'previous_date': window_start,
+    meta = {'previous_count': previous['name'], 'previous_date': window_start,
             'latest_count': latest['name'], 'latest_date': window_end}
     return result_df, meta
 
@@ -1964,11 +1985,6 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
         "Opening + Check-In + Transfers In − Check-Out − Transfers Out = Expected. "
         "Physical − Expected = Variance."
     )
-    st.warning(
-        "⚠️ Working assumption: all Check-In/Check-Out and Stock Take data below is "
-        "treated as Main Factory Stores, since neither source records a location yet. "
-        "Confirm this is correct before acting on anything shown here."
-    )
 
     supabase_client = None
     try:
@@ -1977,9 +1993,11 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
     except Exception:
         pass
 
-    result_df, meta = _compute_stock_variance(supabase_client=supabase_client)
+    location = st.selectbox("Location", COMPANY_LOCATIONS, key="variance_location_select")
+
+    result_df, meta = _compute_stock_variance(location, supabase_client=supabase_client)
     if result_df is None:
-        st.info(meta)  # meta holds the "need N more counts" message in this branch
+        st.info(meta)
         return
 
     st.caption(f"Comparing **{meta['previous_count']}** ({meta['previous_date']}) → "
@@ -1987,13 +2005,13 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
 
     flagged = result_df[result_df['Variance'].abs() > 0.01]
     if not flagged.empty:
-        st.error(f"⚠️ {len(flagged)} item(s) show a variance.")
+        st.error(f"⚠️ {len(flagged)} item(s) show a variance at {location}.")
     st.dataframe(result_df, use_container_width=True, hide_index=True)
 
     csv = result_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Variance Report", csv,
-                        file_name=f"stock_variance_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv")       
+                        file_name=f"stock_variance_{location.replace(' ', '_').lower()}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv")    
 
 # ============================================================
 # 🔒 CHECKOUT RECONCILIATION (now also reviews transfers)
@@ -2182,7 +2200,7 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     if transfers_mismatched:
         st.error(f"⚠️ {len(transfers_mismatched)} transfer(s) mismatched — needs investigation.")
 
-    with st.expander(f"🚫 Mismatched ({len(transfers_mismatched)})", expanded=bool(transfers_mismatched)):
+    with st.expander(f"🚫 Mismatched ({len(transfers_mismatched)})"):
         if transfers_mismatched:
             for t in transfers_mismatched:
                 st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
@@ -2296,7 +2314,7 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
     st.caption("Add one row per item — everything you add here ships under one shared reference number.")
     item_options = sorted((ctx.inventory_items or {}).keys())
 
-    with st.form("record_transfer_form"):
+    with st.form("record_transfer_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
             transfer_date = st.date_input("Transfer Date", value=datetime.now().date())

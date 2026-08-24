@@ -1034,15 +1034,35 @@ class UserManager:
             with col3:
                 if st.button("🗑️ Delete User", type="secondary", use_container_width=True):
                     if selected_user != auth.current_user['email']:
-                        if st.button("⚠️ Confirm Delete", type="primary"):
-                            success = self.delete_user(selected_user)
-                            if success:
-                                st.success(f"✅ User {selected_user} deleted")
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to delete user")
+                        st.session_state['_delete_user_target'] = selected_user
                     else:
                         st.warning("⚠️ Cannot delete your own account")
+
+        # Delete confirmation -- persisted in session_state rather than a
+        # button nested inside another button's if-block, which is what
+        # was actually broken above: a nested button only ever renders on
+        # the exact rerun the outer one was clicked, unclicked on that
+        # same rerun -- so clicking it starts a fresh rerun where the
+        # outer button is false again and the whole block disappears
+        # before delete_user() can run. This survives across that rerun.
+        delete_target = st.session_state.get('_delete_user_target')
+        if delete_target:
+            st.markdown("---")
+            st.warning(f"⚠️ Really delete **{delete_target}**? This cannot be undone.")
+            dcol1, dcol2 = st.columns(2)
+            with dcol1:
+                if st.button("⚠️ Confirm Delete", type="primary", key="confirm_delete_user_btn"):
+                    success = self.delete_user(delete_target)
+                    if success:
+                        st.success(f"✅ User {delete_target} deleted")
+                        st.session_state['_delete_user_target'] = None
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to delete user")
+            with dcol2:
+                if st.button("Cancel", key="cancel_delete_user_btn"):
+                    st.session_state['_delete_user_target'] = None
+                    st.rerun()
 
         # 2FA setup flow — below the button row so the QR code / backup
         # codes have room to render properly, not squeezed into a column.

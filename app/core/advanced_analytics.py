@@ -1382,7 +1382,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
         anomaly_help = (
             "A day where demand looked unusual compared to the normal pattern — "
             "could be a spike, drop, outlier, or a shift in the overall trend. "
-            "Expand '🔍 View Anomaly Details' below for what each type means."
+            "Expand ' View Anomaly Details' below for what each type means."
         )
         if anomaly_count > 0:
             st.metric("⚠️ Anomalies Detected", f"{anomaly_count}", "Last 30 days", help=anomaly_help)
@@ -1439,7 +1439,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
 
             if inactive_rows:
                 inactive_df = pd.DataFrame(inactive_rows)
-                with st.expander(f"🔍 View {len(inactive_df)} Inactive Items", expanded=False):
+                with st.expander(f" View {len(inactive_df)} Inactive Items", expanded=False):
                     st.caption(
                         "The item exists in the sheet but was excluded from active "
                         "inventory -- almost always a zero, negative, or blank quantity."
@@ -1461,7 +1461,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
     # ============================================================
     # ANOMALY DETAILS - Show detailed breakdown
     if anomaly_count > 0:
-        with st.expander(f"🔍 View {anomaly_count} Anomaly Details", expanded=False):
+        with st.expander(f"View {anomaly_count} Anomaly Details", expanded=False):
             # Reuse the (cached) anomalies list computed above instead of
             # re-running the Isolation Forest fit a second time.
             try:

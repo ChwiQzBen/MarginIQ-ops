@@ -576,7 +576,7 @@ def active_counts_interface(inventory_items):
         )
     with col2:
         search = st.text_input(
-            "🔍 Search",
+            " Search",
             placeholder="Search by count name or ID...",
             key="count_search"
         )
