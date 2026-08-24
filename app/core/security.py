@@ -450,12 +450,8 @@ class AuthManager:
                 <div style="font-size: 13px; font-weight: 600; color: #2e7d32;">
                     ✅ {user['name']}
                 </div>
-                <div style="font-size: 11px; color: #666;">
-                    #🏷️ {user['role'].title()}
-                </div>
             </div>
             """, unsafe_allow_html=True)
-            
             if st.button("🚪 Logout", use_container_width=True):
                 self.logout()
             return True
