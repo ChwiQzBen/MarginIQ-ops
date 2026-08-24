@@ -416,12 +416,13 @@ def main():
     if auth_check and auth_check.is_authenticated:
         _user = auth_check.current_user
         st.sidebar.markdown(f"✅ **{_user['name']}**")
+        # DEBUG
+        st.sidebar.caption(f"DEBUG: role = '{_user.get('role')}'")
         # Only show role to admins
         if _user.get('role') == 'admin':
             st.sidebar.caption(f"🏷️ {_user['role'].title()}")
     else:
         st.sidebar.markdown("🔴 Logged out")
-
     # ============================================================
     # 🔐 AUTHENTICATION SECTION (Compact)
     # ============================================================
