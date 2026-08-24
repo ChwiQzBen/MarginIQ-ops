@@ -28,6 +28,53 @@ import uuid
 from app.core.visual_inventory import get_sample_inventory_data
 
 
+def _get_supabase_client():
+    try:
+        from app.core.supabase_client import init_supabase
+        return init_supabase()
+    except Exception:
+        return None
+
+
+def load_persisted_stock_takes():
+    """Loads stock_takes/count_sheets from Supabase into session_state,
+    ONLY if session_state is currently empty -- covers a cold start
+    after a restart without clobbering in-progress edits made earlier
+    in this same running session."""
+    if st.session_state.get('stock_takes'):
+        return
+    client = _get_supabase_client()
+    if not client:
+        return
+    try:
+        result = client.table("stock_take_state").select("*").eq("id", 1).execute()
+        if result.data:
+            row = result.data[0]
+            st.session_state.stock_takes = row.get("stock_takes") or {}
+            st.session_state.count_sheets = row.get("count_sheets") or {}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Could not load persisted stock takes: {e}")
+
+
+def _persist_stock_takes():
+    """Write-through save. Best-effort -- a failed save should never
+    interrupt the page render that triggered it."""
+    client = _get_supabase_client()
+    if not client:
+        return
+    try:
+        client.table("stock_take_state").upsert({
+            "id": 1,
+            "stock_takes": st.session_state.get('stock_takes', {}),
+            "count_sheets": st.session_state.get('count_sheets', {}),
+            "updated_at": datetime.now().isoformat(),
+        }).execute()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Could not persist stock takes: {e}")
+
+
 def init_stock_take_session():
     """Initialize stock take session state variables (safely)"""
     if 'stock_takes' not in st.session_state:
@@ -111,7 +158,8 @@ def create_stock_count(inventory_items, count_name, count_type="Physical", wareh
             'pending': len(snapshot)
         }
     }
-    
+    _persist_stock_takes()
+
     return count_id
 
 
@@ -158,7 +206,8 @@ def split_count_into_sheets(count_id, num_sheets=2):
     # Also store as dictionary for easy lookup
     st.session_state.count_sheets.update({s['id']: s for s in sheets})
     count['sheets'] = [s['id'] for s in sheets]
-    
+    _persist_stock_takes()
+
     return sheets
 
 
@@ -168,13 +217,17 @@ def assign_sheet_to_user(sheet_id, user_name):
     """
     if sheet_id in st.session_state.count_sheets:
         st.session_state.count_sheets[sheet_id]['assigned_to'] = user_name
+        _persist_stock_takes()
         return True
     return False
 
 
-def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes=""):
+def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes="", persist=True):
     """
-    Enter count for a specific item (inFlow style)
+    Enter count for a specific item (inFlow style). persist=False lets a
+    caller doing many of these in a batch (the Enter Counts grid's Save
+    All button, below) skip a Supabase round-trip per item and persist
+    once after the whole batch instead.
     """
     if count_id not in st.session_state.stock_takes:
         return False, "Count not found"
@@ -212,7 +265,9 @@ def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes=""):
         count['status'] = 'Ready for Review'
     else:
         count['status'] = 'In Progress'
-    
+
+    if persist:
+        _persist_stock_takes()
     return True, "Count recorded successfully"
 
 
@@ -281,7 +336,8 @@ def complete_and_adjust(count_id):
     count['status'] = 'Completed'
     count['completed'] = datetime.now().strftime('%Y-%m-%d %H:%M')
     count['adjustments'] = adjustments
-    
+    _persist_stock_takes()
+
     return True, f"Count completed with {len(adjustments)} adjustments"
 
 
@@ -382,6 +438,7 @@ def stock_take_interface(inventory_items):
     # keys before this ever renders, but calling this here too makes the
     # module safe to use standalone (it only sets keys that are missing).
     init_stock_take_session()
+    load_persisted_stock_takes()
     
     # Always sync session state with the freshly-passed inventory_items
     # when it has real content. Previously this only wrote on the FIRST
@@ -798,7 +855,9 @@ def view_count_detail(count_id):
 
 def enter_counts_interface(count_id):
     """
-    Interface for entering counts (inFlow style)
+    Interface for entering counts -- a data_editor grid so a count with
+    100+ items is one scrollable table instead of one full-width block
+    per item.
     """
     if count_id not in st.session_state.stock_takes:
         st.error("Count not found")
@@ -832,75 +891,65 @@ def enter_counts_interface(count_id):
     </div>
     """, unsafe_allow_html=True)
     
-    # Progress
     pct = (count['progress']['counted'] / count['progress']['total'] * 100) if count['progress']['total'] > 0 else 0
     st.progress(pct / 100, text=f"{pct:.0f}% Complete")
     
-    # Items to count
     st.markdown("#### Items to Count")
+    st.caption("Edit the Counted column below, then Save All Counts.")
     
-    # Get pending items first
-    items = []
+    rows = []
     for item_name, details in count['items'].items():
-        items.append({
+        rows.append({
             'Item': item_name,
             'System Qty': details['system_qty'],
             'Unit': details['unit'],
+            'Counted': details['counted_qty'] if details['status'] == 'Counted' else details['system_qty'],
+            'Notes': details['notes'],
             'Status': details['status'],
-            'Counted': details['counted_qty'],
-            'Variance': details['variance'],
-            'Notes': details['notes']
         })
     
-    # Sort pending first
-    items.sort(key=lambda x: x['Status'] != 'Pending')
+    rows.sort(key=lambda r: r['Status'] != 'Pending')
+    items_df = pd.DataFrame(rows)
     
-    # Display items with quick entry
-    for item in items:
-        with st.container():
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
-            
-            with col1:
-                st.markdown(f"**{item['Item']}**")
-                st.caption(f"System: {item['System Qty']} {item['Unit']}")
-            
-            with col2:
-                status_icon = "✅" if item['Status'] == 'Counted' else "⏳"
-                st.caption(f"{status_icon} {item['Status']}")
-            
-            with col3:
-                if item['Status'] == 'Counted':
-                    st.caption(f"Counted: {item['Counted']}")
-                    if item['Variance'] != 0:
-                        st.caption(f"Variance: {item['Variance']:+.0f}")
-            
-            with col4:
-                if item['Status'] != 'Counted':
-                    counted_qty = st.number_input(
-                        "Count",
-                        min_value=0.0,
-                        value=float(item['System Qty']),
-                        step=1.0,
-                        key=f"count_{count_id}_{item['Item']}",
-                        label_visibility="collapsed"
-                    )
-                    
-                    if st.button("✓ Save", key=f"save_{count_id}_{item['Item']}", type="primary"):
-                        success, message = enter_count(
-                            count_id, 
-                            item['Item'], 
-                            counted_qty,
-                            notes=item['Notes']
-                        )
-                        if success:
-                            st.success(message)
-                            
-                        else:
-                            st.error(message)
-            
-            st.markdown("---")
+    edited_df = st.data_editor(
+        items_df,
+        use_container_width=True,
+        hide_index=True,
+        height=min(600, 60 + 35 * len(items_df)),
+        column_config={
+            'Item': st.column_config.TextColumn('Item', disabled=True),
+            'System Qty': st.column_config.NumberColumn('System Qty', disabled=True),
+            'Unit': st.column_config.TextColumn('Unit', disabled=True),
+            'Counted': st.column_config.NumberColumn('Counted Qty', min_value=0.0, step=1.0),
+            'Notes': st.column_config.TextColumn('Notes'),
+            'Status': st.column_config.TextColumn('Status', disabled=True),
+        },
+        key=f"enter_counts_editor_{count_id}",
+    )
     
-    # Complete button
+    if st.button("💾 Save All Counts", type="primary"):
+        saved = 0
+        for _, row in edited_df.iterrows():
+            item_name = row['Item']
+            existing = count['items'].get(item_name, {})
+            counted_qty = row['Counted']
+            notes = row['Notes'] or ""
+            already_matches = (
+                existing.get('status') == 'Counted'
+                and existing.get('counted_qty') == counted_qty
+                and existing.get('notes', '') == notes
+            )
+            if not already_matches:
+                success, _ = enter_count(count_id, item_name, counted_qty, notes=notes, persist=False)
+                if success:
+                    saved += 1
+        if saved:
+            _persist_stock_takes()
+            st.success(f"✅ Saved {saved} count(s).")
+            st.rerun()
+        else:
+            st.info("No changes to save.")
+    
     if count['progress']['counted'] >= count['progress']['total']:
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -910,7 +959,6 @@ def enter_counts_interface(count_id):
                 if success:
                     st.success(message)
                     st.balloons()
-                
                 else:
                     st.error(message)
     

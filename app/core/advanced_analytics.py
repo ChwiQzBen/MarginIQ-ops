@@ -94,14 +94,12 @@ class AdvancedAnalytics:
         self._init_anomaly_detector()
         
     def _init_anomaly_detector(self):
-        """Initialize Isolation Forest for anomaly detection"""
-        from sklearn.ensemble import IsolationForest
-        self.anomaly_detector = IsolationForest(
-            contamination=0.05,  # 5% of data considered anomalies
-            random_state=42,
-            n_estimators=200,
-            max_samples='auto'
-        )
+        """No longer used by detect_anomalies() -- see that method's
+        docstring for why IsolationForest's fixed contamination rate was
+        replaced with a genuine z-score threshold. Left as a no-op rather
+        than removed outright in case anything else in this class comes
+        to depend on self.anomaly_detector later."""
+        self.anomaly_detector = None
 
     # ============================================================
     # 1. MULTIVARIATE PREDICTION
@@ -390,80 +388,75 @@ class AdvancedAnalytics:
         self,
         df: pd.DataFrame,
         target_col: str,
-        confidence_threshold: float = 0.90
+        confidence_threshold: float = 0.90,
+        z_threshold: float = 2.5,
     ) -> List[AnomalyResult]:
         """
-        Detect anomalies in time series data
-        
-        Args:
-            df: Data with timestamps
-            target_col: Column to analyze
-            confidence_threshold: Confidence level for anomaly detection
-        
-        Returns:
-            List of AnomalyResult objects
+        Detect anomalies based on genuine statistical deviation (z-score
+        against the series' own mean/std), not a fixed percentage of days.
+        The previous version used IsolationForest with contamination=0.05,
+        which is configured to always flag approximately 5% of whatever
+        data it's given, regardless of whether that data is actually
+        erratic or perfectly calm -- so the anomaly count was largely an
+        artifact of that fixed parameter, not a real signal about the
+        data. z_scores were already being computed here before and simply
+        never used in the actual decision -- this rewrite is what finally
+        uses them.
         """
         results = []
         values = df[target_col].values
         dates = df['Date'].values
-        
-        # 1. Statistical anomaly detection (Z-score)
+
+        if len(values) < 3:
+            return results
+
         mean = np.mean(values)
         std = np.std(values)
+        if std == 0:
+            return results  # perfectly flat series -- nothing is anomalous
+
         z_scores = np.abs((values - mean) / std)
-        
-        # 2. Isolation Forest for outliers
-        X_reshape = values.reshape(-1, 1)
-        self.anomaly_detector.fit(X_reshape)
-        anomaly_scores = self.anomaly_detector.decision_function(X_reshape)
-        predictions = self.anomaly_detector.predict(X_reshape)
-        
-        # 3. Trend/Pattern break detection
-        if len(values) > 30:
-            # Simple change point detection
-            rolling_mean = pd.Series(values).rolling(7).mean()
-            rolling_std = pd.Series(values).rolling(7).std()
-            
-            for i in range(30, len(values)):
-                # Check for pattern breaks
-                if i >= 7:
-                    prev_mean = np.mean(values[i-7:i])
-                    curr_mean = np.mean(values[i:i+7])
-                    if abs(curr_mean - prev_mean) > 2 * std:
-                        # Pattern break detected
-                        results.append(AnomalyResult(
-                            is_anomaly=True,
-                            anomaly_score=float(abs(curr_mean - prev_mean) / std),
-                            anomaly_type='pattern_break',
-                            confidence=0.85,
-                            explanation=f"Pattern break detected at {dates[i]}: Mean changed by {abs(curr_mean - prev_mean):.2f} units"
-                        ))
-        
-        # 4. Spike and drop detection
-        for i in range(1, len(values) - 1):
-            if predictions[i] == -1:  # Anomaly by Isolation Forest
-                # Determine type
-                if values[i] > values[i-1] * 1.5:
-                    anomaly_type = 'spike'
-                    explanation = f"Spike detected: {values[i]:.2f} vs previous {values[i-1]:.2f}"
-                elif values[i] < values[i-1] * 0.5:
-                    anomaly_type = 'drop'
-                    explanation = f"Drop detected: {values[i]:.2f} vs previous {values[i-1]:.2f}"
-                else:
-                    anomaly_type = 'outlier'
-                    explanation = f"Outlier detected: {values[i]:.2f}"
-                
-                confidence = float(1 - anomaly_scores[i])
-                
-                if confidence >= confidence_threshold:
+
+        # Pattern break: week-over-week mean shift
+        if len(values) > 14:
+            for i in range(7, len(values) - 7):
+                prev_mean = np.mean(values[i-7:i])
+                curr_mean = np.mean(values[i:i+7])
+                if abs(curr_mean - prev_mean) > 2 * std:
                     results.append(AnomalyResult(
                         is_anomaly=True,
-                        anomaly_score=float(anomaly_scores[i]),
-                        anomaly_type=anomaly_type,
-                        confidence=confidence,
-                        explanation=explanation
+                        anomaly_score=float(abs(curr_mean - prev_mean) / std),
+                        anomaly_type='pattern_break',
+                        confidence=0.85,
+                        explanation=f"Pattern break detected at {dates[i]}: weekly average changed by {abs(curr_mean - prev_mean):.2f} units"
                     ))
-        
+
+        # Spike / drop / outlier -- gated by z-score, a real statistical
+        # bar, independent of how many days happen to clear it.
+        for i in range(1, len(values) - 1):
+            if z_scores[i] < z_threshold:
+                continue
+
+            if values[i-1] > 0 and values[i] > values[i-1] * 1.5:
+                anomaly_type = 'spike'
+                explanation = f"Spike detected: {values[i]:.2f} vs previous {values[i-1]:.2f}"
+            elif values[i-1] > 0 and values[i] < values[i-1] * 0.5:
+                anomaly_type = 'drop'
+                explanation = f"Drop detected: {values[i]:.2f} vs previous {values[i-1]:.2f}"
+            else:
+                anomaly_type = 'outlier'
+                explanation = f"Outlier detected: {values[i]:.2f} ({z_scores[i]:.1f} standard deviations from the mean)"
+
+            confidence = float(min(0.99, z_scores[i] / (z_threshold * 2)))
+            if confidence >= confidence_threshold - 0.1:
+                results.append(AnomalyResult(
+                    is_anomaly=True,
+                    anomaly_score=float(z_scores[i]),
+                    anomaly_type=anomaly_type,
+                    confidence=confidence,
+                    explanation=explanation
+                ))
+
         return results
 
     # ============================================================
