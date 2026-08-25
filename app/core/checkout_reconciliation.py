@@ -144,12 +144,17 @@ def get_checkouts(status: Optional[str] = None, start_date: Optional[date] = Non
 
 
 def reconcile_checkout(checkout_id: int, reconciled_by: str, verified: bool,
-                        reconciliation_notes: str = "", supabase_client=None) -> None:
+                        reconciliation_notes: str = "", supabase_client=None) -> bool:
     """verified=True  -> status becomes 'Reconciled' (slip number matched
                           the physical dispatch slip, counts as confirmed).
     verified=False -> status becomes 'Blocked' (could not be verified;
                           excluded from confirmed-usage totals until
-                          corrected — this is the actual security gate)."""
+                          corrected — this is the actual security gate).
+
+    Returns True only if a row actually matched checkout_id and was
+    updated. Previously returned None unconditionally -- an update that
+    silently matched zero rows (stale or wrong id) looked identical to a
+    real success to every caller, since there was nothing to check."""
     new_status = "Reconciled" if verified else "Blocked"
     update = {
         "status": new_status, "reconciled_by": reconciled_by,
@@ -158,16 +163,17 @@ def reconcile_checkout(checkout_id: int, reconciled_by: str, verified: bool,
     }
     if supabase_client:
         try:
-            supabase_client.table("stock_checkouts").update(update).eq("id", checkout_id).execute()
-            return
+            result = supabase_client.table("stock_checkouts").update(update).eq("id", checkout_id).execute()
+            return bool(result.data)
         except Exception as e:
             logger.error(f"Supabase reconcile_checkout failed, falling back to SQLite: {e}")
     conn = _sqlite()
-    conn.execute("""UPDATE stock_checkouts SET status = ?, reconciled_by = ?,
+    cursor = conn.execute("""UPDATE stock_checkouts SET status = ?, reconciled_by = ?,
         reconciled_at = ?, reconciliation_notes = ? WHERE id = ?""",
         (new_status, reconciled_by, update["reconciled_at"], reconciliation_notes, checkout_id))
     conn.commit()
     conn.close()
+    return cursor.rowcount > 0
 
 
 def get_confirmed_checkout_total(item_name: Optional[str] = None,

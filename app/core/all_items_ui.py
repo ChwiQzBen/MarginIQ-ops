@@ -1880,6 +1880,7 @@ def _compute_stock_variance(location: str, supabase_client=None):
     previous, latest = completed[-2], completed[-1]
     window_start, window_end = previous.get('completed', ''), latest.get('completed', '')
 
+    _gsheet_ok = True
     try:
         gsheet = GoogleSheetReader()
         if gsheet.authenticate():
@@ -1887,8 +1888,18 @@ def _compute_stock_variance(location: str, supabase_client=None):
             check_out_df = gsheet.get_check_out()
         else:
             check_in_df, check_out_df = pd.DataFrame(), pd.DataFrame()
-    except Exception:
+            _gsheet_ok = False
+    except Exception as e:
+        logger.error(f"Stock Variance: could not reach Google Sheets: {e}")
         check_in_df, check_out_df = pd.DataFrame(), pd.DataFrame()
+        _gsheet_ok = False
+
+    if not _gsheet_ok:
+        return None, (
+            "Could not reach the Check-In/Check-Out data source right now, so "
+            "Check-In and Check-Out figures would read as zero rather than reflect "
+            "reality. Try again once the connection is restored."
+        )
 
     check_in_loc_col = detect_column(check_in_df, LOCATION_KEYWORDS) if not check_in_df.empty else None
     check_out_loc_col = detect_column(check_out_df, LOCATION_KEYWORDS) if not check_out_df.empty else None
@@ -1984,12 +1995,7 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
         "Physical − Expected = Variance."
     )
 
-    supabase_client = None
-    try:
-        from app.core.supabase_client import init_supabase
-        supabase_client = init_supabase()
-    except Exception:
-        pass
+    supabase_client = ctx.supabase_client
 
     location = st.selectbox("Location", COMPANY_LOCATIONS, key="variance_location_select")
 
@@ -2022,12 +2028,7 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
 
     st.markdown("### 🔒 Checkout Reconciliation")
 
-    supabase_client = None
-    try:
-        from app.core.supabase_client import init_supabase
-        supabase_client = init_supabase()
-    except Exception:
-        pass
+    supabase_client = ctx.supabase_client
     init_checkout_reconciliation_storage(supabase_client)
     init_transfer_storage(supabase_client)
 
@@ -2150,19 +2151,25 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                         if not reconciler.strip():
                             st.error("Enter your name before reconciling.")
                         else:
-                            reconcile_checkout(co["id"], reconciler.strip(), verified=True,
-                                                supabase_client=supabase_client)
-                            st.success(f"✅ #{co['id']} reconciled.")
+                            ok = reconcile_checkout(co["id"], reconciler.strip(), verified=True,
+                                                     supabase_client=supabase_client)
+                            if ok:
+                                st.success(f"✅ #{co['id']} reconciled.")
+                            else:
+                                st.error(f"⚠️ Could not reconcile #{co['id']} — the record may no longer exist.")
                             st.rerun()
                 with c3:
                     if st.button("🚫 Could Not Verify — Block", key=f"block_{co['id']}"):
                         if not reconciler.strip():
                             st.error("Enter your name before blocking.")
                         else:
-                            reconcile_checkout(co["id"], reconciler.strip(), verified=False,
-                                                supabase_client=supabase_client)
-                            st.warning(f"🚫 #{co['id']} blocked — excluded from confirmed usage.")
-                            st.rerun()
+                            ok = reconcile_checkout(co["id"], reconciler.strip(), verified=False,
+                                                     supabase_client=supabase_client)
+                            if ok:
+                                st.warning(f"🚫 #{co['id']} blocked — excluded from confirmed usage.")
+                            else:
+                                st.error(f"⚠️ Could not block #{co['id']} — the record may no longer exist.")
+                            
                 st.markdown("---")
 
     with st.expander(f"🚫 Blocked ({len(blocked)}) — need correction or re-verification"):
@@ -2220,13 +2227,16 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                         elif not resolution_notes.strip():
                             st.error("Enter a resolution note before submitting.")
                         else:
-                            resolve_transfer_mismatch(
+                            ok = resolve_transfer_mismatch(
                                 transfer_id=t["id"], resolved_by=resolver.strip(),
                                 resolution_notes=resolution_notes.strip(),
                                 supabase_client=supabase_client,
                             )
-                            st.success(f"✅ #{t['id']} marked resolved.")
-                            st.rerun()
+                            if ok:
+                                st.success(f"✅ #{t['id']} marked resolved.")
+                            else:
+                                st.error(f"⚠️ Could not mark #{t['id']} resolved — the record may no longer exist.")
+                            
                 st.markdown("---")
         else:
             st.caption("None.")
@@ -2313,12 +2323,7 @@ def _location_picker(label: str, key: str) -> str:
 def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
     st.markdown("### 🔁 Transfers")
 
-    supabase_client = None
-    try:
-        from app.core.supabase_client import init_supabase
-        supabase_client = init_supabase()
-    except Exception:
-        pass
+    supabase_client = ctx.supabase_client
     init_transfer_storage(supabase_client)
 
     # Persistent confirmation banner -- survives the st.rerun() below instead
@@ -2431,13 +2436,22 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
                     if not received_by.strip():
                         st.error("Enter your name before submitting.")
                     else:
+                        failed_items = []
                         for t in items_in_ref:
-                            receive_transfer_item(
+                            result = receive_transfer_item(
                                 transfer_id=t["id"], received_by=received_by.strip(),
                                 quantity_received=received_qtys[t["id"]],
                                 condition_notes=condition_notes, supabase_client=supabase_client,
                             )
-                        st.success(f"✅ {ref} received.")
-                        st.rerun()
+                            if result.get("notes") == "Transfer record not found.":
+                                failed_items.append(t["item_name"])
+                        if failed_items:
+                            st.error(
+                                f"⚠️ Could not record receipt for: {', '.join(failed_items)} "
+                                f"— the record may have already been removed."
+                            )
+                        else:
+                            st.success(f"✅ {ref} received.")
+                        
 
                 st.markdown("---")

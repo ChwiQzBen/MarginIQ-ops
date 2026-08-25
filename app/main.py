@@ -1956,6 +1956,17 @@ def main():
         analytics = AdvancedAnalytics()
 
         # Create context and render
+        _supabase_client = init_supabase()
+        if _supabase_client is None and not st.session_state.get('_supabase_warned'):
+            st.warning(
+                "⚠️ Could not connect to the database — data entered this session "
+                "(transfers, checkouts, stock takes) will NOT be saved permanently and "
+                "will be lost if the app restarts. Contact an administrator."
+            )
+            st.session_state['_supabase_warned'] = True
+        elif _supabase_client is not None:
+            st.session_state.pop('_supabase_warned', None)
+
         all_items_ctx = AllItemsContext(
             inventory_items=all_items_only,
             df=df,
@@ -1964,7 +1975,7 @@ def main():
             constants=constants,
             kpis=kpis,
             inventory_tracker=inventory_tracker,
-            supabase_client=init_supabase(),
+            supabase_client=_supabase_client,
         )
         render_all_items_mode(all_items_ctx, has_permission=has_permission)
 
