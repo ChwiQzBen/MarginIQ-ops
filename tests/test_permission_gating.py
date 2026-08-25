@@ -71,6 +71,33 @@ render_all_items_mode(ctx, has_permission=has_permission)
     return script
 
 
+def _write_all_items_harness_multi(tmp_path, allowed_permissions: list):
+    """Same as _write_all_items_harness, but allows a SET of permissions
+    rather than exactly one -- needed for Checkout Reconciliation, which
+    is gated twice: RECONCILE_CHECKOUTS decides whether the tab shows up
+    at all; REVIEW_RECONCILIATION, checked separately inside the tab
+    function itself, decides whether the review/oversight section below
+    the recording form renders. A real role always grants permissions
+    together (e.g. 'manager' has both) -- the single-permission harness
+    above can't reach that second gate, since a user who only passes
+    REVIEW_RECONCILIATION would never see the tab in the first place to
+    get inside it."""
+    script = tmp_path / "harness.py"
+    perms_repr = repr(set(allowed_permissions))
+    script.write_text(f"""
+from app.core.all_items_ui import render_all_items_mode, AllItemsContext
+
+_ALLOWED = {perms_repr}
+
+def has_permission(perm):
+    return perm in _ALLOWED
+
+ctx = AllItemsContext()
+render_all_items_mode(ctx, has_permission=has_permission)
+""")
+    return script
+
+
 def test_commercial_mode_shows_warning_with_no_permissions(tmp_path):
     script = _write_harness(tmp_path, "app.core.commercial_ui", "render_commercial_mode", None)
     at = _run_app(script)
@@ -102,3 +129,79 @@ def test_cheese_production_mode_shows_warning_with_no_permissions(tmp_path):
     at = _run_app(script)
     assert not at.exception, f"render_cheese_production_mode raised: {at.exception}"
     assert any("isn't available for your current role" in w.value for w in at.warning)
+
+
+# ============================================================
+# New coverage: Transfers, Stock Variance, and Checkout
+# Reconciliation's two-tier gate -- all added the same night.
+# ============================================================
+
+def test_all_items_mode_transfers_tab_gated_correctly(tmp_path):
+    """Also a regression check against the 'blind check' language leak
+    fixed earlier tonight: the tab was rewritten to give the receiver
+    zero awareness that a comparison is happening at all, so nothing
+    rendered here should mention 'blind' in any form."""
+    script = _write_all_items_harness(tmp_path, "record_transfers")
+    at = _run_app(script)
+    assert not at.exception, f"render_all_items_mode raised: {at.exception}"
+    assert len(at.radio) == 1, "exactly one tab selector should render"
+    assert at.radio[0].options == ["🔁 Transfers"], (
+        f"only the permitted tab should be visible, got {at.radio[0].options}"
+    )
+    all_text = " ".join(
+        el.value for group in (at.markdown, at.caption) for el in group if isinstance(el.value, str)
+    )
+    assert "blind" not in all_text.lower(), (
+        "Transfers tab should never mention 'blind' -- the receiver must not know "
+        "a comparison is happening at all, not just be blind to the expected answer"
+    )
+
+
+def test_all_items_mode_stock_variance_tab_gated_correctly(tmp_path):
+    script = _write_all_items_harness(tmp_path, "review_reconciliation")
+    at = _run_app(script)
+    assert not at.exception, f"render_all_items_mode raised: {at.exception}"
+    assert len(at.radio) == 1, "exactly one tab selector should render"
+    assert at.radio[0].options == ["📊 Stock Variance"], (
+        f"only the permitted tab should be visible, got {at.radio[0].options}"
+    )
+
+
+def test_stock_variance_reports_insufficient_data_with_no_stock_takes(tmp_path):
+    """With a fresh session (no completed Stock Takes at all), the report
+    should explain what's missing rather than error or silently show
+    nothing -- this exercises the len(completed) < 2 early-return path in
+    _compute_stock_variance without ever reaching the GoogleSheetReader
+    call further down, since that path returns before touching it."""
+    script = _write_all_items_harness(tmp_path, "review_reconciliation")
+    at = _run_app(script)
+    assert not at.exception, f"render_all_items_mode raised: {at.exception}"
+    all_info = " ".join(el.value for el in at.info if isinstance(el.value, str))
+    assert "completed Stock Take" in all_info, (
+        f"expected an explanation of the missing-data precondition, got info blocks: {all_info!r}"
+    )
+
+
+def test_checkout_reconciliation_hides_review_section_without_review_permission(tmp_path):
+    """Two-tier gating: RECONCILE_CHECKOUTS alone should show the
+    recording form but NOT the Mismatched/Matched/Resolved review
+    section -- that second gate is REVIEW_RECONCILIATION, checked inside
+    the tab function itself, independent of tab-level visibility."""
+    script = _write_all_items_harness_multi(tmp_path, ["reconcile_checkouts"])
+    at = _run_app(script)
+    assert not at.exception, f"render_all_items_mode raised: {at.exception}"
+    all_markdown = " ".join(el.value for el in at.markdown if isinstance(el.value, str))
+    assert "Record a Check-Out" in all_markdown, "the recording form should always render"
+    assert "Transfers Awaiting Reconciliation" not in all_markdown, (
+        "the review section should NOT render without REVIEW_RECONCILIATION"
+    )
+
+
+def test_checkout_reconciliation_shows_review_section_with_review_permission(tmp_path):
+    script = _write_all_items_harness_multi(tmp_path, ["reconcile_checkouts", "review_reconciliation"])
+    at = _run_app(script)
+    assert not at.exception, f"render_all_items_mode raised: {at.exception}"
+    all_markdown = " ".join(el.value for el in at.markdown if isinstance(el.value, str))
+    assert "Transfers Awaiting Reconciliation" in all_markdown, (
+        "the review section should render with both permissions granted, as a real role would have"
+    )
