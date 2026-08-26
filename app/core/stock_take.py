@@ -24,8 +24,11 @@ from datetime import datetime
 import streamlit as st
 import pandas as pd
 import uuid
+import logging
 
 from app.core.visual_inventory import get_sample_inventory_data
+
+logger = logging.getLogger(__name__)
 
 
 def _get_supabase_client():
@@ -36,14 +39,28 @@ def _get_supabase_client():
         return None
 
 
-def load_persisted_stock_takes():
+def _get_team_members(supabase_client=None):
+    """Real user names from the app's actual user list, not hardcoded
+    placeholders -- was previously a fixed list of five made-up names
+    (John Doe, Jane Smith, etc.) that never matched anyone real."""
+    try:
+        from core.advanced_security import UserManager
+        users = UserManager(supabase_client=supabase_client).get_users()
+        names = sorted({(u.get('name') or email) for email, u in users.items()})
+        return ["Unassigned"] + names
+    except Exception as e:
+        logger.error(f"Could not load team members: {e}")
+        return ["Unassigned"]
+
+
+def load_persisted_stock_takes(supabase_client=None):
     """Loads stock_takes/count_sheets from Supabase into session_state,
     ONLY if session_state is currently empty -- covers a cold start
     after a restart without clobbering in-progress edits made earlier
     in this same running session."""
     if st.session_state.get('stock_takes'):
         return
-    client = _get_supabase_client()
+    client = supabase_client or _get_supabase_client()
     if not client:
         return
     try:
@@ -53,15 +70,29 @@ def load_persisted_stock_takes():
             st.session_state.stock_takes = row.get("stock_takes") or {}
             st.session_state.count_sheets = row.get("count_sheets") or {}
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Could not load persisted stock takes: {e}")
+        logger.error(f"Could not load persisted stock takes: {e}")
+        st.warning(
+            "⚠️ Could not load previous stock take history right now — starting with "
+            "an empty view. If counts you expect to see don't reappear once this "
+            "reconnects, they may not have saved — check with whoever ran them."
+        )
 
 
-def _persist_stock_takes():
-    """Write-through save. Best-effort -- a failed save should never
-    interrupt the page render that triggered it."""
-    client = _get_supabase_client()
+def _persist_stock_takes(supabase_client=None):
+    """Write-through save. A failed save now shows a visible one-time
+    warning instead of only logging server-side -- this exact function
+    was written to stop stock takes from silently vanishing, and until
+    now it had the identical silent-failure pattern itself: every count/
+    assign/enter/complete action could fail to save with zero on-screen
+    indication."""
+    client = supabase_client or _get_supabase_client()
     if not client:
+        if not st.session_state.get('_stock_take_save_warned'):
+            st.warning(
+                "⚠️ No database connection — this change will NOT be saved permanently "
+                "and will be lost if the app restarts."
+            )
+            st.session_state['_stock_take_save_warned'] = True
         return
     try:
         client.table("stock_take_state").upsert({
@@ -70,9 +101,15 @@ def _persist_stock_takes():
             "count_sheets": st.session_state.get('count_sheets', {}),
             "updated_at": datetime.now().isoformat(),
         }).execute()
+        st.session_state.pop('_stock_take_save_warned', None)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Could not persist stock takes: {e}")
+        logger.error(f"Could not persist stock takes: {e}")
+        if not st.session_state.get('_stock_take_save_warned'):
+            st.warning(
+                "⚠️ Could not save this change — database error. It will be lost if "
+                "the app restarts."
+            )
+            st.session_state['_stock_take_save_warned'] = True
 
 
 def init_stock_take_session():
@@ -91,6 +128,8 @@ def init_stock_take_session():
         st.session_state.stock_take_selected_menu = "📊 Dashboard"
     if 'stock_take_inventory' not in st.session_state:
         st.session_state.stock_take_inventory = {}
+    if 'stock_take_action' not in st.session_state:
+        st.session_state.stock_take_action = None
 
 
 def generate_count_id():
@@ -121,7 +160,7 @@ def get_progress_color(progress):
         return '#dc3545'
 
 
-def create_stock_count(inventory_items, count_name, count_type="Physical", warehouse="All"):
+def create_stock_count(inventory_items, count_name, count_type="Physical", warehouse="All", supabase_client=None):
     """
     Create a new stock count (like inFlow's stock count creation)
     """
@@ -158,12 +197,12 @@ def create_stock_count(inventory_items, count_name, count_type="Physical", wareh
             'pending': len(snapshot)
         }
     }
-    _persist_stock_takes()
+    _persist_stock_takes(supabase_client)
 
     return count_id
 
 
-def split_count_into_sheets(count_id, num_sheets=2):
+def split_count_into_sheets(count_id, num_sheets=2, supabase_client=None):
     """
     Split a stock count into multiple sheets (inFlow feature)
     """
@@ -206,28 +245,27 @@ def split_count_into_sheets(count_id, num_sheets=2):
     # Also store as dictionary for easy lookup
     st.session_state.count_sheets.update({s['id']: s for s in sheets})
     count['sheets'] = [s['id'] for s in sheets]
-    _persist_stock_takes()
+    _persist_stock_takes(supabase_client)
 
     return sheets
 
 
-def assign_sheet_to_user(sheet_id, user_name):
+def assign_sheet_to_user(sheet_id, user_name, supabase_client=None):
     """
     Assign a count sheet to a team member (inFlow feature)
     """
     if sheet_id in st.session_state.count_sheets:
         st.session_state.count_sheets[sheet_id]['assigned_to'] = user_name
-        _persist_stock_takes()
+        _persist_stock_takes(supabase_client)
         return True
     return False
 
 
-def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes="", persist=True):
+def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes="", persist=True, supabase_client=None):
     """
     Enter count for a specific item (inFlow style). persist=False lets a
-    caller doing many of these in a batch (the Enter Counts grid's Save
-    All button, below) skip a Supabase round-trip per item and persist
-    once after the whole batch instead.
+    caller doing many of these in a batch skip a Supabase round-trip per
+    item and persist once after the whole batch instead.
     """
     if count_id not in st.session_state.stock_takes:
         return False, "Count not found"
@@ -267,7 +305,7 @@ def enter_count(count_id, item_name, counted_qty, sheet_id=None, notes="", persi
         count['status'] = 'In Progress'
 
     if persist:
-        _persist_stock_takes()
+        _persist_stock_takes(supabase_client)
     return True, "Count recorded successfully"
 
 
@@ -307,7 +345,7 @@ def get_count_summary(count_id):
     }
 
 
-def complete_and_adjust(count_id):
+def complete_and_adjust(count_id, supabase_client=None):
     """
     Complete the count and adjust inventory (inFlow's "Complete & Adjust" feature)
     """
@@ -336,7 +374,7 @@ def complete_and_adjust(count_id):
     count['status'] = 'Completed'
     count['completed'] = datetime.now().strftime('%Y-%m-%d %H:%M')
     count['adjustments'] = adjustments
-    _persist_stock_takes()
+    _persist_stock_takes(supabase_client)
 
     return True, f"Count completed with {len(adjustments)} adjustments"
 
@@ -421,6 +459,7 @@ def stock_take_dashboard():
             recent_data.append({
                 'ID': count['id'],
                 'Name': count['name'],
+                'Location': count.get('warehouse', 'Unknown'),
                 'Status': count['status'],
                 'Progress': f"{count['progress']['counted']}/{count['progress']['total']}",
                 'Created': count['created']
@@ -430,7 +469,7 @@ def stock_take_dashboard():
         st.info("No stock counts created yet. Create your first count!")
 
 
-def stock_take_interface(inventory_items):
+def stock_take_interface(inventory_items, supabase_client=None):
     """
     Main stock take interface (inFlow style)
     """
@@ -438,7 +477,7 @@ def stock_take_interface(inventory_items):
     # keys before this ever renders, but calling this here too makes the
     # module safe to use standalone (it only sets keys that are missing).
     init_stock_take_session()
-    load_persisted_stock_takes()
+    load_persisted_stock_takes(supabase_client)
     
     # Always sync session state with the freshly-passed inventory_items
     # when it has real content. Previously this only wrote on the FIRST
@@ -460,14 +499,14 @@ def stock_take_interface(inventory_items):
     if selected_menu == "📊 Dashboard":
         stock_take_dashboard()
     elif selected_menu == "📝 New Count":
-        new_count_form(st.session_state.stock_take_inventory)
+        new_count_form(st.session_state.stock_take_inventory, supabase_client=supabase_client)
     elif selected_menu == "📋 Active Counts":
-        active_counts_interface(st.session_state.stock_take_inventory)
+        active_counts_interface(st.session_state.stock_take_inventory, supabase_client=supabase_client)
     elif selected_menu == "📜 History":
         count_history_interface()
 
 
-def new_count_form(inventory_items):
+def new_count_form(inventory_items, supabase_client=None):
     """
     Form to create a new stock count (inFlow style)
     """
@@ -578,22 +617,28 @@ def new_count_form(inventory_items):
                     {item: inventory_items[item] for item in selected_items if item in inventory_items},
                     count_name,
                     count_type,
-                    warehouse
+                    warehouse,
+                    supabase_client=supabase_client,
                 )
                 
                 # Split into sheets
                 if num_sheets > 1:
-                    sheets = split_count_into_sheets(count_id, num_sheets)
-                    st.success(f"✅ Count '{count_name}' created with {len(sheets)} sheets!")
+                    sheets = split_count_into_sheets(count_id, num_sheets, supabase_client=supabase_client)
+                    st.success(f"✅ Count '{count_name}' created with {len(sheets)} sheets! (Count ID: {count_id})")
                 else:
-                    st.success(f"✅ Count '{count_name}' created successfully!")
+                    st.success(f"✅ Count '{count_name}' created successfully! (Count ID: {count_id})")
                 
                 st.session_state.active_count_id = count_id
-                st.session_state.stock_take_menu = "📋 Active Counts"
-                st.info(f"Count ID: {count_id} | Items: {len(selected_items)}")
+                # NOTE: this key is stock_take_SELECTED_menu -- the sidebar's
+                # actual dispatch key. Every "navigate to Active Counts"
+                # attempt in this file previously set the similarly-named
+                # but entirely unread stock_take_menu instead, which is why
+                # none of them actually navigated anywhere.
+                st.session_state.stock_take_selected_menu = "📋 Active Counts"
+                st.rerun()
 
 
-def active_counts_interface(inventory_items):
+def active_counts_interface(inventory_items, supabase_client=None):
     """
     Interface for active counts (inFlow style)
     """
@@ -633,7 +678,7 @@ def active_counts_interface(inventory_items):
         )
     with col2:
         search = st.text_input(
-            " Search",
+            "🔍 Search",
             placeholder="Search by count name or ID...",
             key="count_search"
         )
@@ -665,7 +710,10 @@ def active_counts_interface(inventory_items):
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <div style="font-weight: 600; font-size: 16px;">{count['name']}</div>
-                        <div style="font-size: 12px; color: #888;">{count['id']} | {count['type']} | Created: {count['created']}</div>
+                        <div style="font-size: 12px; color: #888;">
+                            📍 {count.get('warehouse', 'Unknown')} | {count['type']} | Created: {count['created']}
+                        </div>
+                        <div style="font-size: 10px; color: #aaa; margin-top: 2px;">{count['id']}</div>
                     </div>
                     <div>
                         <span style="
@@ -706,36 +754,57 @@ def active_counts_interface(inventory_items):
             </div>
             """, unsafe_allow_html=True)
             
-            # Action buttons
+            # Action buttons -- these only SET which detail view to show;
+            # they no longer RENDER it from inside their own narrow
+            # column. See the block below, outside this columns() row.
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 if st.button("📊 View", key=f"view_{count['id']}", use_container_width=True):
                     st.session_state.active_count_id = count['id']
-                    view_count_detail(count['id'])
+                    st.session_state.stock_take_action = 'view'
             
-            if count['status'] not in ['Completed', 'Ready for Review']:
-                with col2:
+            with col2:
+                if count['status'] not in ['Completed', 'Ready for Review']:
                     if st.button("📝 Enter Counts", key=f"enter_{count['id']}", use_container_width=True, type="primary"):
                         st.session_state.active_count_id = count['id']
-                        enter_counts_interface(count['id'])
+                        st.session_state.stock_take_action = 'enter'
             
-            if count['status'] == 'Ready for Review':
-                with col3:
+            with col3:
+                if count['status'] == 'Ready for Review':
                     if st.button("✅ Complete & Adjust", key=f"complete_{count['id']}", use_container_width=True, type="primary"):
-                        success, message = complete_and_adjust(count['id'])
+                        success, message = complete_and_adjust(count['id'], supabase_client=supabase_client)
                         if success:
                             st.success(message)
                             st.balloons()
-                        
                         else:
                             st.error(message)
             
             with col4:
                 if count['status'] != 'Completed':
                     if st.button("👥 Assign Sheets", key=f"assign_{count['id']}", use_container_width=True):
-                        assign_sheets_interface(count['id'])
-            
+                        st.session_state.active_count_id = count['id']
+                        st.session_state.stock_take_action = 'assign'
+
+            # Rendered full-width, OUTSIDE the button columns above --
+            # previously view_count_detail / enter_counts_interface /
+            # assign_sheets_interface were each called from directly
+            # inside their own quarter-width st.columns() cell, which
+            # squeezed everything inside them (including their own
+            # nested st.columns() calls) into a sliver of the page. This
+            # was the actual cause of the "squeezed, all vertical" look
+            # on all three screens -- not any individual layout choice
+            # inside those functions.
+            if st.session_state.get('active_count_id') == count['id'] and st.session_state.get('stock_take_action'):
+                st.markdown("---")
+                action = st.session_state.stock_take_action
+                if action == 'view':
+                    view_count_detail(count['id'])
+                elif action == 'enter':
+                    enter_counts_interface(count['id'], supabase_client=supabase_client)
+                elif action == 'assign':
+                    assign_sheets_interface(count['id'], supabase_client=supabase_client)
+
             st.markdown("---")
 
 
@@ -762,7 +831,7 @@ def view_count_detail(count_id):
             <div>
                 <div style="font-size: 18px; font-weight: 600;">{count['name']}</div>
                 <div style="font-size: 13px; color: #888;">
-                    {count['id']} | {count['type']} | {count['warehouse']} | Created: {count['created']}
+                    📍 {count['warehouse']} | {count['type']} | Created: {count['created']}
                 </div>
             </div>
             <div>
@@ -849,15 +918,17 @@ def view_count_detail(count_id):
         hide_index=True
     )
     
-    if st.button("← Back to Counts"):
-        st.session_state.stock_take_menu = "📋 Active Counts"
-        
+    if st.button("← Back to Counts", key=f"back_view_{count_id}"):
+        st.session_state.stock_take_action = None
+        st.rerun()
 
-def enter_counts_interface(count_id):
+
+def enter_counts_interface(count_id, supabase_client=None):
     """
-    Interface for entering counts -- a data_editor grid so a count with
-    100+ items is one scrollable table instead of one full-width block
-    per item.
+    Interface for entering counts (inFlow style) -- one row per item with
+    its own Save button. Rendered full-width now (see
+    active_counts_interface's dispatch), which was the actual fix for
+    "squeezed vertically", not any change to this layout itself.
     """
     if count_id not in st.session_state.stock_takes:
         st.error("Count not found")
@@ -886,87 +957,98 @@ def enter_counts_interface(count_id):
             📝 Enter Counts - {count['name']}
         </div>
         <div style="color: #888; font-size: 13px;">
-            Count ID: {count_id} | Progress: {count['progress']['counted']}/{count['progress']['total']}
+            📍 {count['warehouse']} | Progress: {count['progress']['counted']}/{count['progress']['total']}
         </div>
     </div>
     """, unsafe_allow_html=True)
     
+    # Progress
     pct = (count['progress']['counted'] / count['progress']['total'] * 100) if count['progress']['total'] > 0 else 0
     st.progress(pct / 100, text=f"{pct:.0f}% Complete")
     
+    # Items to count
     st.markdown("#### Items to Count")
-    st.caption("Edit the Counted column below, then Save All Counts.")
     
-    rows = []
+    # Get pending items first
+    items = []
     for item_name, details in count['items'].items():
-        rows.append({
+        items.append({
             'Item': item_name,
             'System Qty': details['system_qty'],
             'Unit': details['unit'],
-            'Counted': details['counted_qty'] if details['status'] == 'Counted' else details['system_qty'],
-            'Notes': details['notes'],
             'Status': details['status'],
+            'Counted': details['counted_qty'],
+            'Variance': details['variance'],
+            'Notes': details['notes']
         })
     
-    rows.sort(key=lambda r: r['Status'] != 'Pending')
-    items_df = pd.DataFrame(rows)
+    # Sort pending first
+    items.sort(key=lambda x: x['Status'] != 'Pending')
     
-    edited_df = st.data_editor(
-        items_df,
-        use_container_width=True,
-        hide_index=True,
-        height=min(600, 60 + 35 * len(items_df)),
-        column_config={
-            'Item': st.column_config.TextColumn('Item', disabled=True),
-            'System Qty': st.column_config.NumberColumn('System Qty', disabled=True),
-            'Unit': st.column_config.TextColumn('Unit', disabled=True),
-            'Counted': st.column_config.NumberColumn('Counted Qty', min_value=0.0, step=1.0),
-            'Notes': st.column_config.TextColumn('Notes'),
-            'Status': st.column_config.TextColumn('Status', disabled=True),
-        },
-        key=f"enter_counts_editor_{count_id}",
-    )
+    # Display items with quick entry
+    for item in items:
+        with st.container():
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
+            
+            with col1:
+                st.markdown(f"**{item['Item']}**")
+                st.caption(f"System: {item['System Qty']} {item['Unit']}")
+            
+            with col2:
+                status_icon = "✅" if item['Status'] == 'Counted' else "⏳"
+                st.caption(f"{status_icon} {item['Status']}")
+            
+            with col3:
+                if item['Status'] == 'Counted':
+                    st.caption(f"Counted: {item['Counted']}")
+                    if item['Variance'] != 0:
+                        st.caption(f"Variance: {item['Variance']:+.0f}")
+            
+            with col4:
+                if item['Status'] != 'Counted':
+                    counted_qty = st.number_input(
+                        "Count",
+                        min_value=0.0,
+                        value=float(item['System Qty']),
+                        step=1.0,
+                        key=f"count_{count_id}_{item['Item']}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    if st.button("✓ Save", key=f"save_{count_id}_{item['Item']}", type="primary"):
+                        success, message = enter_count(
+                            count_id, 
+                            item['Item'], 
+                            counted_qty,
+                            notes=item['Notes'],
+                            supabase_client=supabase_client,
+                        )
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+            
+            st.markdown("---")
     
-    if st.button("💾 Save All Counts", type="primary"):
-        saved = 0
-        for _, row in edited_df.iterrows():
-            item_name = row['Item']
-            existing = count['items'].get(item_name, {})
-            counted_qty = row['Counted']
-            notes = row['Notes'] or ""
-            already_matches = (
-                existing.get('status') == 'Counted'
-                and existing.get('counted_qty') == counted_qty
-                and existing.get('notes', '') == notes
-            )
-            if not already_matches:
-                success, _ = enter_count(count_id, item_name, counted_qty, notes=notes, persist=False)
-                if success:
-                    saved += 1
-        if saved:
-            _persist_stock_takes()
-            st.success(f"✅ Saved {saved} count(s).")
-            st.rerun()
-        else:
-            st.info("No changes to save.")
-    
+    # Complete button
     if count['progress']['counted'] >= count['progress']['total']:
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("✅ Complete & Adjust", type="primary", use_container_width=True):
-                success, message = complete_and_adjust(count_id)
+                success, message = complete_and_adjust(count_id, supabase_client=supabase_client)
                 if success:
                     st.success(message)
                     st.balloons()
                 else:
                     st.error(message)
     
-    if st.button("← Back to Counts"):
-        st.session_state.stock_take_menu = "📋 Active Counts"
+    if st.button("← Back to Counts", key=f"back_enter_{count_id}"):
+        st.session_state.stock_take_action = None
+        st.rerun()
         
 
-def assign_sheets_interface(count_id):
+def assign_sheets_interface(count_id, supabase_client=None):
     """
     Interface for assigning sheets to team members (inFlow feature)
     """
@@ -996,8 +1078,7 @@ def assign_sheets_interface(count_id):
         st.info("No sheets to assign. Create sheets first.")
         return
     
-    # Team members list
-    team_members = ["Unassigned", "John Doe", "Jane Smith", "Mike Johnson", "Sarah Wilson", "David Brown"]
+    team_members = _get_team_members(supabase_client)
     
     sheet_ids = [sid for sid in count['sheets'] if st.session_state.count_sheets.get(sid)]
     cols = st.columns(3)
@@ -1016,14 +1097,15 @@ def assign_sheets_interface(count_id):
                 label_visibility="collapsed"
             )
             if selected_user != current_assign and selected_user != "Unassigned":
-                if assign_sheet_to_user(sheet_id, selected_user):
+                if assign_sheet_to_user(sheet_id, selected_user, supabase_client=supabase_client):
                     st.success(f"✅ Assigned to {selected_user}")
 
             st.caption(f"Status: {sheet.get('status', 'Pending')}")
             st.markdown("---")
     
-    if st.button("← Back"):
-        st.session_state.stock_take_menu = "📋 Active Counts"
+    if st.button("← Back", key=f"back_assign_{count_id}"):
+        st.session_state.stock_take_action = None
+        st.rerun()
         
 
 def count_history_interface():

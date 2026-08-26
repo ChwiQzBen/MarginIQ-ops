@@ -1009,7 +1009,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
         """, unsafe_allow_html=True)
 
         if ctx.inventory_items:
-            stock_take_interface(ctx.inventory_items)
+            stock_take_interface(ctx.inventory_items, supabase_client=ctx.supabase_client)
         else:
             st.warning("⚠️ No inventory data available yet.")
             st.info("Go to the 📦 Inventory tab and refresh to load data.")

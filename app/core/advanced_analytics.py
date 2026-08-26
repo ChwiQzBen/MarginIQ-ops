@@ -27,6 +27,9 @@ from datetime import datetime, timedelta
 import json
 import pickle
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # DATA CLASSES FOR ADVANCED ANALYTICS
@@ -1343,12 +1346,15 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
 
     anomaly_count = 0
     anomalies = []
+    anomaly_detection_failed = False
     if df is not None and not df.empty and len(df) >= 5:
         try:
             anomalies = _cached_detect_anomalies(analytics, df, 'Order_Quantity_kg', 0.90)
             anomaly_count = len(anomalies)
-        except:
+        except Exception as e:
             anomaly_count = 0
+            anomaly_detection_failed = True
+            logger.error(f"Anomaly detection failed: {e}")
     
     # ============================================================
     # DISPLAY METRICS
@@ -1371,16 +1377,18 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
     with col2:
         st.metric("🎯 Pattern Types", "5", "Stable, Seasonal, Trending, Volatile, Mixed")
 
-    with col3:
-        anomaly_help = (
-            "A day where demand looked unusual compared to the normal pattern — "
-            "could be a spike, drop, outlier, or a shift in the overall trend. "
-            "Expand ' View Anomaly Details' below for what each type means."
-        )
-        if anomaly_count > 0:
-            st.metric("⚠️ Anomalies Detected", f"{anomaly_count}", "Last 30 days", help=anomaly_help)
-        else:
-            st.metric("⚠️ Anomalies Detected", "0", "No anomalies", help=anomaly_help)
+        with col3:
+            anomaly_help = (
+                "A day where demand looked unusual compared to the normal pattern — "
+                "could be a spike, drop, outlier, or a shift in the overall trend. "
+                "Expand ' View Anomaly Details' below for what each type means."
+            )
+            if anomaly_detection_failed:
+                st.metric("⚠️ Anomalies Detected", "—", "Detection failed", help=anomaly_help)
+            elif anomaly_count > 0:
+                st.metric("⚠️ Anomalies Detected", f"{anomaly_count}", "Last 30 days", help=anomaly_help)
+            else:
+                st.metric("⚠️ Anomalies Detected", "0", "No anomalies", help=anomaly_help)
     
     with col4:
         # Always surface the real accuracy_message computed above (e.g.
