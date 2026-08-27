@@ -102,8 +102,8 @@ from app.core.checkout_reconciliation import (
     init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
 )
 from app.core.transfer_reconciliation import (
-    init_transfer_storage, record_transfer_batch, get_transfers, receive_transfer_item,
-    resolve_transfer_mismatch,
+    init_transfer_storage, record_transfer_batch, get_transfers, get_goods_received_notes,
+    get_pending_transfer_lines, create_grn, resolve_grn_mismatch,
 )
 from app.core.inventory_cache import save_snapshot, load_snapshot
 
@@ -2038,9 +2038,11 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     blocked = [c for c in all_checkouts if c["status"] == "Blocked"]
 
     all_transfers = get_transfers(supabase_client=supabase_client)
-    transfers_matched = [t for t in all_transfers if t["status"] == "Received-Matched"]
-    transfers_mismatched = [t for t in all_transfers if t["status"] == "Received-Mismatch"]
-    transfers_resolved = [t for t in all_transfers if t["status"] == "Resolved"]
+    transfers_by_id = {t["id"]: t for t in all_transfers}
+    all_grns = get_goods_received_notes(supabase_client=supabase_client)
+    grns_matched = [g for g in all_grns if g["receiving_status"] == "Matched"]
+    grns_mismatched = [g for g in all_grns if g["receiving_status"] == "Mismatch"]
+    grns_resolved = [g for g in all_grns if g["receiving_status"] == "Resolved"]
 
     st.markdown("#### 📝 Record a Check-Out")
     item_options = sorted((ctx.inventory_items or {}).keys())
@@ -2123,9 +2125,9 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     m1.metric("⏳ Pending", len(pending))
     m2.metric("✅ Reconciled", len(reconciled))
     m3.metric("🚫 Blocked", len(blocked))
-    m4.metric("↔️ Transfers Matched", len(transfers_matched))
-    m5.metric("↔️ Transfers Mismatched", len(transfers_mismatched))
-    m6.metric("↔️ Transfers Resolved", len(transfers_resolved))
+    m4.metric("↔️ GRNs Matched", len(grns_matched))
+    m5.metric("↔️ GRNs Mismatched", len(grns_mismatched))
+    m6.metric("↔️ GRNs Resolved", len(grns_resolved))
 
     st.markdown("#### ⏳ Pending Reconciliation — Check-Outs")
     if not pending:
@@ -2196,29 +2198,31 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
             st.caption("None yet.")
 
     st.markdown("---")
-    st.markdown("#### 🔁 Transfers Awaiting Reconciliation")
+    st.markdown("#### 🔁 Goods Received Notes Awaiting Reconciliation")
     st.caption(
-        "Issuing location and receiving department each entered their side independently. "
-        "A mismatch means one of the two records is wrong, or something didn't arrive as expected."
+        "Each GRN is a separate receiving document linked back to the Transfer it's "
+        "receiving against. A mismatch means the quantity received didn't match what "
+        "the Transfer said was sent."
     )
 
-    if transfers_mismatched:
-        st.error(f"⚠️ {len(transfers_mismatched)} transfer(s) mismatched — needs investigation.")
+    if grns_mismatched:
+        st.error(f"⚠️ {len(grns_mismatched)} GRN line(s) mismatched — needs investigation.")
 
-    with st.expander(f"🚫 Mismatched ({len(transfers_mismatched)})"):
-        if transfers_mismatched:
-            for t in transfers_mismatched:
-                st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
+    with st.expander(f"🚫 Mismatched ({len(grns_mismatched)})"):
+        if grns_mismatched:
+            for g in grns_mismatched:
+                tr = transfers_by_id.get(g["transfer_item_id"], {})
+                st.markdown(f"**{g['grn_number']}** — {g['item_name']} (receiving against **{g['transfer_ref_number']}**)")
                 st.caption(
-                    f"Issued: {t['quantity_issued']} {t['unit']} by {t.get('issued_by') or '—'}  \n"
-                    f"Received: {t['quantity_received']} {t['unit']} by {t.get('received_by') or '—'}  \n"
-                    f"Reference: {t['transfer_ref_number']}"
+                    f"Issued: {g['quantity_expected']} {g['unit']} — {tr.get('from_location', '?')} → {tr.get('to_location', g['receiving_store'])}, "
+                    f"dispatched by {tr.get('issued_by') or '—'}  \n"
+                    f"Received: {g['quantity_received']} {g['unit']} at {g['receiving_store']} by {g.get('received_by') or '—'}"
                 )
-                with st.form(f"resolve_transfer_form_{t['id']}"):
-                    resolver = st.text_input("Resolved by", key=f"resolver_{t['id']}")
+                with st.form(f"resolve_grn_form_{g['id']}"):
+                    resolver = st.text_input("Resolved by", key=f"resolver_{g['id']}")
                     resolution_notes = st.text_area(
                         "What happened / how was this resolved?",
-                        key=f"resolution_notes_{t['id']}",
+                        key=f"resolution_notes_{g['id']}",
                         placeholder="e.g. Recounted — 1kg was left on the truck, delivered separately.",
                     )
                     if st.form_submit_button("✅ Mark Resolved"):
@@ -2227,47 +2231,47 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                         elif not resolution_notes.strip():
                             st.error("Enter a resolution note before submitting.")
                         else:
-                            ok = resolve_transfer_mismatch(
-                                transfer_id=t["id"], resolved_by=resolver.strip(),
+                            ok = resolve_grn_mismatch(
+                                grn_id=g["id"], resolved_by=resolver.strip(),
                                 resolution_notes=resolution_notes.strip(),
                                 supabase_client=supabase_client,
                             )
                             if ok:
-                                st.success(f"✅ #{t['id']} marked resolved.")
+                                st.success(f"✅ {g['grn_number']} marked resolved.")
                             else:
-                                st.error(f"⚠️ Could not mark #{t['id']} resolved — the record may no longer exist.")
-                            
+                                st.error(f"⚠️ Could not mark {g['grn_number']} resolved — the record may no longer exist.")
+                            st.rerun()
                 st.markdown("---")
         else:
             st.caption("None.")
 
-    with st.expander(f"✅ Resolved ({len(transfers_resolved)})"):
-        if transfers_resolved:
-            for t in transfers_resolved:
-                st.markdown(f"**#{t['id']} — {t['item_name']}** ({t['from_location']} → {t['to_location']})")
-                st.caption(f"Resolved by {t.get('resolved_by') or '—'} on {(t.get('resolved_at') or '')[:10]}")
-                st.caption(t.get('reconciliation_notes', ''))
+    with st.expander(f"✅ Resolved ({len(grns_resolved)})"):
+        if grns_resolved:
+            for g in grns_resolved:
+                st.markdown(f"**{g['grn_number']}** — {g['item_name']} (receiving against **{g['transfer_ref_number']}**)")
+                st.caption(f"Resolved by {g.get('resolved_by') or '—'} on {(g.get('resolved_at') or '')[:10]}")
+                st.caption(g.get('reconciliation_notes', ''))
                 st.markdown("---")
         else:
             st.caption("None yet.")
 
-    with st.expander(f"✅ Matched ({len(transfers_matched)})"):
-        if transfers_matched:
-            df = pd.DataFrame(transfers_matched)[
-                ["id", "transfer_date", "item_name", "from_location", "to_location",
-                 "quantity_issued", "issued_by", "received_by", "received_at"]
+    with st.expander(f"✅ Matched ({len(grns_matched)})"):
+        if grns_matched:
+            df = pd.DataFrame(grns_matched)[
+                ["grn_number", "transfer_ref_number", "item_name", "receiving_store",
+                 "quantity_expected", "quantity_received", "received_by", "receiving_date"]
             ]
             st.dataframe(df, use_container_width=True, hide_index=True)
             csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Download Matched Transfers CSV", csv,
-                                file_name=f"matched_transfers_{datetime.now().strftime('%Y%m%d')}.csv",
+            st.download_button("📥 Download Matched GRNs CSV", csv,
+                                file_name=f"matched_grns_{datetime.now().strftime('%Y%m%d')}.csv",
                                 mime="text/csv")
         else:
             st.caption("None yet.")
 
     st.markdown("---")
-    st.markdown("#### 📅 Transfer Trends Report")
-    st.caption("Pull every transfer in a date range, across all statuses, for trend review.")
+    st.markdown("#### 📅 Transfer & Receiving Trends Report")
+    st.caption("Pull every Transfer in a date range, with its linked GRN (if received), for trend review.")
     tcol1, tcol2, tcol3 = st.columns([1, 1, 1])
     with tcol1:
         trend_start = st.date_input("From", key="transfer_trend_start")
@@ -2289,24 +2293,65 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
         if not window:
             st.info("No transfers found in that date range.")
         else:
-            trend_df = pd.DataFrame(window)[
-                ["id", "transfer_date", "transfer_ref_number", "item_name", "from_location", "to_location",
-                 "quantity_issued", "quantity_received", "status", "issued_by", "received_by",
-                 "received_at", "resolved_by", "resolved_at"]
-            ]
+            grns_by_transfer_item = {}
+            for g in all_grns:
+                grns_by_transfer_item.setdefault(g["transfer_item_id"], []).append(g)
+
+            trend_rows = []
+            for t in window:
+                matching_grns = grns_by_transfer_item.get(t["id"], [])
+                if matching_grns:
+                    for g in matching_grns:
+                        trend_rows.append({
+                            "transfer_ref_number": t["transfer_ref_number"],
+                            "transfer_date": t["transfer_date"],
+                            "item_name": t["item_name"],
+                            "from_location": t["from_location"],
+                            "to_location": t["to_location"],
+                            "quantity_issued": t["quantity_issued"],
+                            "requested_by": t.get("requested_by"),
+                            "approved_by": t.get("approved_by"),
+                            "dispatched_by": t.get("issued_by"),
+                            "grn_number": g["grn_number"],
+                            "quantity_received": g["quantity_received"],
+                            "receiving_status": g["receiving_status"],
+                            "received_by": g.get("received_by"),
+                            "receiving_date": g.get("receiving_date"),
+                        })
+                else:
+                    trend_rows.append({
+                        "transfer_ref_number": t["transfer_ref_number"],
+                        "transfer_date": t["transfer_date"],
+                        "item_name": t["item_name"],
+                        "from_location": t["from_location"],
+                        "to_location": t["to_location"],
+                        "quantity_issued": t["quantity_issued"],
+                        "requested_by": t.get("requested_by"),
+                        "approved_by": t.get("approved_by"),
+                        "dispatched_by": t.get("issued_by"),
+                        "grn_number": None,
+                        "quantity_received": None,
+                        "receiving_status": "Not yet received",
+                        "received_by": None,
+                        "receiving_date": None,
+                    })
+
+            trend_df = pd.DataFrame(trend_rows)
             st.dataframe(trend_df, use_container_width=True, hide_index=True)
             csv = trend_df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "📥 Download Transfer Trends CSV", csv,
+                "📥 Download Transfer & Receiving Trends CSV", csv,
                 file_name=f"transfer_trends_{trend_start}_{trend_end}.csv",
                 mime="text/csv",
             )
 
 
 # ============================================================
-# 🔁 TRANSFERS -- ordinary send/receive, no reconciliation UI at all.
-# The comparison happens silently in receive_transfer_blind() and only
-# ever surfaces in the restricted section of Checkout Reconciliation above.
+# 🔁 TRANSFERS -- ordinary send/receive. Sending creates a Transfer
+# (TR-XXXX); receiving creates a separate, linked Goods Received Note
+# (GRN-XXXX) -- never a new Transfer number. The comparison happens
+# silently in create_grn() and only ever surfaces in the restricted
+# section of Checkout Reconciliation above.
 # ============================================================
 from app.core.locations import COMPANY_LOCATIONS
 
@@ -2326,11 +2371,6 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
     supabase_client = ctx.supabase_client
     init_transfer_storage(supabase_client)
 
-    # Persistent confirmation banner -- survives the st.rerun() below instead
-    # of being wiped before it ever renders. st.success() called right
-    # before st.rerun() never actually reaches the screen; reading it back
-    # from session_state on the next run does, and it stays until dismissed,
-    # giving time to actually write the reference down.
     last_sent = st.session_state.get("_last_sent_transfer")
     if last_sent:
         st.success(
@@ -2342,10 +2382,18 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
             del st.session_state["_last_sent_transfer"]
             st.rerun()
 
-    all_transfers = get_transfers(supabase_client=supabase_client)
-    pending = [t for t in all_transfers if t["status"] == "Pending"]
+    last_grn = st.session_state.get("_last_grn")
+    if last_grn:
+        st.success(
+            f"✅ Receipt recorded. Reference: **{last_grn['grn']}** "
+            f"(receiving against **{last_grn['transfer_ref']}**)."
+        )
+        if st.button("Got it, dismiss", key="dismiss_grn_banner"):
+            del st.session_state["_last_grn"]
+            st.rerun()
 
-    st.metric("⏳ Awaiting Receipt", len(pending))
+    pending_lines = get_pending_transfer_lines(supabase_client=supabase_client)
+    st.metric("⏳ Awaiting Receipt", len(pending_lines))
 
     st.markdown("---")
     st.markdown("#### 📤 Send a Transfer")
@@ -2357,9 +2405,11 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
         with col1:
             transfer_date = st.date_input("Transfer Date", value=datetime.now().date())
             from_location = _location_picker("From", "from_loc")
+            requested_by = st.text_input("Requested By (optional)")
         with col2:
             to_location = _location_picker("To", "to_loc")
-            issued_by = st.text_input("Sent By")
+            approved_by = st.text_input("Approved By (optional)")
+            dispatched_by = st.text_input("Dispatched By")
 
         if item_options:
             item_col_config = st.column_config.SelectboxColumn("Item", options=item_options, required=True)
@@ -2391,12 +2441,15 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
                 st.error("Add at least one item with a quantity greater than 0.")
             elif not from_location or not to_location:
                 st.error("Both From and To locations are required.")
+            elif not dispatched_by.strip():
+                st.error("Dispatched By is required.")
             else:
                 ref_number, new_ids = record_transfer_batch(
                     transfer_date=transfer_date,
                     items=valid_items.to_dict("records"),
                     from_location=from_location, to_location=to_location,
-                    issued_by=issued_by, issue_notes=issue_notes,
+                    requested_by=requested_by.strip(), approved_by=approved_by.strip(),
+                    dispatched_by=dispatched_by.strip(), issue_notes=issue_notes,
                     supabase_client=supabase_client,
                 )
                 st.session_state["_last_sent_transfer"] = {"ref": ref_number, "count": len(new_ids)}
@@ -2404,11 +2457,12 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
 
     st.markdown("---")
     st.markdown("#### 📥 Receive a Transfer")
-    if not pending:
+    st.caption("Recording a receipt creates its own Goods Received Note (GRN), linked back to the Transfer — never a new Transfer number.")
+    if not pending_lines:
         st.info("Nothing pending right now.")
     else:
         pending_by_ref = {}
-        for t in pending:
+        for t in pending_lines:
             pending_by_ref.setdefault(t["transfer_ref_number"], []).append(t)
 
         for ref, items_in_ref in pending_by_ref.items():
@@ -2416,42 +2470,55 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
             with st.container():
                 st.markdown(
                     f"**{ref}** — {first['from_location']} → {first['to_location']} "
-                    f"— {first['transfer_date']} — sent by {first.get('issued_by') or '—'}"
+                    f"— {first['transfer_date']} — dispatched by {first.get('issued_by') or '—'}"
                 )
                 if first.get("issue_notes"):
                     st.caption(f"Notes: {first['issue_notes']}")
 
                 with st.form(f"receive_ref_form_{ref}"):
-                    received_by = st.text_input("Your name", key=f"recv_by_{ref}")
+                    rc1, rc2, rc3 = st.columns(3)
+                    with rc1:
+                        default_idx = (
+                            COMPANY_LOCATIONS.index(first['to_location'])
+                            if first['to_location'] in COMPANY_LOCATIONS else 0
+                        )
+                        receiving_store = st.selectbox(
+                            "Receiving Store", COMPANY_LOCATIONS,
+                            index=default_idx, key=f"recv_store_{ref}",
+                        )
+                    with rc2:
+                        receiving_date = st.date_input("Receiving Date", value=datetime.now().date(), key=f"recv_date_{ref}")
+                    with rc3:
+                        received_by = st.text_input("Received By", key=f"recv_by_{ref}")
+
                     received_qtys = {}
                     for t in items_in_ref:
                         received_qtys[t["id"]] = st.number_input(
                             f"{t['item_name']} — Quantity Received ({t['unit']})",
                             min_value=0.0, step=1.0, key=f"recv_qty_{t['id']}",
                         )
-                    condition_notes = st.text_input("Notes (optional)", key=f"recv_notes_{ref}")
-                    submitted = st.form_submit_button("📥 Confirm Receipt")
+                    submitted = st.form_submit_button("📥 Record Receipt (creates a GRN)")
 
                 if submitted:
                     if not received_by.strip():
                         st.error("Enter your name before submitting.")
                     else:
-                        failed_items = []
-                        for t in items_in_ref:
-                            result = receive_transfer_item(
-                                transfer_id=t["id"], received_by=received_by.strip(),
-                                quantity_received=received_qtys[t["id"]],
-                                condition_notes=condition_notes, supabase_client=supabase_client,
-                            )
-                            if result.get("notes") == "Transfer record not found.":
-                                failed_items.append(t["item_name"])
-                        if failed_items:
-                            st.error(
-                                f"⚠️ Could not record receipt for: {', '.join(failed_items)} "
-                                f"— the record may have already been removed."
-                            )
-                        else:
-                            st.success(f"✅ {ref} received.")
-                        
+                        item_receipts = [
+                            {
+                                "transfer_item_id": t["id"],
+                                "item_name": t["item_name"],
+                                "quantity_expected": t["quantity_issued"],
+                                "quantity_received": received_qtys[t["id"]],
+                                "unit": t["unit"],
+                            }
+                            for t in items_in_ref
+                        ]
+                        grn_number, _ = create_grn(
+                            transfer_ref_number=ref, receiving_store=receiving_store,
+                            receiving_date=receiving_date, received_by=received_by.strip(),
+                            item_receipts=item_receipts, supabase_client=supabase_client,
+                        )
+                        st.session_state["_last_grn"] = {"grn": grn_number, "transfer_ref": ref}
+                        st.rerun()
 
                 st.markdown("---")
