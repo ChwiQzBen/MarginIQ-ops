@@ -50,9 +50,12 @@ def record_price_changes(stock_df, supabase_client: Any = None) -> int:
 
         old_price = current_prices.get(item_name)
         if old_price is None:
+            # First time seeing this item -- initial_price is set ONCE here
+            # and never touched again, regardless of how many times price
+            # changes afterward.
             try:
                 supabase_client.table(_CURRENT_PRICES_TABLE).upsert({
-                    "item_name": item_name, "price": price,
+                    "item_name": item_name, "price": price, "initial_price": price,
                     "updated_at": datetime.now().isoformat(),
                 }).execute()
             except Exception as e:
@@ -65,10 +68,11 @@ def record_price_changes(stock_df, supabase_client: Any = None) -> int:
                     "item_name": item_name, "old_price": old_price,
                     "new_price": price, "changed_at": datetime.now().isoformat(),
                 }).execute()
-                supabase_client.table(_CURRENT_PRICES_TABLE).upsert({
-                    "item_name": item_name, "price": price,
-                    "updated_at": datetime.now().isoformat(),
-                }).execute()
+                # .update(), not .upsert() -- deliberately omits initial_price
+                # from the payload so it's never overwritten by a later change.
+                supabase_client.table(_CURRENT_PRICES_TABLE).update({
+                    "price": price, "updated_at": datetime.now().isoformat(),
+                }).eq("item_name", item_name).execute()
                 changes += 1
             except Exception as e:
                 logger.error(f"Could not log price change for {item_name}: {e}")

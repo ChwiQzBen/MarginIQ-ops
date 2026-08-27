@@ -2457,7 +2457,6 @@ def _render_transfer_reconciliation_tab(ctx: AllItemsContext) -> None:
 
     st.markdown("---")
     st.markdown("#### 📥 Receive a Transfer")
-    st.caption("Recording a receipt creates its own Goods Received Note (GRN), linked back to the Transfer — never a new Transfer number.")
     if not pending_lines:
         st.info("Nothing pending right now.")
     else:

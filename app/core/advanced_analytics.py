@@ -387,6 +387,24 @@ class AdvancedAnalytics:
     # 5. ANOMALY DETECTION
     # ============================================================
     
+    def _emit_pattern_break_run(self, run, std, results):
+        """Appends ONE summarized AnomalyResult for a contiguous run of
+        flagged days, instead of one entry per day -- a genuine
+        week-over-week shift fires on every overlapping window it
+        touches, which otherwise floods the list with near-duplicates
+        of the same event."""
+        start_date, end_date = run[0][1], run[-1][1]
+        max_magnitude = max(r[2] for r in run)
+        score = float(max_magnitude / std) if std else 0.0
+        when = f"around {start_date}" if start_date == end_date else f"from {start_date} to {end_date}"
+        results.append(AnomalyResult(
+            is_anomaly=True,
+            anomaly_score=score,
+            anomaly_type='pattern_break',
+            confidence=0.85,
+            explanation=f"Sustained shift {when}: weekly average changed by up to {max_magnitude:.2f} units ({len(run)} day(s) affected)"
+        ))
+
     def detect_anomalies(
         self,
         df: pd.DataFrame,
@@ -420,19 +438,24 @@ class AdvancedAnalytics:
 
         z_scores = np.abs((values - mean) / std)
 
-        # Pattern break: week-over-week mean shift
+        # Pattern break: week-over-week mean shift -- grouped into runs,
+        # see _emit_pattern_break_run above for why.
         if len(values) > 14:
+            break_days = []
             for i in range(7, len(values) - 7):
                 prev_mean = np.mean(values[i-7:i])
                 curr_mean = np.mean(values[i:i+7])
                 if abs(curr_mean - prev_mean) > 2 * std:
-                    results.append(AnomalyResult(
-                        is_anomaly=True,
-                        anomaly_score=float(abs(curr_mean - prev_mean) / std),
-                        anomaly_type='pattern_break',
-                        confidence=0.85,
-                        explanation=f"Pattern break detected at {dates[i]}: weekly average changed by {abs(curr_mean - prev_mean):.2f} units"
-                    ))
+                    break_days.append((i, dates[i], abs(curr_mean - prev_mean)))
+
+            run = []
+            for entry in break_days:
+                if run and entry[0] - run[-1][0] > 1:
+                    self._emit_pattern_break_run(run, std, results)
+                    run = []
+                run.append(entry)
+            if run:
+                self._emit_pattern_break_run(run, std, results)
 
         # Spike / drop / outlier -- gated by z-score, a real statistical
         # bar, independent of how many days happen to clear it.
@@ -1248,6 +1271,14 @@ class AdvancedAnalytics:
 # ============================================================
 # STREAMLIT INTEGRATION
 # ============================================================
+_ANOMALY_TYPE_LABELS = {
+    'spike': 'Sudden Spike',
+    'drop': 'Sudden Drop',
+    'outlier': 'Unusual Day',
+    'pattern_break': 'Sustained Shift',
+}
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def _cached_detect_anomalies(_analytics, df: pd.DataFrame, target_col: str, confidence_threshold: float):
     """Cached wrapper around AdvancedAnalytics.detect_anomalies. The leading
@@ -1310,8 +1341,14 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                     train = values[:-test_size]
                     test = values[-test_size:]
                     
-                    # Simple naive forecast: use mean of training data
-                    forecast = np.mean(train)
+                    # Naive forecast uses the MEDIAN of training data, not the
+                    # mean -- a handful of extreme single-day spikes (seen
+                    # firsthand: 4 units jumping to 232,529 in one day) drag
+                    # the mean far from what a typical day looks like, which
+                    # was collapsing this metric to 0% even where the rest of
+                    # the data behaves reasonably. Median barely moves for a
+                    # few outliers.
+                    forecast = np.median(train)
                     predictions = np.full(len(test), forecast)
                     
                     # Calculate MAPE (avoid division by zero)
@@ -1475,7 +1512,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                     st.markdown("""
     - **📈 Spike** — a sudden jump, more than 50% higher than the day before. Often a bulk order, a restock, or a data-entry mistake.
     - **📉 Drop** — a sudden fall, more than 50% lower than the day before. Often a stockout, a missed delivery, or a genuinely quiet day.
-    - **🔄 Pattern Break** — not one bad day, but the *overall trend* shifting — a week's average moves well away from the week before it. Usually points to something structural: a customer lost, a new competitor, a process change.
+    - **🔄 Sustained Shift** — not one bad day, but the *overall trend* shifting — a week's average moves well away from the week before it. Usually points to something structural: a customer lost, a new competitor, a process change.
     - **⚠️ Outlier** — a day that doesn't match the rest of the data, but isn't a sharp jump or fall from the day right before it. Worth a second look — sometimes a real one-off, sometimes a typo.
                         """)
 
@@ -1489,7 +1526,7 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                     st.metric("📉 Drops", type_counts.get('drop', 0),
                               help="More than 50% lower than the previous day.")
                 with col3:
-                    st.metric("🔄 Pattern Breaks", type_counts.get('pattern_break', 0),
+                    st.metric("🔄 Sustained Shifts", type_counts.get('pattern_break', 0),
                               help="The week-to-week trend shifted — not just one unusual day.")
                 with col4:
                     st.metric("⚠️ Outliers", type_counts.get('outlier', 0),
@@ -1522,8 +1559,8 @@ def create_advanced_analytics_tab(analytics: AdvancedAnalytics, df: pd.DataFrame
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
                             <div>
                                 <span style="font-weight: 600;">#{i}</span>
-                                <span style="color: {color}; font-weight: 600; text-transform: uppercase;">
-                                    {anomaly.anomaly_type}
+                                <span style="color: {color}; font-weight: 600;">
+                                    {_ANOMALY_TYPE_LABELS.get(anomaly.anomaly_type, anomaly.anomaly_type)}
                                 </span>
                                 <span style="color: #888; font-size: 13px; margin-left: 8px;">
                                     Confidence: {confidence_pct:.0f}%
