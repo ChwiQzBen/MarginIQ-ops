@@ -137,7 +137,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
     "🔁 Transfers": Permission.RECORD_TRANSFERS,
-    "🔒 Checkout Reconciliation": Permission.RECONCILE_CHECKOUTS,
+    "⚖️ Reconciliation & Oversight": Permission.RECONCILE_CHECKOUTS,
     "📊 Stock Variance": Permission.REVIEW_RECONCILIATION,
 }
 
@@ -152,7 +152,7 @@ DRY_ICE_TAB_REQUIREMENTS = {
 }
 
 MODE_REQUIREMENTS = {
-    "📦 All Items Mode": Permission.ACCESS_ALL_ITEMS_MODE,
+    "📦 Stores Module": Permission.ACCESS_ALL_ITEMS_MODE,
     "🧀 BCPOS Mode": Permission.ACCESS_BCPOS_MODE,
     "❄️ Dry Ice Mode": Permission.ACCESS_DRY_ICE_MODE,
 }

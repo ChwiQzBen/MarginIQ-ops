@@ -531,7 +531,7 @@ def main():
     if auth_check and auth_check.is_authenticated:
         available_modes = [name for name, perm in MODE_REQUIREMENTS.items() if has_permission(perm)]
         if not available_modes:
-            available_modes = ["📦 All Items Mode"]
+            available_modes = ["📦 Stores Module"]
     else:
         available_modes = list(MODE_REQUIREMENTS.keys())
 
@@ -662,7 +662,7 @@ def main():
 
     if mode == "❄️ Dry Ice Mode":
         df, analyzer, kpis = _load_dry_ice_analysis_data()
-    elif mode == "📦 All Items Mode":
+    elif mode == "📦 Stores Module":
         df = _load_all_items_analysis_data()
         analyzer = None
         kpis = {}
@@ -1871,7 +1871,7 @@ def main():
         st.stop()
 
     # ============================================================
-    if mode == "📦 All Items Mode":
+    if mode == "📦 Stores Module":
         # ============================================================
         # 🖼️ BANNER IMAGE - RENDER FIRST
         st.image("assets/all_items_dashboard.jpg", use_container_width=True)
@@ -1921,7 +1921,7 @@ def main():
             }
         </style>
         
-        <div class="mode-badge-all">📦 ALL ITEMS MODE</div>
+        <div class="mode-badge-all">📦 STORES MODULE</div>
         """, unsafe_allow_html=True)
         
         

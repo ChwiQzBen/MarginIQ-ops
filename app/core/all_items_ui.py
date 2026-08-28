@@ -174,7 +174,7 @@ def render_all_items_mode(ctx: AllItemsContext,
         _render_advanced_analytics_tab(ctx)
     elif active_tab == "🔄 JIT Purchasing":
         render_jit_purchasing_tab(ctx.constants, has_permission=has_permission)
-    elif active_tab == "🔒 Checkout Reconciliation":
+    elif active_tab == "⚖️ Reconciliation & Oversight":
         _render_checkout_reconciliation_tab(ctx, has_permission=has_permission)
     elif active_tab == "🔁 Transfers":
         _render_transfer_reconciliation_tab(ctx)
@@ -2026,7 +2026,7 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
 
     can_review = _can(Permission.REVIEW_RECONCILIATION)
 
-    st.markdown("### 🔒 Checkout Reconciliation")
+    st.markdown("### 🔍 Reconciliation & Oversight")
 
     supabase_client = ctx.supabase_client
     init_checkout_reconciliation_storage(supabase_client)
