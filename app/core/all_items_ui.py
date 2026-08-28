@@ -2026,7 +2026,7 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
 
     can_review = _can(Permission.REVIEW_RECONCILIATION)
 
-    st.markdown("### 🔍 Reconciliation & Oversight")
+    st.markdown("### Reconciliation & Oversight")
 
     supabase_client = ctx.supabase_client
     init_checkout_reconciliation_storage(supabase_client)
