@@ -2025,17 +2025,14 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
         return has_permission(permission) if has_permission else True
 
     can_review = _can(Permission.REVIEW_RECONCILIATION)
+    if not can_review:
+        st.warning("This section isn't available for your current role. If you feel this is a mistake, please contact your administrator.")
+        return
 
-    st.markdown("### Reconciliation & Oversight")
+    st.markdown("### ⚖️ Reconciliation & Oversight")
 
     supabase_client = ctx.supabase_client
-    init_checkout_reconciliation_storage(supabase_client)
     init_transfer_storage(supabase_client)
-
-    all_checkouts = get_checkouts(supabase_client=supabase_client)
-    pending = [c for c in all_checkouts if c["status"] == "Pending"]
-    reconciled = [c for c in all_checkouts if c["status"] == "Reconciled"]
-    blocked = [c for c in all_checkouts if c["status"] == "Blocked"]
 
     all_transfers = get_transfers(supabase_client=supabase_client)
     transfers_by_id = {t["id"]: t for t in all_transfers}
@@ -2044,48 +2041,10 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     grns_mismatched = [g for g in all_grns if g["receiving_status"] == "Mismatch"]
     grns_resolved = [g for g in all_grns if g["receiving_status"] == "Resolved"]
 
-    st.markdown("#### 📝 Record a Check-Out")
-    item_options = sorted((ctx.inventory_items or {}).keys())
-    with st.form("record_checkout_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            checkout_date = st.date_input("Checkout Date", value=datetime.now().date())
-            if item_options:
-                item_name = st.selectbox("Item", item_options)
-            else:
-                item_name = st.text_input("Item")
-            quantity = st.number_input("Quantity", min_value=0.0, value=1.0, step=1.0)
-            unit = st.text_input("Unit", value="kg")
-        with col2:
-            requested_by = st.text_input("Requested By")
-            destination = st.text_input("Destination (optional)")
-            dispatch_slip_number = st.text_input("Dispatch Slip / Gate Pass Number")
-        notes = st.text_input("Notes (optional)")
-
-        if st.form_submit_button("📤 Record Check-Out", type="primary"):
-            if not item_name:
-                st.error("Select or enter an item.")
-            elif quantity <= 0:
-                st.error("Enter a quantity greater than 0.")
-            elif not dispatch_slip_number.strip():
-                st.error("Dispatch slip / gate pass number is required.")
-            else:
-                new_id = record_checkout(
-                    checkout_date=checkout_date, item_name=item_name, quantity=quantity,
-                    dispatch_slip_number=dispatch_slip_number.strip(), unit=unit,
-                    requested_by=requested_by, destination=destination, notes=notes,
-                    supabase_client=supabase_client,
-                )
-                st.success(f"✅ Check-out #{new_id} recorded.")
-                st.rerun()
-
-    if not can_review:
-        return
-
     open_alerts = get_open_alerts(supabase_client=supabase_client)
     if open_alerts:
-        st.error(f" {len(open_alerts)} item(s) disappeared from the inventory sheet between two loads — needs review.")
-        with st.expander(f" Missing Items ({len(open_alerts)})", expanded=True):
+        st.error(f"⚖️ {len(open_alerts)} item(s) disappeared from the inventory sheet between two loads — needs review.")
+        with st.expander(f"⚖️ Missing Items ({len(open_alerts)})", expanded=True):
             st.caption(
                 "Present in a previous successful load, now gone from the sheet "
                 "entirely. This is a diffing signal, not proof of anything — a row "
@@ -2116,86 +2075,10 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                 st.markdown("---")
 
     st.markdown("---")
-    st.caption(
-        "Every check-out starts as **Pending** and is excluded from confirmed-usage "
-        "figures until reconciled against the physical dispatch slip / gate pass number."
-    )
-
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("⏳ Pending", len(pending))
-    m2.metric("✅ Reconciled", len(reconciled))
-    m3.metric("🚫 Blocked", len(blocked))
-    m4.metric("↔️ GRNs Matched", len(grns_matched))
-    m5.metric("↔️ GRNs Mismatched", len(grns_mismatched))
-    m6.metric("↔️ GRNs Resolved", len(grns_resolved))
-
-    st.markdown("#### ⏳ Pending Reconciliation — Check-Outs")
-    if not pending:
-        st.info("Nothing pending — every check-out is reconciled.")
-    else:
-        for co in pending:
-            with st.container():
-                st.markdown(
-                    f"**#{co['id']}** — {co['item_name']} — {co['quantity']:.1f} {co.get('unit', '')} "
-                    f"— slip **{co['dispatch_slip_number']}** — {co['checkout_date']} "
-                    f"— requested by {co.get('requested_by') or '—'}"
-                )
-                if co.get("destination"):
-                    st.caption(f"Destination: {co['destination']}")
-                c1, c2, c3 = st.columns([2, 1, 1])
-                with c1:
-                    reconciler = st.text_input(
-                        "Reconciled by", key=f"reconciler_{co['id']}", label_visibility="collapsed",
-                        placeholder="Your name",
-                    )
-                with c2:
-                    if st.button("✅ Verified — Reconcile", key=f"verify_{co['id']}"):
-                        if not reconciler.strip():
-                            st.error("Enter your name before reconciling.")
-                        else:
-                            ok = reconcile_checkout(co["id"], reconciler.strip(), verified=True,
-                                                     supabase_client=supabase_client)
-                            if ok:
-                                st.success(f"✅ #{co['id']} reconciled.")
-                            else:
-                                st.error(f"⚠️ Could not reconcile #{co['id']} — the record may no longer exist.")
-                            st.rerun()
-                with c3:
-                    if st.button("🚫 Could Not Verify — Block", key=f"block_{co['id']}"):
-                        if not reconciler.strip():
-                            st.error("Enter your name before blocking.")
-                        else:
-                            ok = reconcile_checkout(co["id"], reconciler.strip(), verified=False,
-                                                     supabase_client=supabase_client)
-                            if ok:
-                                st.warning(f"🚫 #{co['id']} blocked — excluded from confirmed usage.")
-                            else:
-                                st.error(f"⚠️ Could not block #{co['id']} — the record may no longer exist.")
-                            
-                st.markdown("---")
-
-    with st.expander(f"🚫 Blocked ({len(blocked)}) — need correction or re-verification"):
-        if blocked:
-            st.dataframe(pd.DataFrame(blocked)[
-                ["id", "checkout_date", "item_name", "quantity", "dispatch_slip_number",
-                 "reconciled_by", "reconciliation_notes"]
-            ], use_container_width=True, hide_index=True)
-        else:
-            st.caption("None.")
-
-    with st.expander(f"✅ Reconciled history ({len(reconciled)})"):
-        if reconciled:
-            df = pd.DataFrame(reconciled)[
-                ["id", "checkout_date", "item_name", "quantity", "dispatch_slip_number",
-                 "reconciled_by", "reconciled_at"]
-            ]
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Download Reconciled CSV", csv,
-                                file_name=f"reconciled_checkouts_{datetime.now().strftime('%Y%m%d')}.csv",
-                                mime="text/csv")
-        else:
-            st.caption("None yet.")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("↔️ GRNs Matched", len(grns_matched))
+    m2.metric("↔️ GRNs Mismatched", len(grns_mismatched))
+    m3.metric("↔️ GRNs Resolved", len(grns_resolved))
 
     st.markdown("---")
     st.markdown("#### 🔁 Goods Received Notes Awaiting Reconciliation")

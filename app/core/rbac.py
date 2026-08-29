@@ -137,7 +137,7 @@ ALL_ITEMS_TAB_REQUIREMENTS = {
     "🤖 Advanced Analytics": Permission.VIEW_ANALYTICS,
     "🔄 JIT Purchasing": Permission.MANAGE_PURCHASING,
     "🔁 Transfers": Permission.RECORD_TRANSFERS,
-    "⚖️ Reconciliation & Oversight": Permission.RECONCILE_CHECKOUTS,
+    "⚖️ Reconciliation & Oversight": Permission.REVIEW_RECONCILIATION,
     "📊 Stock Variance": Permission.REVIEW_RECONCILIATION,
 }
 
