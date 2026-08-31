@@ -1855,6 +1855,7 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
         st.warning("No data available for advanced analytics")
 
 LOCATION_KEYWORDS = ["LOCATION", "WAREHOUSE", "SITE", "STORE", "OUTLET"]
+DEPARTMENT_KEYWORDS = ["DEPARTMENT", "REQUESTED BY", "ISSUED TO", "USER", "TEAM", "REQUESTER"]
 
 
 def _compute_stock_variance(location: str, supabase_client=None):
@@ -1920,7 +1921,7 @@ def _compute_stock_variance(location: str, supabase_client=None):
     def _sum_in_window(df, loc_col, item_name, start, end):
         if df is None or df.empty:
             return 0.0
-        item_col = detect_column(df, ITEM_NAME_KEYWORDS)
+        item_col = detect_column(df, ITEM_LABEL_KEYWORDS)
         date_col = next((c for c in df.columns if 'date' in c.lower()), None)
         qty_col = next((c for c in df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
         if not item_col or not date_col or not qty_col:
@@ -1986,6 +1987,175 @@ def _compute_stock_variance(location: str, supabase_client=None):
     meta = {'previous_count': previous['name'], 'previous_date': window_start,
             'latest_count': latest['name'], 'latest_date': window_end}
     return result_df, meta
+
+
+def _find_unusual_checkout_quantities(supabase_client=None, lookback_days=30, mad_threshold=3.5):
+    """Flags recent Check-Out rows whose quantity is a statistical
+    outlier against that SAME item's own check-out history -- no
+    reference number exists to verify against, so this is a 'worth a
+    look' signal, not proof of anything. Median + MAD (median absolute
+    deviation), not mean + std -- a few genuine outliers shouldn't raise
+    the bar for detecting more of them, same lesson as the forecast
+    accuracy fix earlier tonight."""
+    try:
+        gsheet = GoogleSheetReader()
+        if not gsheet.authenticate():
+            return None, "Could not reach the Check-Out data source right now."
+        check_out_df = gsheet.get_check_out()
+    except Exception as e:
+        logger.error(f"Could not load check-out data for quantity flagging: {e}")
+        return None, "Could not reach the Check-Out data source right now."
+
+    if check_out_df.empty:
+        return pd.DataFrame(), None
+
+    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
+    qty_col = next((c for c in check_out_df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
+
+    if not item_col or not date_col or not qty_col:
+        return None, "Check-Out sheet is missing an Item, Date, or Quantity column."
+
+    df = check_out_df[[item_col, date_col, qty_col]].copy()
+    df.columns = ['item', 'date', 'qty']
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df['qty'] = pd.to_numeric(df['qty'], errors='coerce')
+    df = df.dropna(subset=['item', 'date', 'qty'])
+
+    if df.empty:
+        return pd.DataFrame(), None
+
+    cutoff = datetime.now() - pd.Timedelta(days=lookback_days)
+    recent = df[df['date'] >= cutoff]
+
+    flagged = []
+    for item_name, group in df.groupby('item'):
+        if len(group) < 5:
+            continue  # not enough history to judge what's "normal"
+        median_q = group['qty'].median()
+        mad = (group['qty'] - median_q).abs().median()
+        if mad == 0:
+            continue  # no variability to compare against
+        item_recent = recent[recent['item'] == item_name]
+        for _, row in item_recent.iterrows():
+            modified_z = 0.6745 * (row['qty'] - median_q) / mad
+            if abs(modified_z) > mad_threshold:
+                flagged.append({
+                    'Item': item_name,
+                    'Date': row['date'].strftime('%Y-%m-%d'),
+                    'Quantity': row['qty'],
+                    'Typical (median)': median_q,
+                    'Deviation Score': round(abs(modified_z), 2),
+                })
+
+    return pd.DataFrame(flagged), None
+
+
+def _find_incomplete_checkout_rows(supabase_client=None):
+    """Check-Out rows missing a date, a quantity, or (if a department/
+    requester column can be found) that too -- these are the rows most
+    likely to represent sloppy or incomplete recording, worth catching
+    before they distort Stock Variance or anything else downstream."""
+    try:
+        gsheet = GoogleSheetReader()
+        if not gsheet.authenticate():
+            return None, "Could not reach the Check-Out data source right now."
+        check_out_df = gsheet.get_check_out()
+    except Exception as e:
+        logger.error(f"Could not load check-out data for completeness check: {e}")
+        return None, "Could not reach the Check-Out data source right now."
+
+    if check_out_df.empty:
+        return pd.DataFrame(), None
+
+    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
+    qty_col = next((c for c in check_out_df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
+    dept_col = detect_column(check_out_df, DEPARTMENT_KEYWORDS)
+
+    problems = []
+    for _, row in check_out_df.iterrows():
+        issues = []
+        if date_col and (pd.isna(row.get(date_col)) or str(row.get(date_col)).strip() == ''):
+            issues.append("Missing date")
+        if qty_col:
+            try:
+                qty_val = float(row.get(qty_col))
+                if qty_val <= 0:
+                    issues.append("Zero/blank quantity")
+            except (ValueError, TypeError):
+                issues.append("Zero/blank quantity")
+        if dept_col and (pd.isna(row.get(dept_col)) or str(row.get(dept_col)).strip() == ''):
+            issues.append("Missing department/requester")
+        if issues:
+            problems.append({
+                'Item': row.get(item_col, 'Unknown') if item_col else 'Unknown',
+                'Date (raw)': row.get(date_col, '') if date_col else '',
+                'Quantity (raw)': row.get(qty_col, '') if qty_col else '',
+                'Department (raw)': row.get(dept_col, '') if dept_col else 'N/A (column not found)',
+                'Issues': ', '.join(issues),
+            })
+
+    note = None if dept_col else (
+        "No department/requester column detected on the Check-Out sheet -- that "
+        "specific check is skipped. Tell me the exact column name to include it."
+    )
+    return pd.DataFrame(problems), note
+
+
+def _get_flagged_variance_checkouts(location, supabase_client=None):
+    """For items with a shortfall (physical below expected) at
+    `location`, pulls the actual Check-Out rows recorded in that
+    reconciliation window -- so a manager can look at exactly what the
+    sheet claims left, rather than just seeing a number."""
+    result_df, meta = _compute_stock_variance(location, supabase_client=supabase_client)
+    if result_df is None:
+        return None, meta
+
+    shortfalls = result_df[result_df['Variance'] < -0.01]
+    if shortfalls.empty:
+        return [], meta
+
+    try:
+        gsheet = GoogleSheetReader()
+        if not gsheet.authenticate():
+            return None, "Could not reach the Check-Out data source right now."
+        check_out_df = gsheet.get_check_out()
+    except Exception as e:
+        logger.error(f"Could not load check-out detail: {e}")
+        return None, "Could not reach the Check-Out data source right now."
+
+    if check_out_df.empty:
+        return [], meta
+
+    loc_col = detect_column(check_out_df, LOCATION_KEYWORDS)
+    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
+
+    if not loc_col or not item_col or not date_col:
+        return None, "Check-Out sheet is missing a Location, Item, or Date column."
+
+    start_dt = pd.to_datetime(meta['previous_date'], errors='coerce')
+    end_dt = pd.to_datetime(meta['latest_date'], errors='coerce')
+
+    results = []
+    for _, row in shortfalls.iterrows():
+        item_name = row['Item']
+        sub = check_out_df[
+            (check_out_df[item_col] == item_name)
+            & (check_out_df[loc_col].astype(str).str.strip() == location)
+        ].copy()
+        sub['_DATE'] = pd.to_datetime(sub[date_col], errors='coerce')
+        if pd.notna(start_dt):
+            sub = sub[sub['_DATE'] >= start_dt]
+        if pd.notna(end_dt):
+            sub = sub[sub['_DATE'] <= end_dt]
+        results.append({
+            'item': item_name, 'variance': row['Variance'],
+            'expected': row['Expected'], 'physical': row['Physical'],
+            'checkout_rows': sub,
+        })
+    return results, meta
 
 
 def _render_variance_tab(ctx: AllItemsContext) -> None:
@@ -2073,6 +2243,54 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
                             st.success("✅ Marked reviewed.")
                             st.rerun()
                 st.markdown("---")
+
+    st.markdown("---")
+    st.markdown("#### 📤 Check-Out Oversight")
+    st.caption(
+        "No reference number exists for check-outs -- the requisition is a hard "
+        "copy, filed, not digitized. These are 'worth a look' signals, not proof "
+        "of anything wrong."
+    )
+
+    with st.expander("📊 Unusual Quantities (vs. each item's own history, last 30 days)"):
+        unusual_df, unusual_err = _find_unusual_checkout_quantities(supabase_client=supabase_client)
+        if unusual_err:
+            st.info(unusual_err)
+        elif unusual_df is None or unusual_df.empty:
+            st.caption("Nothing flagged.")
+        else:
+            st.dataframe(unusual_df, use_container_width=True, hide_index=True)
+
+    with st.expander("⚠️ Incomplete Check-Out Records"):
+        incomplete_df, incomplete_note = _find_incomplete_checkout_rows(supabase_client=supabase_client)
+        if incomplete_note:
+            st.info(incomplete_note)
+        if incomplete_df is not None and not incomplete_df.empty:
+            st.dataframe(incomplete_df, use_container_width=True, hide_index=True)
+        elif incomplete_df is not None:
+            st.caption("No incomplete rows found.")
+
+    with st.expander("🕵️ Shortfall Investigation — Check-Outs Behind a Variance"):
+        st.caption("Pick a location; if Stock Variance shows a shortfall there, this pulls the actual check-out rows recorded in that window.")
+        investigate_location = st.selectbox("Location", COMPANY_LOCATIONS, key="checkout_investigate_location")
+        if st.button("🕵️ Investigate Shortfalls", key="investigate_shortfalls_btn"):
+            shortfalls, sf_meta = _get_flagged_variance_checkouts(investigate_location, supabase_client=supabase_client)
+            if shortfalls is None:
+                st.info(sf_meta)
+            elif not shortfalls:
+                st.success(f"No shortfalls found for {investigate_location} in the latest comparison window.")
+            else:
+                st.caption(f"Comparing **{sf_meta['previous_count']}** ({sf_meta['previous_date']}) → **{sf_meta['latest_count']}** ({sf_meta['latest_date']})")
+                for item_result in shortfalls:
+                    st.markdown(
+                        f"**{item_result['item']}** — Physical {item_result['physical']}, "
+                        f"Expected {item_result['expected']:.1f}, Variance {item_result['variance']:.1f}"
+                    )
+                    if item_result['checkout_rows'].empty:
+                        st.caption("No check-out rows found for this item in this window at this location.")
+                    else:
+                        st.dataframe(item_result['checkout_rows'], use_container_width=True, hide_index=True)
+                    st.markdown("---")
 
     st.markdown("---")
     m1, m2, m3 = st.columns(3)
