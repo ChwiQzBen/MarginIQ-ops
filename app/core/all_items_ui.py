@@ -66,6 +66,7 @@ _bootstrap_repo_root_on_syspath()
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Any
 from datetime import datetime
+import re
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1855,7 +1856,7 @@ def _render_advanced_analytics_tab(ctx: AllItemsContext) -> None:
         st.warning("No data available for advanced analytics")
 
 LOCATION_KEYWORDS = ["LOCATION", "WAREHOUSE", "SITE", "STORE", "OUTLET"]
-DEPARTMENT_KEYWORDS = ["DEPARTMENT", "REQUESTED BY", "ISSUED TO", "USER", "TEAM", "REQUESTER"]
+DEPARTMENT_KEYWORDS = ["DEPARTMENT", "REQUESTED BY", "ISSUED TO", "ISSUED_TO", "USER", "TEAM", "REQUESTER"]
 
 
 def _compute_stock_variance(location: str, supabase_client=None):
@@ -2079,12 +2080,16 @@ def _find_incomplete_checkout_rows(supabase_client=None):
         if date_col and (pd.isna(row.get(date_col)) or str(row.get(date_col)).strip() == ''):
             issues.append("Missing date")
         if qty_col:
-            try:
-                qty_val = float(row.get(qty_col))
-                if qty_val <= 0:
-                    issues.append("Zero/blank quantity")
-            except (ValueError, TypeError):
-                issues.append("Zero/blank quantity")
+            raw_qty = row.get(qty_col)
+            if pd.isna(raw_qty) or str(raw_qty).strip() == '':
+                issues.append("Missing quantity")
+            else:
+                qty_match = re.match(r'^\s*(-?\d+\.?\d*)', str(raw_qty))
+                if qty_match:
+                    if float(qty_match.group(1)) <= 0:
+                        issues.append("Zero quantity")
+                else:
+                    issues.append("Quantity not a recognizable number")
         if dept_col and (pd.isna(row.get(dept_col)) or str(row.get(dept_col)).strip() == ''):
             issues.append("Missing department/requester")
         if issues:

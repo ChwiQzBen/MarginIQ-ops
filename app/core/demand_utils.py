@@ -68,8 +68,9 @@ def detect_column(df: pd.DataFrame, keywords: List[str]) -> Optional[str]:
     'the date column' / 'the quantity column' across Google Sheets exports
     with inconsistent headers -- just keyword-priority-aware now."""
     for keyword in keywords:
+        keyword_lower = keyword.lower()
         for col in df.columns:
-            if keyword in col.lower():
+            if keyword_lower in col.lower():
                 return col
     return None
 
