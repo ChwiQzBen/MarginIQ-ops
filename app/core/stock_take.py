@@ -912,8 +912,14 @@ def view_count_detail(count_id):
             return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
         return ''
     
+    styler = df.style
+    if hasattr(styler, "map"):
+        styled_df = styler.map(style_variance, subset=['Variance'])
+    else:
+        styled_df = styler.applymap(style_variance, subset=['Variance'])
+
     st.dataframe(
-        df.style.applymap(style_variance, subset=['Variance']),
+        styled_df,
         use_container_width=True,
         hide_index=True
     )

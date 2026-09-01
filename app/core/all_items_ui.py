@@ -2009,7 +2009,7 @@ def _find_unusual_checkout_quantities(supabase_client=None, lookback_days=30, ma
     if check_out_df.empty:
         return pd.DataFrame(), None
 
-    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    item_col = detect_column(check_out_df, ITEM_LABEL_KEYWORDS)
     date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
     qty_col = next((c for c in check_out_df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
 
@@ -2068,7 +2068,7 @@ def _find_incomplete_checkout_rows(supabase_client=None):
     if check_out_df.empty:
         return pd.DataFrame(), None
 
-    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    item_col = detect_column(check_out_df, ITEM_LABEL_KEYWORDS)
     date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
     qty_col = next((c for c in check_out_df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
     dept_col = detect_column(check_out_df, DEPARTMENT_KEYWORDS)
@@ -2129,7 +2129,7 @@ def _get_flagged_variance_checkouts(location, supabase_client=None):
         return [], meta
 
     loc_col = detect_column(check_out_df, LOCATION_KEYWORDS)
-    item_col = detect_column(check_out_df, ITEM_NAME_KEYWORDS)
+    item_col = detect_column(check_out_df, ITEM_LABEL_KEYWORDS)
     date_col = next((c for c in check_out_df.columns if 'date' in c.lower()), None)
 
     if not loc_col or not item_col or not date_col:
@@ -2247,9 +2247,9 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
     st.markdown("---")
     st.markdown("#### 📤 Check-Out Oversight")
     st.caption(
-        "No reference number exists for check-outs -- the requisition is a hard "
-        "copy, filed, not digitized. These are 'worth a look' signals, not proof "
-        "of anything wrong."
+        "Check-outs can't be verified against a reference number -- the paper "
+        "requisition form doesn't have one. These are flags worth a look, not "
+        "proof of a problem."
     )
 
     with st.expander("📊 Unusual Quantities (vs. each item's own history, last 30 days)"):
