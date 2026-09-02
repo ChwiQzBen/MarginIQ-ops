@@ -1028,9 +1028,8 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     if active_subtab == "📥 Check-Ins":
         st.markdown("### 📥 Check-In Records")
-        st.caption("Record new check-ins from the 🔄 Check In / Check Out tab.")
 
-        with st.expander("📜 Historical Records (Google Sheet, before in-app entry)", expanded=False):
+        with st.expander("📜 Historical Records", expanded=False):
             if not check_in_df.empty:
                 st.dataframe(check_in_df, use_container_width=True, height=400)
                 csv = check_in_df.to_csv(index=False).encode('utf-8')
@@ -1043,7 +1042,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             else:
                 st.info("No historical check-in records found.")
 
-        with st.expander("🆕 New Records (recorded in the app)", expanded=False):
+        with st.expander("🆕 New Records", expanded=False):
             new_checkins = get_checkins(supabase_client=ctx.supabase_client)
             if new_checkins:
                 new_checkins_df = pd.DataFrame(new_checkins)
@@ -1060,9 +1059,8 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
-        st.caption("Record new check-outs from the 🔄 Check In / Check Out tab.")
 
-        with st.expander("📜 Historical Records (Google Sheet, before in-app entry)", expanded=False):
+        with st.expander("📜 Historical Records", expanded=False):
             if not check_out_df.empty:
                 st.dataframe(check_out_df, use_container_width=True, height=400)
                 csv = check_out_df.to_csv(index=False).encode('utf-8')
@@ -1076,7 +1074,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
                 st.info("No historical check-out records found.")
 
         recorded_checkouts = get_checkouts(supabase_client=supabase_client)
-        with st.expander("🆕 New Records (recorded in the app)", expanded=False):
+        with st.expander("🆕 New Records", expanded=False):
             if recorded_checkouts:
                 checkout_df_display = pd.DataFrame(recorded_checkouts)
                 st.dataframe(checkout_df_display, use_container_width=True, height=400)
@@ -2297,9 +2295,7 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
                 "Supplier", _distinct_check_in_suppliers(_supabase_client=supabase_client), "checkin_supplier"
             )
         with col2:
-            ci_invoice = st.text_input("Invoice / LPO No. (optional)", key="checkin_invoice")
-            ci_temp = st.text_input("Temperature at receipt (optional, applies to this whole delivery)", key="checkin_temp")
-            ci_coa = st.text_input("COA reference (optional, applies to this whole delivery)", key="checkin_coa")
+            ci_invoice = st.text_input("Invoice / LPO / Delivery Note No. (optional)", key="checkin_invoice")
 
         ci_items_df = st.data_editor(
             pd.DataFrame({"item_name": [None], "quantity": [0.0], "unit_price": [0.0], "batch_no": [""]}),
@@ -2339,7 +2335,7 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
                         unit=item_details.get('unit', 'kg'), item_category=item_details.get('category', ''),
                         unit_price=item_row.get("unit_price", 0.0) or 0.0, supplier=ci_supplier,
                         store=ci_store, batch_no=str(item_row.get("batch_no") or "").strip(),
-                        temperature=ci_temp.strip(), coa=ci_coa.strip(), invoice_lpo=ci_invoice.strip(),
+                        invoice_lpo=ci_invoice.strip(),
                         received_by=ci_received_by.strip(), confirmed_by=ci_confirmed_by.strip(),
                         notes=ci_notes.strip(), created_by=ci_received_by.strip(),
                         supabase_client=supabase_client,
@@ -2348,7 +2344,7 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
                 _distinct_check_in_suppliers.clear()
                 st.rerun()
 
-    with st.expander("📋 View Recorded Check-Ins (this app only — full history is still on Stock Movements → Check-Ins)", expanded=False):
+    with st.expander("📋 View Recorded Check-Ins", expanded=False):
         recent_checkins = get_checkins(supabase_client=supabase_client)
         if recent_checkins:
             st.dataframe(pd.DataFrame(recent_checkins), use_container_width=True, height=300, hide_index=True)
@@ -2510,11 +2506,6 @@ def _render_checkout_reconciliation_tab(ctx: AllItemsContext, has_permission=Non
 
     st.markdown("---")
     st.markdown("#### 📤 Check-Out Oversight")
-    st.caption(
-        "Check-outs can't be verified against a reference number -- the paper "
-        "requisition form doesn't have one. These are flags worth a look, not "
-        "proof of a problem."
-    )
 
     with st.expander("📊 Unusual Quantities (vs. each item's own history, last 30 days)"):
         unusual_df, unusual_err = _find_unusual_checkout_quantities(supabase_client=supabase_client)
