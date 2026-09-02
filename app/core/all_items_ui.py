@@ -182,7 +182,7 @@ def render_all_items_mode(ctx: AllItemsContext,
         _render_checkout_reconciliation_tab(ctx, has_permission=has_permission)
     elif active_tab == "🔁 Transfers":
         _render_transfer_reconciliation_tab(ctx)
-    elif active_tab == "🔄 Check In / Check Out":
+    elif active_tab == "⤴️⤵️ Check In / Check Out":
         _render_checkin_checkout_tab(ctx)
     elif active_tab == "📊 Stock Variance":
         _render_variance_tab(ctx)
