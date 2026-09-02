@@ -82,9 +82,10 @@ from app.core.forecasting import create_ensemble_forecast
 from app.core.eoq import calculate_eoq_costs
 from app.core.demand_utils import (
     compute_daily_demand_for_item, detect_column, is_junk_value,
-    build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS,
+    build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS, LOCATION_KEYWORDS,
 )
 from app.core.item_master import get_all_items, create_item, update_item, deactivate_item
+from app.core.stock_ledger import sum_check_in_window, sum_check_out_window, transfer_total
 from app.core.visual_inventory import (
     ai_powered_recommendations,
     inventory_status_dashboard,
@@ -235,9 +236,9 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
             im_unit = st.text_input("Unit of Measure", value=current.get('unit_of_measure', 'kg'))
             im_price = st.number_input("Unit Price (KSh)", min_value=0.0, value=float(current.get('unit_price', 0.0)), step=1.0)
             im_reorder = st.number_input("Reorder Level", min_value=0.0, value=float(current.get('reorder_level', 0.0)), step=1.0)
-            im_seed = st.number_input(
-                "Starting Quantity (used only until the first Stock Take for this item)",
-                min_value=0.0, value=float(current.get('seed_quantity', 0.0)), step=1.0,
+            st.caption(
+                "Starting stock isn't set here — since stock is tracked per location, "
+                "run an initial Stock Take at each location to establish its baseline."
             )
             im_created_by = st.text_input("Your Name")
 
@@ -253,7 +254,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                         {
                             "item_serial": im_serial.strip(), "item_category": im_category.strip(),
                             "unit_of_measure": im_unit.strip(), "unit_price": im_price,
-                            "reorder_level": im_reorder, "seed_quantity": im_seed,
+                            "reorder_level": im_reorder,
                         },
                         supabase_client=ctx.supabase_client,
                     )
@@ -267,7 +268,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                         create_item(
                             item_name=im_name, item_serial=im_serial, item_category=im_category,
                             unit_of_measure=im_unit, unit_price=im_price, reorder_level=im_reorder,
-                            seed_quantity=im_seed, created_by=im_created_by.strip(),
+                            created_by=im_created_by.strip(),
                             supabase_client=ctx.supabase_client,
                         )
                         st.success(f"✅ {im_name} added.")
@@ -1986,7 +1987,12 @@ def _compute_stock_variance(location: str, supabase_client=None):
     Expected book stock; Physical - Expected = Variance. Computed per
     location -- every term is filtered to `location` specifically, since
     check-in/check-out/transfers/stock takes all happen at every location,
-    not just one."""
+    not just one.
+
+    Check-Out and Transfers come from the app's own tables via
+    stock_ledger.py's shared helpers; Check-In still comes from Google
+    Sheets until Phase 3 moves it into the app too, so a Check-In outage
+    degrades to a warning rather than blocking the whole report."""
     completed = [
         c for c in st.session_state.get('stock_takes', {}).values()
         if c['status'] == 'Completed' and c.get('warehouse') == location
@@ -2004,88 +2010,25 @@ def _compute_stock_variance(location: str, supabase_client=None):
     previous, latest = completed[-2], completed[-1]
     window_start, window_end = previous.get('completed', ''), latest.get('completed', '')
 
-    _gsheet_ok = True
     try:
         gsheet = GoogleSheetReader()
-        if gsheet.authenticate():
-            check_in_df = gsheet.get_check_in()
-            check_out_df = gsheet.get_check_out()
-        else:
-            check_in_df, check_out_df = pd.DataFrame(), pd.DataFrame()
-            _gsheet_ok = False
+        check_in_df = gsheet.get_check_in() if gsheet.authenticate() else pd.DataFrame()
+        check_in_ok = True
     except Exception as e:
-        logger.error(f"Stock Variance: could not reach Google Sheets: {e}")
-        check_in_df, check_out_df = pd.DataFrame(), pd.DataFrame()
-        _gsheet_ok = False
-
-    if not _gsheet_ok:
-        return None, (
-            "Could not reach the Check-In/Check-Out data source right now, so "
-            "Check-In and Check-Out figures would read as zero rather than reflect "
-            "reality. Try again once the connection is restored."
-        )
+        logger.error(f"Stock Variance: could not reach Check-In source: {e}")
+        check_in_df = pd.DataFrame()
+        check_in_ok = False
 
     check_in_loc_col = detect_column(check_in_df, LOCATION_KEYWORDS) if not check_in_df.empty else None
-    check_out_loc_col = detect_column(check_out_df, LOCATION_KEYWORDS) if not check_out_df.empty else None
-
-    if not check_in_df.empty and not check_in_loc_col:
-        return None, (
-            "Check-In data doesn't have a Location column yet, so it can't be split "
+    check_in_warning = None
+    if not check_in_ok:
+        check_in_warning = "Could not reach the Check-In data source -- Check-In figures below read as 0 rather than reflect reality."
+    elif not check_in_df.empty and not check_in_loc_col:
+        check_in_warning = (
+            f"Check-In data doesn't have a Location column yet, so it can't be split "
             f"by location. Add one to the Check-In sheet (e.g. named 'LOCATION') with "
             f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
         )
-    if not check_out_df.empty and not check_out_loc_col:
-        return None, (
-            "Check-Out data doesn't have a Location column yet, so it can't be split "
-            f"by location. Add one to the Check-Out sheet (e.g. named 'LOCATION') with "
-            f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
-        )
-
-    def _sum_in_window(df, loc_col, item_name, start, end):
-        if df is None or df.empty:
-            return 0.0
-        item_col = detect_column(df, ITEM_LABEL_KEYWORDS)
-        date_col = next((c for c in df.columns if 'date' in c.lower()), None)
-        qty_col = next((c for c in df.columns if 'quantity' in c.lower() or 'qty' in c.lower()), None)
-        if not item_col or not date_col or not qty_col:
-            return 0.0
-        sub = df[(df[item_col] == item_name) & (df[loc_col].astype(str).str.strip() == location)].copy()
-        if sub.empty:
-            return 0.0
-        sub['_DATE'] = pd.to_datetime(sub[date_col], errors='coerce')
-        start_dt, end_dt = pd.to_datetime(start, errors='coerce'), pd.to_datetime(end, errors='coerce')
-        if pd.notna(start_dt):
-            sub = sub[sub['_DATE'] >= start_dt]
-        if pd.notna(end_dt):
-            sub = sub[sub['_DATE'] <= end_dt]
-        return pd.to_numeric(sub[qty_col], errors='coerce').fillna(0).sum()
-
-    all_transfers = get_transfers(supabase_client=supabase_client)
-
-    def _transfer_total(item_name, start, end, direction):
-        total = 0.0
-        start_dt, end_dt = pd.to_datetime(start, errors='coerce'), pd.to_datetime(end, errors='coerce')
-        for t in all_transfers:
-            if t.get('item_name') != item_name:
-                continue
-            if direction == 'out':
-                if t.get('from_location') != location:
-                    continue
-                d = pd.to_datetime(t.get('transfer_date'), errors='coerce')
-                qty = float(t.get('quantity_issued') or 0)
-            else:
-                if t.get('to_location') != location or t.get('status') not in ('Received-Matched', 'Received-Mismatch'):
-                    continue
-                d = pd.to_datetime(t.get('received_at'), errors='coerce')
-                qty = float(t.get('quantity_received') or 0)
-            if pd.isna(d):
-                continue
-            if pd.notna(start_dt) and d < start_dt:
-                continue
-            if pd.notna(end_dt) and d > end_dt:
-                continue
-            total += qty
-        return total
 
     rows = []
     for item_name, latest_details in latest['items'].items():
@@ -2093,10 +2036,13 @@ def _compute_stock_variance(location: str, supabase_client=None):
         prev_details = previous['items'].get(item_name)
         opening = prev_details.get('counted_qty', 0) if prev_details else latest_details.get('system_qty', 0)
 
-        check_in = _sum_in_window(check_in_df, check_in_loc_col, item_name, window_start, window_end)
-        check_out = _sum_in_window(check_out_df, check_out_loc_col, item_name, window_start, window_end)
-        transfers_out = _transfer_total(item_name, window_start, window_end, 'out')
-        transfers_in = _transfer_total(item_name, window_start, window_end, 'in')
+        check_in = (
+            sum_check_in_window(check_in_df, check_in_loc_col, item_name, location, window_start, window_end)
+            if check_in_loc_col else 0.0
+        )
+        check_out = sum_check_out_window(item_name, location, window_start, window_end, supabase_client=supabase_client)
+        transfers_in = transfer_total(item_name, location, window_start, window_end, 'in', supabase_client=supabase_client)
+        transfers_out = transfer_total(item_name, location, window_start, window_end, 'out', supabase_client=supabase_client)
 
         expected = opening + check_in + transfers_in - check_out - transfers_out
         rows.append({
@@ -2108,7 +2054,8 @@ def _compute_stock_variance(location: str, supabase_client=None):
 
     result_df = pd.DataFrame(rows)
     meta = {'previous_count': previous['name'], 'previous_date': window_start,
-            'latest_count': latest['name'], 'latest_date': window_end}
+            'latest_count': latest['name'], 'latest_date': window_end,
+            'check_in_warning': check_in_warning}
     return result_df, meta
 
 
@@ -2303,6 +2250,9 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
 
     st.caption(f"Comparing **{meta['previous_count']}** ({meta['previous_date']}) → "
                f"**{meta['latest_count']}** ({meta['latest_date']})")
+
+    if meta.get('check_in_warning'):
+        st.warning(f"⚠️ {meta['check_in_warning']}")
 
     flagged = result_df[result_df['Variance'].abs() > 0.01]
     if not flagged.empty:

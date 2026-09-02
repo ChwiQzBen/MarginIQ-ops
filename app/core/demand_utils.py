@@ -30,6 +30,16 @@ ITEM_LABEL_KEYWORDS = ['item_description', 'item description', 'item_name', 'ite
 # grouping by a stable SKU matters more than what it's called on screen.
 ITEM_NAME_KEYWORDS = ITEM_CODE_KEYWORDS + ITEM_LABEL_KEYWORDS + ['item', 'product']
 
+# Shared with stock_ledger.py and all_items_ui.py's Stock Variance -- moved
+# here so both import the same list instead of keeping two copies that can
+# drift out of sync (which is exactly what happened before).
+LOCATION_KEYWORDS = ["location", "warehouse", "site", "store", "outlet"]
+
+# Shared with stock_ledger.py and all_items_ui.py's Stock Variance -- moved
+# here so both import the same list instead of keeping two copies that can
+# drift out of sync (which is exactly what happened before).
+LOCATION_KEYWORDS = ["location", "warehouse", "site", "store", "outlet"]
+
 # Values that show up in Google Sheets exports as formula errors or blanks,
 # not real data -- filtered out anywhere item/supplier/etc. values are
 # grouped or displayed, same spirit as the existing 'nan'/'' checks already
