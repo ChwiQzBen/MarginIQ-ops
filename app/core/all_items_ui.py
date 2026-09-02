@@ -85,6 +85,7 @@ from app.core.demand_utils import (
     build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS, LOCATION_KEYWORDS,
 )
 from app.core.item_master import get_all_items, create_item, update_item, deactivate_item
+from app.core.checkin_records import record_checkin, get_checkins
 from app.core.stock_ledger import sum_check_in_window, sum_check_out_window, transfer_total
 from app.core.visual_inventory import (
     ai_powered_recommendations,
@@ -181,6 +182,8 @@ def render_all_items_mode(ctx: AllItemsContext,
         _render_checkout_reconciliation_tab(ctx, has_permission=has_permission)
     elif active_tab == "🔁 Transfers":
         _render_transfer_reconciliation_tab(ctx)
+    elif active_tab == "🔄 Check In / Check Out":
+        _render_checkin_checkout_tab(ctx)
     elif active_tab == "📊 Stock Variance":
         _render_variance_tab(ctx)
 
@@ -1040,49 +1043,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
-        st.caption("Recorded directly in the app — this is now the source of truth, not the Google Sheet.")
-
-        with st.expander("➕ Record a Check-Out", expanded=False):
-            item_options = sorted((ctx.inventory_items or {}).keys())
-            with st.form("record_checkout_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    co_date = st.date_input("Date", value=datetime.now().date())
-                    if item_options:
-                        co_item = st.selectbox("Item", item_options)
-                    else:
-                        co_item = st.text_input("Item")
-                    co_qty = st.number_input("Quantity", min_value=0.0, step=1.0)
-                    co_store = st.selectbox("Store/Location", COMPANY_LOCATIONS)
-                with col2:
-                    co_department = st.text_input("Department")
-                    co_issued_to = st.text_input("Issued To")
-                    co_batch = st.text_input("Batch No. (optional)")
-                    co_recorded_by = st.text_input("Recorded By")
-
-                co_notes = st.text_input("Notes (optional)")
-
-                if st.form_submit_button("📤 Record Check-Out", type="primary"):
-                    if not co_item:
-                        st.error("Select or enter an item.")
-                    elif co_qty <= 0:
-                        st.error("Quantity must be greater than 0.")
-                    elif not co_store:
-                        st.error("Store/Location is required.")
-                    elif not co_recorded_by.strip():
-                        st.error("Enter who is recording this.")
-                    else:
-                        item_details = (ctx.inventory_items or {}).get(co_item, {})
-                        record_checkout(
-                            checkout_date=co_date, item_name=co_item, quantity=co_qty,
-                            unit=item_details.get('unit', 'kg'), item_category=item_details.get('category', ''),
-                            store=co_store, requested_by=co_issued_to.strip(),
-                            destination=co_department.strip(), batch_no=co_batch.strip(),
-                            notes=co_notes.strip(), created_by=co_recorded_by.strip(),
-                            supabase_client=supabase_client,
-                        )
-                        st.success(f"✅ Check-out recorded for {co_item}.")
-                        st.rerun()
+        st.caption("Oversight view — record new check-outs from the 🔄 Check In / Check Out tab.")
 
         recorded_checkouts = get_checkouts(supabase_client=supabase_client)
         with st.expander("📋 View Check-Out Records", expanded=False):
@@ -2230,6 +2191,109 @@ def _get_flagged_variance_checkouts(location, supabase_client=None):
             'checkout_rows': sub,
         })
     return results, meta
+
+
+def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
+    st.markdown("### 🔄 Check In / Check Out")
+    supabase_client = ctx.supabase_client
+    init_checkout_reconciliation_storage(supabase_client)
+    item_options = sorted((ctx.inventory_items or {}).keys())
+
+    st.markdown("#### 📥 Record a Check-In")
+    with st.form("record_checkin_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            ci_date = st.date_input("Date", value=datetime.now().date(), key="checkin_date")
+            ci_item = st.selectbox("Item", item_options, key="checkin_item") if item_options else st.text_input("Item", key="checkin_item_text")
+            ci_qty = st.number_input("Quantity", min_value=0.0, step=1.0, key="checkin_qty")
+            ci_store = st.selectbox("Store/Location", COMPANY_LOCATIONS, key="checkin_store")
+            ci_supplier = st.text_input("Supplier", key="checkin_supplier")
+        with col2:
+            ci_unit_price = st.number_input("Unit Price (KSh, optional)", min_value=0.0, step=1.0, key="checkin_price")
+            ci_batch = st.text_input("Batch No. (optional)", key="checkin_batch")
+            ci_invoice = st.text_input("Invoice / LPO No. (optional)", key="checkin_invoice")
+            ci_temp = st.text_input("Temperature at receipt (optional)", key="checkin_temp")
+            ci_coa = st.text_input("COA reference (optional)", key="checkin_coa")
+
+        ci_received_by = st.text_input("Received By", key="checkin_received_by")
+        ci_confirmed_by = st.text_input("Confirmed By (optional)", key="checkin_confirmed_by")
+        ci_notes = st.text_input("Notes (optional)", key="checkin_notes")
+
+        if st.form_submit_button("📥 Record Check-In", type="primary"):
+            if not ci_item:
+                st.error("Select or enter an item.")
+            elif ci_qty <= 0:
+                st.error("Quantity must be greater than 0.")
+            elif not ci_store:
+                st.error("Store/Location is required.")
+            elif not ci_received_by.strip():
+                st.error("Enter who received this.")
+            else:
+                item_details = (ctx.inventory_items or {}).get(ci_item, {})
+                record_checkin(
+                    checkin_date=ci_date, item_name=ci_item, quantity=ci_qty,
+                    unit=item_details.get('unit', 'kg'), item_category=item_details.get('category', ''),
+                    unit_price=ci_unit_price, supplier=ci_supplier.strip(), store=ci_store,
+                    batch_no=ci_batch.strip(), temperature=ci_temp.strip(), coa=ci_coa.strip(),
+                    invoice_lpo=ci_invoice.strip(), received_by=ci_received_by.strip(),
+                    confirmed_by=ci_confirmed_by.strip(), notes=ci_notes.strip(),
+                    created_by=ci_received_by.strip(), supabase_client=supabase_client,
+                )
+                st.success(f"✅ Check-in recorded for {ci_item}.")
+                st.rerun()
+
+    with st.expander("📋 View Recorded Check-Ins (this app only — full history is still on Stock Movements → Check-Ins)", expanded=False):
+        recent_checkins = get_checkins(supabase_client=supabase_client)
+        if recent_checkins:
+            st.dataframe(pd.DataFrame(recent_checkins), use_container_width=True, height=300, hide_index=True)
+        else:
+            st.info("No check-ins recorded in the app yet.")
+
+    st.markdown("---")
+    st.markdown("#### 📤 Record a Check-Out")
+    with st.form("record_checkout_form_v2", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            co_date = st.date_input("Date", value=datetime.now().date(), key="checkout_date")
+            co_item = st.selectbox("Item", item_options, key="checkout_item") if item_options else st.text_input("Item", key="checkout_item_text")
+            co_qty = st.number_input("Quantity", min_value=0.0, step=1.0, key="checkout_qty")
+            co_store = st.selectbox("Store/Location", COMPANY_LOCATIONS, key="checkout_store")
+        with col2:
+            co_department = st.text_input("Department", key="checkout_department")
+            co_issued_to = st.text_input("Issued To", key="checkout_issued_to")
+            co_batch = st.text_input("Batch No. (optional)", key="checkout_batch")
+            co_recorded_by = st.text_input("Recorded By", key="checkout_recorded_by")
+
+        co_notes = st.text_input("Notes (optional)", key="checkout_notes")
+
+        if st.form_submit_button("📤 Record Check-Out", type="primary"):
+            if not co_item:
+                st.error("Select or enter an item.")
+            elif co_qty <= 0:
+                st.error("Quantity must be greater than 0.")
+            elif not co_store:
+                st.error("Store/Location is required.")
+            elif not co_recorded_by.strip():
+                st.error("Enter who is recording this.")
+            else:
+                item_details = (ctx.inventory_items or {}).get(co_item, {})
+                record_checkout(
+                    checkout_date=co_date, item_name=co_item, quantity=co_qty,
+                    unit=item_details.get('unit', 'kg'), item_category=item_details.get('category', ''),
+                    store=co_store, requested_by=co_issued_to.strip(),
+                    destination=co_department.strip(), batch_no=co_batch.strip(),
+                    notes=co_notes.strip(), created_by=co_recorded_by.strip(),
+                    supabase_client=supabase_client,
+                )
+                st.success(f"✅ Check-out recorded for {co_item}.")
+                st.rerun()
+
+    with st.expander("📋 View Recorded Check-Outs", expanded=False):
+        recent_checkouts = get_checkouts(supabase_client=supabase_client)
+        if recent_checkouts:
+            st.dataframe(pd.DataFrame(recent_checkouts), use_container_width=True, height=300, hide_index=True)
+        else:
+            st.info("No check-outs recorded yet.")
 
 
 def _render_variance_tab(ctx: AllItemsContext) -> None:
