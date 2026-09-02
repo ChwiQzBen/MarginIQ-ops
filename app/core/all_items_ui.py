@@ -84,6 +84,7 @@ from app.core.demand_utils import (
     compute_daily_demand_for_item, detect_column, is_junk_value,
     build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS,
 )
+from app.core.item_master import get_all_items, create_item, update_item, deactivate_item
 from app.core.visual_inventory import (
     ai_powered_recommendations,
     inventory_status_dashboard,
@@ -209,6 +210,78 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
         st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     st.divider()
+
+    with st.expander("➕ Add / Edit Item (new item master — not yet live elsewhere)", expanded=False):
+        st.caption(
+            "Adds to the new in-app item list. Until Check-In/Check-Out and this "
+            "tab's display are switched over, items added here won't show up "
+            "anywhere else yet -- safe to test, not yet the production way to add items."
+        )
+        existing_items = get_all_items(active_only=True, supabase_client=ctx.supabase_client)
+        existing_names = [i['item_name'] for i in existing_items]
+
+        edit_mode = st.checkbox("Editing an existing item", key="item_master_edit_mode")
+        if edit_mode and existing_names:
+            selected_name = st.selectbox("Item to edit", existing_names, key="item_master_edit_select")
+            current = next((i for i in existing_items if i['item_name'] == selected_name), {})
+        else:
+            selected_name = None
+            current = {}
+
+        with st.form("item_master_form", clear_on_submit=not edit_mode):
+            im_name = st.text_input("Item Name", value=current.get('item_name', ''), disabled=edit_mode)
+            im_serial = st.text_input("Item Serial (optional)", value=current.get('item_serial', ''))
+            im_category = st.text_input("Category", value=current.get('item_category', ''))
+            im_unit = st.text_input("Unit of Measure", value=current.get('unit_of_measure', 'kg'))
+            im_price = st.number_input("Unit Price (KSh)", min_value=0.0, value=float(current.get('unit_price', 0.0)), step=1.0)
+            im_reorder = st.number_input("Reorder Level", min_value=0.0, value=float(current.get('reorder_level', 0.0)), step=1.0)
+            im_seed = st.number_input(
+                "Starting Quantity (used only until the first Stock Take for this item)",
+                min_value=0.0, value=float(current.get('seed_quantity', 0.0)), step=1.0,
+            )
+            im_created_by = st.text_input("Your Name")
+
+            submit_label = "💾 Update Item" if edit_mode else "➕ Add Item"
+            if st.form_submit_button(submit_label, type="primary"):
+                if not im_name.strip():
+                    st.error("Item name is required.")
+                elif not im_created_by.strip():
+                    st.error("Enter your name.")
+                elif edit_mode:
+                    ok = update_item(
+                        selected_name,
+                        {
+                            "item_serial": im_serial.strip(), "item_category": im_category.strip(),
+                            "unit_of_measure": im_unit.strip(), "unit_price": im_price,
+                            "reorder_level": im_reorder, "seed_quantity": im_seed,
+                        },
+                        supabase_client=ctx.supabase_client,
+                    )
+                    if ok:
+                        st.success(f"✅ {selected_name} updated.")
+                        st.rerun()
+                    else:
+                        st.error("Could not update -- check the logs.")
+                else:
+                    try:
+                        create_item(
+                            item_name=im_name, item_serial=im_serial, item_category=im_category,
+                            unit_of_measure=im_unit, unit_price=im_price, reorder_level=im_reorder,
+                            seed_quantity=im_seed, created_by=im_created_by.strip(),
+                            supabase_client=ctx.supabase_client,
+                        )
+                        st.success(f"✅ {im_name} added.")
+                        st.rerun()
+                    except Exception:
+                        st.error(f"Could not add '{im_name}' -- it may already exist.")
+
+        if edit_mode and selected_name:
+            if st.button(f"🚫 Deactivate {selected_name}", key="item_master_deactivate_btn"):
+                if deactivate_item(selected_name, supabase_client=ctx.supabase_client):
+                    st.success(f"✅ {selected_name} deactivated.")
+                    st.rerun()
+                else:
+                    st.error("Could not deactivate -- check the logs.")
 
     @st.cache_data(ttl=300)
     def load_full_inventory_details():
