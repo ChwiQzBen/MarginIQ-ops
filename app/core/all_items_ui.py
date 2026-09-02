@@ -873,6 +873,9 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
 def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
     st.markdown("## 📊 Stock Movements & Stock Take")
 
+    supabase_client = ctx.supabase_client
+    init_checkout_reconciliation_storage(supabase_client)
+
     col1, col2 = st.columns([1, 4])
     with col1:
         if st.button("🔄 Refresh Movements", use_container_width=True):
@@ -963,10 +966,56 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
+        st.caption("Recorded directly in the app — this is now the source of truth, not the Google Sheet.")
+
+        with st.expander("➕ Record a Check-Out", expanded=False):
+            item_options = sorted((ctx.inventory_items or {}).keys())
+            with st.form("record_checkout_form", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    co_date = st.date_input("Date", value=datetime.now().date())
+                    if item_options:
+                        co_item = st.selectbox("Item", item_options)
+                    else:
+                        co_item = st.text_input("Item")
+                    co_qty = st.number_input("Quantity", min_value=0.0, step=1.0)
+                    co_store = st.selectbox("Store/Location", COMPANY_LOCATIONS)
+                with col2:
+                    co_department = st.text_input("Department")
+                    co_issued_to = st.text_input("Issued To")
+                    co_batch = st.text_input("Batch No. (optional)")
+                    co_recorded_by = st.text_input("Recorded By")
+
+                co_notes = st.text_input("Notes (optional)")
+
+                if st.form_submit_button("📤 Record Check-Out", type="primary"):
+                    if not co_item:
+                        st.error("Select or enter an item.")
+                    elif co_qty <= 0:
+                        st.error("Quantity must be greater than 0.")
+                    elif not co_store:
+                        st.error("Store/Location is required.")
+                    elif not co_recorded_by.strip():
+                        st.error("Enter who is recording this.")
+                    else:
+                        item_details = (ctx.inventory_items or {}).get(co_item, {})
+                        record_checkout(
+                            checkout_date=co_date, item_name=co_item, quantity=co_qty,
+                            unit=item_details.get('unit', 'kg'), item_category=item_details.get('category', ''),
+                            store=co_store, requested_by=co_issued_to.strip(),
+                            destination=co_department.strip(), batch_no=co_batch.strip(),
+                            notes=co_notes.strip(), created_by=co_recorded_by.strip(),
+                            supabase_client=supabase_client,
+                        )
+                        st.success(f"✅ Check-out recorded for {co_item}.")
+                        st.rerun()
+
+        recorded_checkouts = get_checkouts(supabase_client=supabase_client)
         with st.expander("📋 View Check-Out Records", expanded=False):
-            if not check_out_df.empty:
-                st.dataframe(check_out_df, use_container_width=True, height=400)
-                csv = check_out_df.to_csv(index=False).encode('utf-8')
+            if recorded_checkouts:
+                checkout_df_display = pd.DataFrame(recorded_checkouts)
+                st.dataframe(checkout_df_display, use_container_width=True, height=400)
+                csv = checkout_df_display.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Download Check-Outs CSV",
                     data=csv,

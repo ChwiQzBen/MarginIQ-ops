@@ -54,11 +54,14 @@ def init_checkout_reconciliation_storage(supabase_client=None) -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         checkout_date TEXT NOT NULL,
         item_name TEXT NOT NULL,
+        item_category TEXT,
         quantity REAL NOT NULL,
         unit TEXT,
+        store TEXT,
         requested_by TEXT,
         destination TEXT,
-        dispatch_slip_number TEXT NOT NULL,
+        batch_no TEXT,
+        dispatch_slip_number TEXT,
         notes TEXT,
         status TEXT NOT NULL DEFAULT 'Pending',
         reconciled_by TEXT,
@@ -76,18 +79,20 @@ def _sqlite():
 
 
 def record_checkout(checkout_date: date, item_name: str, quantity: float,
-                     dispatch_slip_number: str, unit: str = "",
-                     requested_by: str = "", destination: str = "",
-                     notes: str = "", created_by: str = "",
+                     unit: str = "", item_category: str = "", store: str = "",
+                     requested_by: str = "", destination: str = "", batch_no: str = "",
+                     dispatch_slip_number: str = "", notes: str = "", created_by: str = "",
                      supabase_client=None) -> Optional[int]:
     """Always created with status='Pending' — a check-out is NOT confirmed
-    until reconcile_checkout() is called against it. dispatch_slip_number
-    is required (this is the whole point of the control) but validation
-    of non-blank is left to the caller/UI so this stays pure persistence."""
+    until reconcile_checkout() is called against it. dispatch_slip_number is
+    now optional: confirmed against the actual paper requisition form that
+    check-outs have no reference/slip number in practice, so this can no
+    longer be a required field."""
     row = {
         "checkout_date": checkout_date.isoformat(), "item_name": item_name,
-        "quantity": quantity, "unit": unit, "requested_by": requested_by,
-        "destination": destination, "dispatch_slip_number": dispatch_slip_number,
+        "item_category": item_category, "quantity": quantity, "unit": unit,
+        "store": store, "requested_by": requested_by, "destination": destination,
+        "batch_no": batch_no, "dispatch_slip_number": dispatch_slip_number,
         "notes": notes, "status": "Pending", "created_by": created_by,
         "created_at": datetime.now().isoformat(),
     }
@@ -100,10 +105,12 @@ def record_checkout(checkout_date: date, item_name: str, quantity: float,
     conn = _sqlite()
     c = conn.cursor()
     c.execute("""INSERT INTO stock_checkouts
-        (checkout_date, item_name, quantity, unit, requested_by, destination,
-         dispatch_slip_number, notes, status, created_by, created_at)
-        VALUES (:checkout_date, :item_name, :quantity, :unit, :requested_by, :destination,
-         :dispatch_slip_number, :notes, :status, :created_by, :created_at)""", row)
+        (checkout_date, item_name, item_category, quantity, unit, store,
+         requested_by, destination, batch_no, dispatch_slip_number, notes,
+         status, created_by, created_at)
+        VALUES (:checkout_date, :item_name, :item_category, :quantity, :unit, :store,
+         :requested_by, :destination, :batch_no, :dispatch_slip_number, :notes,
+         :status, :created_by, :created_at)""", row)
     new_id = c.lastrowid
     conn.commit()
     conn.close()
