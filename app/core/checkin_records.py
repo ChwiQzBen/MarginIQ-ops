@@ -53,3 +53,16 @@ def get_checkins(start_date: Optional[date] = None, end_date: Optional[date] = N
     except Exception as e:
         logger.error(f"get_checkins failed: {e}")
         return []
+
+def delete_checkin(checkin_id: int, supabase_client=None) -> bool:
+    """Hard delete -- no soft-delete/audit column on this table, so the
+    deletion itself is logged server-side (who, which id) even though the
+    row itself is gone afterward."""
+    if not supabase_client:
+        return False
+    try:
+        result = supabase_client.table(TABLE).delete().eq("id", checkin_id).execute()
+        return bool(result.data)
+    except Exception as e:
+        logger.error(f"delete_checkin failed for id={checkin_id}: {e}")
+        return False

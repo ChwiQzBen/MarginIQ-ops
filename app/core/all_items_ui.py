@@ -85,8 +85,11 @@ from app.core.demand_utils import (
     build_code_to_label_map, ITEM_NAME_KEYWORDS, ITEM_LABEL_KEYWORDS, LOCATION_KEYWORDS,
 )
 from app.core.item_master import get_all_items, create_item, update_item, deactivate_item
-from app.core.checkin_records import record_checkin, get_checkins
-from app.core.stock_ledger import sum_check_in_window, sum_check_out_window, transfer_total
+from app.core.checkin_records import record_checkin, get_checkins, delete_checkin
+from app.core.stock_ledger import (
+    sum_check_in_window, sum_check_out_window, transfer_total,
+    _sum_check_out_from_records, _transfer_total_from_records, get_all_current_stock,
+)
 from app.core.visual_inventory import (
     ai_powered_recommendations,
     inventory_status_dashboard,
@@ -103,7 +106,7 @@ from app.core.stock_take import stock_take_interface
 from app.core.jit_purchasing_ui import render_jit_purchasing_tab
 from app.core.rbac import ALL_ITEMS_TAB_REQUIREMENTS, Permission
 from app.core.checkout_reconciliation import (
-    init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout,
+    init_checkout_reconciliation_storage, record_checkout, get_checkouts, reconcile_checkout, delete_checkout,
 )
 from app.core.transfer_reconciliation import (
     init_transfer_storage, record_transfer_batch, get_transfers, get_goods_received_notes,
@@ -2019,6 +2022,9 @@ def _compute_stock_variance(location: str, supabase_client=None):
             f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
         )
 
+    all_checkouts = get_checkouts(supabase_client=supabase_client)
+    all_transfers = get_transfers(supabase_client=supabase_client)
+
     rows = []
     for item_name, latest_details in latest['items'].items():
         physical = latest_details.get('counted_qty', 0)
@@ -2029,9 +2035,9 @@ def _compute_stock_variance(location: str, supabase_client=None):
             sum_check_in_window(check_in_df, check_in_loc_col, item_name, location, window_start, window_end)
             if check_in_loc_col else 0.0
         )
-        check_out = sum_check_out_window(item_name, location, window_start, window_end, supabase_client=supabase_client)
-        transfers_in = transfer_total(item_name, location, window_start, window_end, 'in', supabase_client=supabase_client)
-        transfers_out = transfer_total(item_name, location, window_start, window_end, 'out', supabase_client=supabase_client)
+        check_out = _sum_check_out_from_records(all_checkouts, item_name, location, window_start, window_end)
+        transfers_in = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'in')
+        transfers_out = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'out')
 
         expected = opening + check_in + transfers_in - check_out - transfers_out
         rows.append({
@@ -2291,11 +2297,11 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
         with col1:
             ci_date = st.date_input("Date", value=datetime.now().date(), key="checkin_date")
             ci_store = st.selectbox("Store/Location", COMPANY_LOCATIONS, key="checkin_store")
+        with col2:
+            ci_invoice = st.text_input("Invoice / LPO / Delivery Note No. (optional)", key="checkin_invoice")
             ci_supplier = _picker_with_add_new(
                 "Supplier", _distinct_check_in_suppliers(_supabase_client=supabase_client), "checkin_supplier"
             )
-        with col2:
-            ci_invoice = st.text_input("Invoice / LPO / Delivery Note No. (optional)", key="checkin_invoice")
 
         ci_items_df = st.data_editor(
             pd.DataFrame({"item_name": [None], "quantity": [0.0], "unit_price": [0.0], "batch_no": [""]}),
@@ -2348,6 +2354,25 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
         recent_checkins = get_checkins(supabase_client=supabase_client)
         if recent_checkins:
             st.dataframe(pd.DataFrame(recent_checkins), use_container_width=True, height=300, hide_index=True)
+
+            st.markdown("##### 🗑️ Delete an Entry")
+            checkin_labels = {
+                f"#{r['id']} — {r['checkin_date']} — {r['item_name']} ({r['quantity']} {r.get('unit', '')})": r['id']
+                for r in recent_checkins
+            }
+            del_checkin_label = st.selectbox("Select entry to delete", list(checkin_labels.keys()), key="delete_checkin_select")
+            del_checkin_by = st.text_input("Your Name", key="delete_checkin_by")
+            if st.button("🗑️ Delete This Check-In", key="delete_checkin_btn"):
+                if not del_checkin_by.strip():
+                    st.error("Enter your name before deleting.")
+                else:
+                    target_id = checkin_labels[del_checkin_label]
+                    if delete_checkin(target_id, supabase_client=supabase_client):
+                        logger.info(f"Check-in #{target_id} deleted by {del_checkin_by.strip()}")
+                        st.success("✅ Entry deleted.")
+                        st.rerun()
+                    else:
+                        st.error("Could not delete — check the logs.")
         else:
             st.info("No check-ins recorded in the app yet.")
 
@@ -2411,6 +2436,25 @@ def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
         recent_checkouts = get_checkouts(supabase_client=supabase_client)
         if recent_checkouts:
             st.dataframe(pd.DataFrame(recent_checkouts), use_container_width=True, height=300, hide_index=True)
+
+            st.markdown("##### 🗑️ Delete an Entry")
+            checkout_labels = {
+                f"#{r['id']} — {r['checkout_date']} — {r['item_name']} ({r['quantity']} {r.get('unit', '')})": r['id']
+                for r in recent_checkouts
+            }
+            del_checkout_label = st.selectbox("Select entry to delete", list(checkout_labels.keys()), key="delete_checkout_select")
+            del_checkout_by = st.text_input("Your Name", key="delete_checkout_by")
+            if st.button("🗑️ Delete This Check-Out", key="delete_checkout_btn"):
+                if not del_checkout_by.strip():
+                    st.error("Enter your name before deleting.")
+                else:
+                    target_id = checkout_labels[del_checkout_label]
+                    if delete_checkout(target_id, supabase_client=supabase_client):
+                        logger.info(f"Check-out #{target_id} deleted by {del_checkout_by.strip()}")
+                        st.success("✅ Entry deleted.")
+                        st.rerun()
+                    else:
+                        st.error("Could not delete — check the logs.")
         else:
             st.info("No check-outs recorded yet.")
 

@@ -195,3 +195,16 @@ def get_confirmed_checkout_total(item_name: Optional[str] = None,
     if item_name:
         rows = [r for r in rows if r["item_name"] == item_name]
     return sum(float(r["quantity"]) for r in rows)
+
+def delete_checkout(checkout_id: int, supabase_client=None) -> bool:
+    """Hard delete, Supabase-only -- not implemented against the SQLite
+    fallback since that path only matters when Supabase is unreachable,
+    in which case there is nothing on this side to delete against."""
+    if not supabase_client:
+        return False
+    try:
+        result = supabase_client.table("stock_checkouts").delete().eq("id", checkout_id).execute()
+        return bool(result.data)
+    except Exception as e:
+        logger.error(f"delete_checkout failed for id={checkout_id}: {e}")
+        return False
