@@ -89,6 +89,7 @@ from app.core.checkin_records import record_checkin, get_checkins, delete_checki
 from app.core.stock_ledger import (
     sum_check_in_window, sum_check_out_window, transfer_total,
     _sum_check_out_from_records, _transfer_total_from_records, get_all_current_stock,
+    _sum_check_in_from_app_records,
 )
 from app.core.visual_inventory import (
     ai_powered_recommendations,
@@ -2024,6 +2025,7 @@ def _compute_stock_variance(location: str, supabase_client=None):
 
     all_checkouts = get_checkouts(supabase_client=supabase_client)
     all_transfers = get_transfers(supabase_client=supabase_client)
+    all_app_checkins = get_checkins(supabase_client=supabase_client)
 
     rows = []
     for item_name, latest_details in latest['items'].items():
@@ -2032,8 +2034,8 @@ def _compute_stock_variance(location: str, supabase_client=None):
         opening = prev_details.get('counted_qty', 0) if prev_details else latest_details.get('system_qty', 0)
 
         check_in = (
-            sum_check_in_window(check_in_df, check_in_loc_col, item_name, location, window_start, window_end)
-            if check_in_loc_col else 0.0
+            (sum_check_in_window(check_in_df, check_in_loc_col, item_name, location, window_start, window_end) if check_in_loc_col else 0.0)
+            + _sum_check_in_from_app_records(all_app_checkins, item_name, location, window_start, window_end)
         )
         check_out = _sum_check_out_from_records(all_checkouts, item_name, location, window_start, window_end)
         transfers_in = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'in')

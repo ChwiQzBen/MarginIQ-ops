@@ -30,6 +30,7 @@ from app.core.dashboard_home import DashboardContext, render_dashboard_home
 from app.core.supabase_client import init_supabase
 from app.core.pdf_reports import generate_enhanced_pdf_report
 from app.core.visual_inventory import get_sample_inventory_data
+from app.core.stock_ledger import get_all_current_stock
 from app.core.forecasting import (
       create_ensemble_forecast,
       create_scenario_analysis,
@@ -674,9 +675,19 @@ def main():
     # Try to load from Google Sheets first
     @st.cache_data(ttl=600)
     @safe_operation(error_message="Failed to load inventory data")
-    def load_inventory_data():
+    def load_inventory_data(_supabase_client=None):
         """
-        Load inventory data from Google Sheets with comprehensive error handling.
+        Item identity/attributes from the Stock/Inventory Google Sheet;
+        current stock computed via stock_ledger.py (Stock Take anchor +
+        Check-In/Check-Out/Transfers since) instead of read directly off
+        the sheet's QUANTITY column.
+
+        Safety net: an item with no completed Stock Take at ANY location
+        yet has no honest baseline to compute from -- rather than a false
+        zero (which would misfire every Low Stock/reorder alert in the
+        app), it falls back to the sheet's last-known QUANTITY, tagged
+        'stock_source': 'sheet_fallback' on the item so it stays
+        identifiable later.
         """
         inventory_items = {}
         stock_df = None
@@ -685,7 +696,6 @@ def main():
             logger.info("Loading inventory data from Google Sheets...")
             gsheet = GoogleSheetReader()
             
-            # Check authentication
             if not gsheet.authenticate():
                 logger.warning("Google Sheets authentication failed. Using sample data.")
                 st.info("📊 Could not connect to the inventory data source right now. Showing sample data for now.")
@@ -694,18 +704,12 @@ def main():
             logger.info("Google Sheets authentication successful. Fetching data...")
             stock_df = gsheet.get_stock_with_pricing()
             
-            # ============================================================
-            # 🚀 COMPRESS DATAFRAME TO REDUCE MEMORY USAGE
-            # ============================================================
             if not stock_df.empty:
                 original_size = len(stock_df)
                 original_memory = stock_df.memory_usage(deep=True).sum() / 1024 / 1024
-                
                 stock_df = compress_dataframe(stock_df)
-                
                 compressed_memory = stock_df.memory_usage(deep=True).sum() / 1024 / 1024
                 reduction = ((original_memory - compressed_memory) / original_memory) * 100
-                
                 logger.info(f"📊 Stock DataFrame compressed: {original_size} rows")
                 logger.info(f"💾 Memory: {original_memory:.1f}MB → {compressed_memory:.1f}MB (↓{reduction:.0f}%)")
             else:
@@ -713,7 +717,6 @@ def main():
                 st.info("📊 No inventory data found yet. Showing sample data for now.")
                 return get_sample_inventory_data(), None
             
-            # Check if data is empty
             if stock_df.empty:
                 logger.warning("Google Sheets returned empty data. Using sample data.")
                 st.info("📊 No inventory data found yet. Showing sample data for now.")
@@ -721,86 +724,60 @@ def main():
             
             logger.info(f"Retrieved {len(stock_df)} rows from Google Sheets")
             
-            # Process the data with error handling for each row
+            # --- Pass 1: identity/attributes + the sheet's own quantity,
+            # kept as a fallback value rather than the final number ---
+            parsed_rows = {}
             processed_count = 0
             skipped_count = 0
             
             for _, row in stock_df.iterrows():
                 try:
-                    # Get item name
                     item_name = row.get('ITEM_NAME', 'Unknown')
                     if not item_name or str(item_name).strip() == '':
                         skipped_count += 1
                         continue
                     
-                    # Safe conversion for stock
                     try:
                         stock_val = row.get('QUANTITY', 0)
-                        if pd.isna(stock_val) or str(stock_val).strip() == '':
-                            stock = 0
-                        else:
-                            stock = float(stock_val)
+                        sheet_stock = 0 if (pd.isna(stock_val) or str(stock_val).strip() == '') else float(stock_val)
                     except (ValueError, TypeError) as e:
                         logger.debug(f"Error converting stock for {item_name}: {e}")
-                        stock = 0
+                        sheet_stock = 0
                     
-                    # Skip items with zero or negative stock
-                    if stock <= 0:
+                    if sheet_stock <= 0:
                         skipped_count += 1
                         continue
                     
-                    # Safe conversion for reorder level
                     try:
                         reorder_val = row.get('REORDER LEVEL', 0)
-                        if pd.isna(reorder_val) or str(reorder_val).strip() == '':
-                            reorder = stock * 0.5
-                        else:
-                            reorder = float(reorder_val)
+                        reorder = sheet_stock * 0.5 if (pd.isna(reorder_val) or str(reorder_val).strip() == '') else float(reorder_val)
                     except (ValueError, TypeError) as e:
                         logger.debug(f"Error converting reorder for {item_name}: {e}")
-                        reorder = stock * 0.5
+                        reorder = sheet_stock * 0.5
                     
-                    # Safe conversion for price
                     try:
                         price_val = row.get('UNIT PRICE', 0)
-                        if pd.isna(price_val) or str(price_val).strip() == '':
-                            price = 0
-                        else:
-                            price = float(price_val)
+                        price = 0 if (pd.isna(price_val) or str(price_val).strip() == '') else float(price_val)
                     except (ValueError, TypeError) as e:
                         logger.debug(f"Error converting price for {item_name}: {e}")
                         price = 0
                     
-                    # Map icons based on category
                     icon_map = {
-                        'Dry Ice': '🧊',
-                        'Chemicals': '🧪',
-                        'Packaging': '📦',
-                        'Equipment': '⚙️',
-                        'Safety': '🛡️',
-                        'Default': '📦'
+                        'Dry Ice': '🧊', 'Chemicals': '🧪', 'Packaging': '📦',
+                        'Equipment': '⚙️', 'Safety': '🛡️', 'Default': '📦'
                     }
-                    
                     category = row.get('ITEM_CATEGORY', 'Default')
                     if pd.isna(category) or str(category).strip() == '':
                         category = 'Default'
                     icon = icon_map.get(category, icon_map['Default'])
                     
-                    # Get unit of measure
                     unit = row.get('UNIT_OF_MEASURE', 'kg')
                     if pd.isna(unit) or str(unit).strip() == '':
                         unit = 'kg'
                     
-                    # Create inventory item
-                    inventory_items[item_name] = {
-                        'icon': icon,
-                        'stock': stock,
-                        'reorder': reorder,
-                        'max': max(stock * 2, reorder * 3, 100),
-                        'unit': unit,
-                        'category': category if category else 'Uncategorized',
-                        'location': 'Warehouse',
-                        'price': price
+                    parsed_rows[item_name] = {
+                        'icon': icon, 'sheet_stock': sheet_stock, 'reorder': reorder,
+                        'unit': unit, 'category': category if category else 'Uncategorized', 'price': price,
                     }
                     processed_count += 1
                     
@@ -811,11 +788,37 @@ def main():
             
             logger.info(f"Processed {processed_count} items, skipped {skipped_count} items")
             
-            # Check if we have any valid items
-            if not inventory_items:
+            if not parsed_rows:
                 logger.warning("No valid inventory items found after processing. Using sample data.")
                 st.warning("⚠️ No valid inventory items found. Showing sample data for now.")
                 return get_sample_inventory_data(), None
+            
+            # --- Pass 2: real current stock via the shared ledger, ONE
+            # batch call for every item instead of one call each ---
+            sheet_stocks = {name: details['sheet_stock'] for name, details in parsed_rows.items()}
+            try:
+                computed_stock = get_all_current_stock(
+                    list(parsed_rows.keys()), sheet_quantities=sheet_stocks, supabase_client=_supabase_client,
+                )
+            except Exception as e:
+                logger.error(f"Stock ledger computation failed, falling back to sheet quantities for all items: {e}")
+                st.warning("⚠️ Could not compute live stock levels right now — showing last known sheet quantities.")
+                computed_stock = {
+                    name: {'total': details['sheet_stock'], 'source': 'sheet_fallback', 'missing_locations': []}
+                    for name, details in parsed_rows.items()
+                }
+            
+            for item_name, details in parsed_rows.items():
+                stock_info = computed_stock.get(
+                    item_name, {'total': details['sheet_stock'], 'source': 'sheet_fallback', 'missing_locations': []}
+                )
+                stock = stock_info['total']
+                inventory_items[item_name] = {
+                    'icon': details['icon'], 'stock': stock, 'reorder': details['reorder'],
+                    'max': max(stock * 2, details['reorder'] * 3, 100), 'unit': details['unit'],
+                    'category': details['category'], 'location': 'Warehouse', 'price': details['price'],
+                    'stock_source': stock_info['source'],
+                }
             
             logger.info(f"Successfully loaded {len(inventory_items)} inventory items")
             return inventory_items, stock_df
@@ -840,7 +843,8 @@ def main():
 
     
     if mode != "🧀 BCPOS Mode":
-        inventory_items, stock_df = load_inventory_data()
+        _inventory_supabase_client = init_supabase()
+        inventory_items, stock_df = load_inventory_data(_supabase_client=_inventory_supabase_client)
     else:
         inventory_items, stock_df = {}, None
     

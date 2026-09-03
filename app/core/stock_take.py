@@ -396,6 +396,32 @@ def get_count_history():
     return sorted(history, key=lambda x: x['completed'], reverse=True)
 
 
+def get_location_coverage() -> list:
+    """For each company location, whether it has at least one completed
+    Stock Take -- the minimum stock_ledger.py needs to compute real stock
+    there instead of falling back to the last known sheet quantity."""
+    from app.core.locations import COMPANY_LOCATIONS
+    coverage = []
+    for loc in COMPANY_LOCATIONS:
+        completed = [
+            c for c in st.session_state.get('stock_takes', {}).values()
+            if c.get('status') == 'Completed' and c.get('warehouse') == loc
+        ]
+        if completed:
+            completed.sort(key=lambda c: c.get('completed', ''))
+            coverage.append({
+                'Location': loc, 'Has Baseline': '✅ Yes',
+                'Completed Counts': len(completed),
+                'Most Recent': completed[-1].get('completed', ''),
+            })
+        else:
+            coverage.append({
+                'Location': loc, 'Has Baseline': '❌ No',
+                'Completed Counts': 0, 'Most Recent': '—',
+            })
+    return coverage
+
+
 def stock_take_dashboard():
     """
     Stock take dashboard showing overview (inFlow style)
@@ -448,6 +474,17 @@ def stock_take_dashboard():
             avg_rate = sum(rates) / len(rates) if rates else 0
         st.metric("📊 Avg Completion", f"{avg_rate:.0f}%")
     
+    # Location coverage -- readiness for cutover: which locations have at
+    # least one completed Stock Take, the minimum the ledger needs.
+    st.markdown("---")
+    st.markdown("#### 📍 Location Coverage — Ledger Readiness")
+    st.caption(
+        "A location needs at least one completed Stock Take before current stock "
+        "there is computed instead of falling back to the last known sheet quantity."
+    )
+    coverage_df = pd.DataFrame(get_location_coverage())
+    st.dataframe(coverage_df, use_container_width=True, hide_index=True)
+
     # Recent counts
     st.markdown("---")
     st.markdown("#### Recent Counts")

@@ -4,24 +4,18 @@ app/core/stock_ledger.py
 Shared "what is current stock, right now" computation: the last completed
 Stock Take's counted quantity at a location, plus everything that's moved
 since (Check-In, Check-Out, Transfers). Returns None for a location with
-no completed Stock Take yet for that item -- there's no honest baseline
-to compute from, and treating that as zero would silently understate
-stock rather than say so.
+no completed Stock Take yet for that item.
 
-Two computation paths, same underlying math:
-- get_current_stock() / get_total_current_stock(): single-item
-  convenience, fetches fresh each call. Fine for one-off lookups (Stock
-  Variance, a detail view).
-- get_all_current_stock(): batch path for computing many items at once
-  (load_inventory_data()). Fetches Check-In/Check-Out/Transfers ONCE,
-  then computes every item from the same in-memory data -- calling the
-  single-item path in a loop over a whole inventory would re-fetch all
-  three sources from scratch per item, which is fine for one item and
-  ruinous for hundreds.
+Check-In sums TWO sources: the historical Google Sheet, and the app's own
+stock_checkins table (Phase 3) -- a check-in can now be entered through
+either, so the ledger has to look at both or it silently misses anything
+entered through the new form. Check-Out and Transfers only ever had one
+source (the app), no split to worry about there.
 
-Check-Out and Transfers read from the app's own tables. Check-In still
-reads from Google Sheets until Phase 3's tables get their historical
-import and full cutover.
+Two computation paths: get_current_stock()/get_total_current_stock() for
+single-item lookups (fetches fresh each call); get_all_current_stock()
+for computing many items at once (fetches each source ONCE, computes
+every item from the same in-memory data) -- see load_inventory_data().
 """
 from __future__ import annotations
 from datetime import datetime
@@ -32,6 +26,7 @@ import streamlit as st
 
 from app.core.google_sheet_reader import GoogleSheetReader
 from app.core.demand_utils import detect_column, ITEM_LABEL_KEYWORDS
+from app.core.checkin_records import get_checkins
 from app.core.checkout_reconciliation import get_checkouts
 from app.core.transfer_reconciliation import get_transfers
 from app.core.locations import COMPANY_LOCATIONS
@@ -40,7 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 def sum_check_in_window(check_in_df, loc_col, item_name: str, location: str, start, end) -> float:
-    """Pure computation over an already-fetched Check-In dataframe."""
+    """Pure computation over an already-fetched Check-In GOOGLE SHEET
+    dataframe -- the historical source only. See
+    _sum_check_in_from_app_records for the app's own table."""
     if check_in_df is None or check_in_df.empty or not loc_col:
         return 0.0
     item_col = detect_column(check_in_df, ITEM_LABEL_KEYWORDS)
@@ -63,9 +60,26 @@ def sum_check_in_window(check_in_df, loc_col, item_name: str, location: str, sta
     return pd.to_numeric(sub[qty_col], errors='coerce').fillna(0).sum()
 
 
+def _sum_check_in_from_app_records(checkin_records: List[Dict], item_name: str, location: str, start, end) -> float:
+    """Pure computation over an already-fetched list of the app's own
+    stock_checkins records (Phase 3)."""
+    start_dt, end_dt = pd.to_datetime(start, errors='coerce'), pd.to_datetime(end, errors='coerce')
+    total = 0.0
+    for r in checkin_records:
+        if r.get('item_name') != item_name or r.get('store') != location:
+            continue
+        d = pd.to_datetime(r.get('checkin_date'), errors='coerce')
+        if pd.isna(d):
+            continue
+        if pd.notna(start_dt) and d < start_dt:
+            continue
+        if pd.notna(end_dt) and d > end_dt:
+            continue
+        total += float(r.get('quantity') or 0)
+    return total
+
+
 def _fetch_check_in_df():
-    """Isolated fetch, used by both the single-item and batch paths so
-    the try/except lives in one place."""
     try:
         gsheet = GoogleSheetReader()
         return gsheet.get_check_in() if gsheet.authenticate() else pd.DataFrame()
@@ -75,10 +89,6 @@ def _fetch_check_in_df():
 
 
 def _sum_check_out_from_records(checkout_records: List[Dict], item_name: str, location: str, start, end) -> float:
-    """Pure computation over an already-fetched list of checkout dicts.
-    Sums ALL check-outs regardless of reconciliation status -- whether a
-    check-out has been paperwork-reconciled is an audit/trust question,
-    not whether the stock physically left the shelf."""
     start_dt, end_dt = pd.to_datetime(start, errors='coerce'), pd.to_datetime(end, errors='coerce')
     total = 0.0
     for r in checkout_records:
@@ -96,14 +106,10 @@ def _sum_check_out_from_records(checkout_records: List[Dict], item_name: str, lo
 
 
 def sum_check_out_window(item_name: str, location: str, start, end, supabase_client=None) -> float:
-    """Single-item convenience: fetches fresh, then delegates to the pure
-    computation. For many items, fetch get_checkouts() once and call
-    _sum_check_out_from_records directly -- see get_all_current_stock."""
     return _sum_check_out_from_records(get_checkouts(supabase_client=supabase_client), item_name, location, start, end)
 
 
 def _transfer_total_from_records(transfer_records: List[Dict], item_name: str, location: str, start, end, direction: str) -> float:
-    """Pure computation over an already-fetched list of transfer dicts."""
     start_dt, end_dt = pd.to_datetime(start, errors='coerce'), pd.to_datetime(end, errors='coerce')
     total = 0.0
     for t in transfer_records:
@@ -130,14 +136,10 @@ def _transfer_total_from_records(transfer_records: List[Dict], item_name: str, l
 
 
 def transfer_total(item_name: str, location: str, start, end, direction: str, supabase_client=None) -> float:
-    """Single-item convenience wrapper -- see _transfer_total_from_records."""
     return _transfer_total_from_records(get_transfers(supabase_client=supabase_client), item_name, location, start, end, direction)
 
 
 def get_last_stock_take_anchor(item_name: str, location: str) -> Optional[Dict[str, Any]]:
-    """Most recent completed Stock Take at `location` that counted
-    `item_name`. None if this location has never had one for this item.
-    Pure in-memory lookup (st.session_state), no network cost."""
     completed = [
         c for c in st.session_state.get('stock_takes', {}).values()
         if c.get('status') == 'Completed' and c.get('warehouse') == location
@@ -154,8 +156,6 @@ def get_last_stock_take_anchor(item_name: str, location: str) -> Optional[Dict[s
 
 
 def get_current_stock(item_name: str, location: str, supabase_client=None) -> Optional[float]:
-    """Current stock for one item at one location. None if there's no
-    completed Stock Take there yet for this item to anchor from."""
     anchor = get_last_stock_take_anchor(item_name, location)
     if anchor is None:
         return None
@@ -165,7 +165,10 @@ def get_current_stock(item_name: str, location: str, supabase_client=None) -> Op
 
     check_in_df = _fetch_check_in_df()
     check_in_col = detect_column(check_in_df, ["location", "warehouse", "site", "store", "outlet"]) if not check_in_df.empty else None
-    check_in_total = sum_check_in_window(check_in_df, check_in_col, item_name, location, anchor_date, today)
+    check_in_total = (
+        sum_check_in_window(check_in_df, check_in_col, item_name, location, anchor_date, today)
+        + _sum_check_in_from_app_records(get_checkins(supabase_client=supabase_client), item_name, location, anchor_date, today)
+    )
     check_out_total = sum_check_out_window(item_name, location, anchor_date, today, supabase_client=supabase_client)
     transfers_in = transfer_total(item_name, location, anchor_date, today, 'in', supabase_client=supabase_client)
     transfers_out = transfer_total(item_name, location, anchor_date, today, 'out', supabase_client=supabase_client)
@@ -174,8 +177,6 @@ def get_current_stock(item_name: str, location: str, supabase_client=None) -> Op
 
 
 def get_total_current_stock(item_name: str, supabase_client=None) -> Dict[str, Any]:
-    """Sums get_current_stock() across every company location. Locations
-    with no baseline yet are reported separately, not silently zeroed."""
     per_location = {}
     missing = []
     for loc in COMPANY_LOCATIONS:
@@ -184,25 +185,15 @@ def get_total_current_stock(item_name: str, supabase_client=None) -> Dict[str, A
             missing.append(loc)
         else:
             per_location[loc] = val
-    return {
-        'total': sum(per_location.values()),
-        'per_location': per_location,
-        'missing_locations': missing,
-    }
+    return {'total': sum(per_location.values()), 'per_location': per_location, 'missing_locations': missing}
 
 
 def get_all_current_stock(item_names: List[str], sheet_quantities: Optional[Dict[str, float]] = None,
                            supabase_client=None) -> Dict[str, Dict[str, Any]]:
-    """Batch version: fetches Check-In, Check-Out, and Transfers ONCE for
-    every item passed in, instead of once per item. If an item has no
-    Stock Take anchor at ANY location yet, falls back to
-    sheet_quantities[item_name] (tagged 'sheet_fallback') rather than
-    reporting a false zero -- an item with no baseline isn't "confirmed
-    empty," it's "not yet counted," and those two states must not look
-    the same to anyone reading a Low Stock alert."""
     sheet_quantities = sheet_quantities or {}
     check_in_df = _fetch_check_in_df()
     check_in_col = detect_column(check_in_df, ["location", "warehouse", "site", "store", "outlet"]) if not check_in_df.empty else None
+    all_app_checkins = get_checkins(supabase_client=supabase_client)
     all_checkouts = get_checkouts(supabase_client=supabase_client)
     all_transfers = get_transfers(supabase_client=supabase_client)
     today = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -217,7 +208,10 @@ def get_all_current_stock(item_names: List[str], sheet_quantities: Optional[Dict
                 missing.append(loc)
                 continue
             anchor_date = anchor['completed_at']
-            check_in_total = sum_check_in_window(check_in_df, check_in_col, item_name, loc, anchor_date, today)
+            check_in_total = (
+                sum_check_in_window(check_in_df, check_in_col, item_name, loc, anchor_date, today)
+                + _sum_check_in_from_app_records(all_app_checkins, item_name, loc, anchor_date, today)
+            )
             check_out_total = _sum_check_out_from_records(all_checkouts, item_name, loc, anchor_date, today)
             transfers_in = _transfer_total_from_records(all_transfers, item_name, loc, anchor_date, today, 'in')
             transfers_out = _transfer_total_from_records(all_transfers, item_name, loc, anchor_date, today, 'out')
