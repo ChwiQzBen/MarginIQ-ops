@@ -1960,7 +1960,7 @@ def main():
         analytics = AdvancedAnalytics()
 
         # Create context and render
-        _supabase_client = init_supabase()
+        _supabase_client = _inventory_supabase_client  # reuse -- avoids a second init_supabase() call per render
         if _supabase_client is None and not st.session_state.get('_supabase_warned'):
             st.warning(
                 "⚠️ Could not connect to the database — data entered this session "

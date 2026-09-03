@@ -21,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 import logging
+from collections import defaultdict
 import pandas as pd
 import streamlit as st
 
@@ -198,8 +199,25 @@ def get_all_current_stock(item_names: List[str], sheet_quantities: Optional[Dict
     all_transfers = get_transfers(supabase_client=supabase_client)
     today = datetime.now().strftime('%Y-%m-%d %H:%M')
 
+    # Pre-group by item_name once -- without this, every item x location
+    # pair does a full linear scan of ALL checkouts/checkins/transfers,
+    # which is fine at a handful of records and slow once real volume
+    # builds up. O(1) dict lookup per item instead.
+    checkins_by_item = defaultdict(list)
+    for r in all_app_checkins:
+        checkins_by_item[r.get('item_name')].append(r)
+    checkouts_by_item = defaultdict(list)
+    for r in all_checkouts:
+        checkouts_by_item[r.get('item_name')].append(r)
+    transfers_by_item = defaultdict(list)
+    for t in all_transfers:
+        transfers_by_item[t.get('item_name')].append(t)
+
     results = {}
     for item_name in item_names:
+        item_checkins = checkins_by_item.get(item_name, [])
+        item_checkouts = checkouts_by_item.get(item_name, [])
+        item_transfers = transfers_by_item.get(item_name, [])
         per_location = {}
         missing = []
         for loc in COMPANY_LOCATIONS:
@@ -210,11 +228,11 @@ def get_all_current_stock(item_names: List[str], sheet_quantities: Optional[Dict
             anchor_date = anchor['completed_at']
             check_in_total = (
                 sum_check_in_window(check_in_df, check_in_col, item_name, loc, anchor_date, today)
-                + _sum_check_in_from_app_records(all_app_checkins, item_name, loc, anchor_date, today)
+                + _sum_check_in_from_app_records(item_checkins, item_name, loc, anchor_date, today)
             )
-            check_out_total = _sum_check_out_from_records(all_checkouts, item_name, loc, anchor_date, today)
-            transfers_in = _transfer_total_from_records(all_transfers, item_name, loc, anchor_date, today, 'in')
-            transfers_out = _transfer_total_from_records(all_transfers, item_name, loc, anchor_date, today, 'out')
+            check_out_total = _sum_check_out_from_records(item_checkouts, item_name, loc, anchor_date, today)
+            transfers_in = _transfer_total_from_records(item_transfers, item_name, loc, anchor_date, today, 'in')
+            transfers_out = _transfer_total_from_records(item_transfers, item_name, loc, anchor_date, today, 'out')
             per_location[loc] = anchor['counted_qty'] + check_in_total - check_out_total + transfers_in - transfers_out
 
         if per_location:

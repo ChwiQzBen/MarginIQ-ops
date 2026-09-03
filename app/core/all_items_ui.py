@@ -225,7 +225,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
             "tab's display are switched over, items added here won't show up "
             "anywhere else yet -- safe to test, not yet the production way to add items."
         )
-        existing_items = get_all_items(active_only=True, supabase_client=ctx.supabase_client)
+        existing_items = _cached_active_items(_supabase_client=ctx.supabase_client)
         existing_names = [i['item_name'] for i in existing_items]
 
         edit_mode = st.checkbox("Editing an existing item", key="item_master_edit_mode")
@@ -267,6 +267,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                     )
                     if ok:
                         st.success(f"✅ {selected_name} updated.")
+                        _cached_active_items.clear()
                         st.rerun()
                     else:
                         st.error("Could not update -- check the logs.")
@@ -279,6 +280,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                             supabase_client=ctx.supabase_client,
                         )
                         st.success(f"✅ {im_name} added.")
+                        _cached_active_items.clear()
                         st.rerun()
                     except Exception:
                         st.error(f"Could not add '{im_name}' -- it may already exist.")
@@ -287,6 +289,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
             if st.button(f"🚫 Deactivate {selected_name}", key="item_master_deactivate_btn"):
                 if deactivate_item(selected_name, supabase_client=ctx.supabase_client):
                     st.success(f"✅ {selected_name} deactivated.")
+                    _cached_active_items.clear()
                     st.rerun()
                 else:
                     st.error("Could not deactivate -- check the logs.")
@@ -1047,7 +1050,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
                 st.info("No historical check-in records found.")
 
         with st.expander("🆕 New Records", expanded=False):
-            new_checkins = get_checkins(supabase_client=ctx.supabase_client)
+            new_checkins = _cached_checkins(_supabase_client=ctx.supabase_client)
             if new_checkins:
                 new_checkins_df = pd.DataFrame(new_checkins)
                 st.dataframe(new_checkins_df, use_container_width=True, height=400)
@@ -1077,7 +1080,7 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             else:
                 st.info("No historical check-out records found.")
 
-        recorded_checkouts = get_checkouts(supabase_client=supabase_client)
+        recorded_checkouts = _cached_checkouts(_supabase_client=supabase_client)
         with st.expander("🆕 New Records", expanded=False):
             if recorded_checkouts:
                 checkout_df_display = pd.DataFrame(recorded_checkouts)
@@ -2280,6 +2283,25 @@ def _picker_with_add_new(label: str, options: list, key_prefix: str) -> str:
     if picked == ADD_NEW:
         return st.text_input(f"{label} (new)", key=f"{key_prefix}_new").strip()
     return picked
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_active_items(_supabase_client=None):
+    """Cached wrapper around get_all_items -- the Add/Edit Item expander
+    runs on every rerun of the page regardless of whether it's open
+    (Streamlit executes expander contents unconditionally), so this was
+    firing an uncached Supabase query on every click anywhere in the app."""
+    return get_all_items(active_only=True, supabase_client=_supabase_client)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_checkins(_supabase_client=None):
+    return get_checkins(supabase_client=_supabase_client)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_checkouts(_supabase_client=None):
+    return get_checkouts(supabase_client=_supabase_client)
 
 
 def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
