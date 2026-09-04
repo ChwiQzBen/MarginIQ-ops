@@ -31,6 +31,7 @@ from app.core.supabase_client import init_supabase
 from app.core.pdf_reports import generate_enhanced_pdf_report
 from app.core.visual_inventory import get_sample_inventory_data
 from app.core.stock_ledger import get_all_current_stock
+from app.core.item_master import get_all_items
 from app.core.forecasting import (
       create_ensemble_forecast,
       create_scenario_analysis,
@@ -787,6 +788,34 @@ def main():
                     continue
             
             logger.info(f"Processed {processed_count} items, skipped {skipped_count} items")
+            
+            # --- Pass 1.5: merge item_master items not already present
+            # from the sheet. Items added directly to item_master (bulk
+            # scripts, the Add/Edit Item form) need a path into
+            # inventory_items too, or they stay invisible to the
+            # Check-In/Check-Out item pickers despite existing in the
+            # database. Unlike Pass 1's sheet rows, these are never
+            # skipped for having zero stock -- a brand-new item
+            # legitimately starts at zero until its first Stock Take, and
+            # hiding it would defeat the entire point of adding it. ---
+            try:
+                item_master_items = get_all_items(active_only=True, supabase_client=_supabase_client)
+                for im_item in item_master_items:
+                    im_name = im_item.get('item_name')
+                    if not im_name or im_name in parsed_rows:
+                        continue
+                    im_category = im_item.get('item_category') or 'Default'
+                    parsed_rows[im_name] = {
+                        'icon': icon_map.get(im_category, icon_map['Default']),
+                        'sheet_stock': 0,
+                        'reorder': im_item.get('reorder_level') or 0,
+                        'unit': im_item.get('unit_of_measure') or 'kg',
+                        'category': im_category,
+                        'price': im_item.get('unit_price') or 0,
+                    }
+                    processed_count += 1
+            except Exception as e:
+                logger.warning(f"Could not merge item_master items into inventory: {e}")
             
             if not parsed_rows:
                 logger.warning("No valid inventory items found after processing. Using sample data.")

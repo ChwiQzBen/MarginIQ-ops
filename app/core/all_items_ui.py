@@ -89,7 +89,6 @@ from app.core.checkin_records import record_checkin, get_checkins, delete_checki
 from app.core.stock_ledger import (
     sum_check_in_window, sum_check_out_window, transfer_total,
     _sum_check_out_from_records, _transfer_total_from_records, get_all_current_stock,
-    _sum_check_in_from_app_records,
 )
 from app.core.visual_inventory import (
     ai_powered_recommendations,
@@ -1014,9 +1013,9 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("📥 Check-Ins", len(check_in_df) if not check_in_df.empty else 0)
+        st.metric("📥 Check-Ins", len(_cached_checkins(_supabase_client=ctx.supabase_client)))
     with col2:
-        st.metric("📤 Check-Outs", len(check_out_df) if not check_out_df.empty else 0)
+        st.metric("📤 Check-Outs", len(_cached_checkouts(_supabase_client=ctx.supabase_client)))
     with col3:
         st.metric("📊 Current Stock Records", len(current_stock_df) if not current_stock_df.empty else 0)
 
@@ -1036,64 +1035,38 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
     if active_subtab == "📥 Check-Ins":
         st.markdown("### 📥 Check-In Records")
 
-        with st.expander("📜 Historical Records", expanded=False):
-            if not check_in_df.empty:
-                st.dataframe(check_in_df, use_container_width=True, height=400)
-                csv = check_in_df.to_csv(index=False).encode('utf-8')
+        with st.expander("📋 View Check-In Records", expanded=False):
+            all_checkins = _cached_checkins(_supabase_client=ctx.supabase_client)
+            if all_checkins:
+                checkins_df = pd.DataFrame(all_checkins)
+                st.dataframe(checkins_df, use_container_width=True, height=400)
+                csv = checkins_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Download Historical Check-Ins CSV",
+                    label="📥 Download Check-Ins CSV",
                     data=csv,
-                    file_name=f"check_ins_historical_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"check_ins_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime='text/csv'
                 )
             else:
-                st.info("No historical check-in records found.")
-
-        with st.expander("🆕 New Records", expanded=False):
-            new_checkins = _cached_checkins(_supabase_client=ctx.supabase_client)
-            if new_checkins:
-                new_checkins_df = pd.DataFrame(new_checkins)
-                st.dataframe(new_checkins_df, use_container_width=True, height=400)
-                csv = new_checkins_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download New Check-Ins CSV",
-                    data=csv,
-                    file_name=f"check_ins_new_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime='text/csv'
-                )
-            else:
-                st.info("No check-in records found in the app yet.")
+                st.info("No check-in records found.")
 
     elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
 
-        with st.expander("📜 Historical Records", expanded=False):
-            if not check_out_df.empty:
-                st.dataframe(check_out_df, use_container_width=True, height=400)
-                csv = check_out_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Historical Check-Outs CSV",
-                    data=csv,
-                    file_name=f"check_outs_historical_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime='text/csv'
-                )
-            else:
-                st.info("No historical check-out records found.")
-
-        recorded_checkouts = _cached_checkouts(_supabase_client=supabase_client)
-        with st.expander("🆕 New Records", expanded=False):
+        with st.expander("📋 View Check-Out Records", expanded=False):
+            recorded_checkouts = _cached_checkouts(_supabase_client=supabase_client)
             if recorded_checkouts:
                 checkout_df_display = pd.DataFrame(recorded_checkouts)
                 st.dataframe(checkout_df_display, use_container_width=True, height=400)
                 csv = checkout_df_display.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Download New Check-Outs CSV",
+                    label="📥 Download Check-Outs CSV",
                     data=csv,
-                    file_name=f"check_outs_new_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"check_outs_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime='text/csv'
                 )
             else:
-                st.info("No check-out records found in the app yet.")
+                st.info("No check-out records found.")
 
     elif active_subtab == "📊 Current Stock":
         st.markdown("### 📊 Current Stock Levels")
@@ -1985,10 +1958,9 @@ def _compute_stock_variance(location: str, supabase_client=None):
     check-in/check-out/transfers/stock takes all happen at every location,
     not just one.
 
-    Check-Out and Transfers come from the app's own tables via
-    stock_ledger.py's shared helpers; Check-In still comes from Google
-    Sheets until Phase 3 moves it into the app too, so a Check-In outage
-    degrades to a warning rather than blocking the whole report."""
+    Fully app-only as of Phase 4a: Check-In's full history was imported
+    into stock_checkins, so this no longer reads Google Sheets at all --
+    doing so would double-count every pre-import event."""
     completed = [
         c for c in st.session_state.get('stock_takes', {}).values()
         if c['status'] == 'Completed' and c.get('warehouse') == location
@@ -2006,26 +1978,6 @@ def _compute_stock_variance(location: str, supabase_client=None):
     previous, latest = completed[-2], completed[-1]
     window_start, window_end = previous.get('completed', ''), latest.get('completed', '')
 
-    try:
-        gsheet = GoogleSheetReader()
-        check_in_df = gsheet.get_check_in() if gsheet.authenticate() else pd.DataFrame()
-        check_in_ok = True
-    except Exception as e:
-        logger.error(f"Stock Variance: could not reach Check-In source: {e}")
-        check_in_df = pd.DataFrame()
-        check_in_ok = False
-
-    check_in_loc_col = detect_column(check_in_df, LOCATION_KEYWORDS) if not check_in_df.empty else None
-    check_in_warning = None
-    if not check_in_ok:
-        check_in_warning = "Could not reach the Check-In data source -- Check-In figures below read as 0 rather than reflect reality."
-    elif not check_in_df.empty and not check_in_loc_col:
-        check_in_warning = (
-            f"Check-In data doesn't have a Location column yet, so it can't be split "
-            f"by location. Add one to the Check-In sheet (e.g. named 'LOCATION') with "
-            f"values matching your locations exactly: {', '.join(COMPANY_LOCATIONS)}."
-        )
-
     all_checkouts = get_checkouts(supabase_client=supabase_client)
     all_transfers = get_transfers(supabase_client=supabase_client)
     all_app_checkins = get_checkins(supabase_client=supabase_client)
@@ -2036,10 +1988,7 @@ def _compute_stock_variance(location: str, supabase_client=None):
         prev_details = previous['items'].get(item_name)
         opening = prev_details.get('counted_qty', 0) if prev_details else latest_details.get('system_qty', 0)
 
-        check_in = (
-            (sum_check_in_window(check_in_df, check_in_loc_col, item_name, location, window_start, window_end) if check_in_loc_col else 0.0)
-            + _sum_check_in_from_app_records(all_app_checkins, item_name, location, window_start, window_end)
-        )
+        check_in = sum_check_in_window(all_app_checkins, item_name, location, window_start, window_end)
         check_out = _sum_check_out_from_records(all_checkouts, item_name, location, window_start, window_end)
         transfers_in = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'in')
         transfers_out = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'out')
@@ -2054,8 +2003,7 @@ def _compute_stock_variance(location: str, supabase_client=None):
 
     result_df = pd.DataFrame(rows)
     meta = {'previous_count': previous['name'], 'previous_date': window_start,
-            'latest_count': latest['name'], 'latest_date': window_end,
-            'check_in_warning': check_in_warning}
+            'latest_count': latest['name'], 'latest_date': window_end}
     return result_df, meta
 
 
@@ -2501,9 +2449,6 @@ def _render_variance_tab(ctx: AllItemsContext) -> None:
 
     st.caption(f"Comparing **{meta['previous_count']}** ({meta['previous_date']}) → "
                f"**{meta['latest_count']}** ({meta['latest_date']})")
-
-    if meta.get('check_in_warning'):
-        st.warning(f"⚠️ {meta['check_in_warning']}")
 
     flagged = result_df[result_df['Variance'].abs() > 0.01]
     if not flagged.empty:
