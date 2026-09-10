@@ -49,9 +49,12 @@ class GoogleSheetReader:
             data = worksheet.get_all_records()
             df = pd.DataFrame(data)
             df = df.dropna(how='all')
+            # DEBUG: show what we actually read
+            st.caption(f"📋 '{worksheet_name}' — {len(df)} rows, columns: {list(df.columns)}")
             return df
         except Exception as e:
-            st.error(f"Error reading '{worksheet_name}': {e}")
+            available = [ws.title for ws in self.sheet.worksheets()]
+            st.error(f"Error reading '{worksheet_name}': {e}. Available tabs: {available}")
             return pd.DataFrame()
     
     def get_all_worksheets(self):
@@ -63,12 +66,35 @@ class GoogleSheetReader:
         return []
     
     def get_stock_listing(self):
-        """Read STOCK_LISTING"""
-        return self.read_worksheet("STOCK_LISTING")
+        """Read STOCK_LIST (master data) and normalize column names to
+        what the app expects: spaces instead of underscores, ITEM_CATEGORY
+        instead of the 'Utensils' column, QUANTITY instead of OPENING_STOCK."""
+        df = self.read_worksheet("STOCK_LIST")
+        if df.empty:
+            return df
+        rename_map = {
+            'Utensils': 'ITEM_CATEGORY',
+            'OPENING_STOCK': 'QUANTITY',
+            'REORDER_LEVEL': 'REORDER LEVEL',
+            'UNIT_PRICE': 'UNIT PRICE',
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        return df
     
     def get_current_stock(self):
-        """Read CURRENT_STOCK"""
-        return self.read_worksheet("CURRENT_STOCK")
+        """Read 'Current Stock' and normalize to what the app expects.
+        This is the tab with actual live quantities (AVAILABLE)."""
+        df = self.read_worksheet("Current Stock")
+        if df.empty:
+            return df
+        rename_map = {
+            'UoM': 'UNIT_OF_MEASURE',
+            'AVAILABLE': 'QUANTITY',
+            'REORDER_LEVEL': 'REORDER LEVEL',
+            'UNIT_PRICE': 'UNIT PRICE',
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        return df
     
     def get_check_in(self):
         """Read CHECK_IN"""
@@ -117,7 +143,15 @@ class GoogleSheetReader:
         return derive_item_supplier_links_from_check_in(check_in_df)
 
     def get_unit_pricing(self):
-        """Read UNIT PRICING"""
+        """Read UNIT PRICING — not present on every deployment. Returns an
+        empty DataFrame if the tab doesn't exist, so callers treat all items
+        as price-less rather than showing a spurious error banner."""
+        try:
+            titles = [ws.title for ws in self.sheet.worksheets()]
+        except Exception:
+            return pd.DataFrame()
+        if "UNIT PRICING" not in titles:
+            return pd.DataFrame()
         return self.read_worksheet("UNIT PRICING")
     
     def get_stock_with_pricing(self):
