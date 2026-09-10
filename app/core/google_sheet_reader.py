@@ -1,7 +1,7 @@
 # app/core/google_sheet_reader.py
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials as GoogleCredentials
 import pandas as pd
 from datetime import datetime
 
@@ -17,27 +17,25 @@ class GoogleSheetReader:
     def authenticate(self):
         """Authenticate with Google Sheets API"""
         try:
-            # Read-only scope
             scope = [
-                'https://spreadsheets.google.com/feeds',
-                'https://www.googleapis.com/auth/drive.readonly'
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly',
             ]
-            
-            # Load credentials from secrets
+
             if 'google_credentials' in st.secrets:
                 creds_dict = dict(st.secrets["google_credentials"])
-                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+                creds = GoogleCredentials.from_service_account_info(creds_dict, scopes=scope)
             else:
-                creds = ServiceAccountCredentials.from_json_keyfile_name(
-                    'google-credentials.json', scope
+                creds = GoogleCredentials.from_service_account_file(
+                    'google-credentials.json', scopes=scope
                 )
-            
+
             self.client = gspread.authorize(creds)
             self.sheet = self.client.open_by_url(self.sheet_url)
             self.authenticated = True
             return True
         except Exception as e:
-            st.error(f"Authentication failed: {e}")
+            st.error(f"Authentication failed: {type(e).__name__}: {e}")
             return False
     
     def read_worksheet(self, worksheet_name):
