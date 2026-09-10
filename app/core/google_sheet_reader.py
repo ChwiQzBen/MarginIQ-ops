@@ -254,39 +254,46 @@ class GoogleSheetReader:
         return summary
     
     def get_low_stock_items(self, threshold=None):
-        """Get items with low stock levels"""
+        """Get items with low stock levels. Both stock and reorder columns
+        are coerced to numeric first -- the sheet has mixed types (blanks,
+        text-formatted numbers) that cause TypeError on comparison."""
         stock_df = self.get_current_stock()
         if stock_df.empty:
             return pd.DataFrame()
-        
+
         # Find stock column
         stock_col = None
         for col in stock_df.columns:
             if 'stock' in col.lower() or 'quantity' in col.lower():
                 stock_col = col
                 break
-        
-        if stock_col:
-            if threshold is None:
-                # Try to find reorder point column
-                reorder_col = None
-                for col in stock_df.columns:
-                    if 'reorder' in col.lower() or 'reorder level' in col.lower():
-                        reorder_col = col
-                        break
-                
-                if reorder_col:
-                    low_stock = stock_df[stock_df[stock_col] <= stock_df[reorder_col]]
-                else:
-                    # Use 10% of average as threshold
-                    avg = stock_df[stock_col].mean()
-                    low_stock = stock_df[stock_df[stock_col] <= avg * 0.1]
+
+        if not stock_col:
+            return pd.DataFrame()
+
+        # Coerce to numeric -- non-numeric rows become NaN, then drop them
+        stock_df = stock_df.copy()
+        stock_df[stock_col] = pd.to_numeric(stock_df[stock_col], errors='coerce')
+
+        if threshold is None:
+            reorder_col = None
+            for col in stock_df.columns:
+                if 'reorder' in col.lower() or 'reorder level' in col.lower():
+                    reorder_col = col
+                    break
+
+            if reorder_col:
+                stock_df[reorder_col] = pd.to_numeric(stock_df[reorder_col], errors='coerce')
+                # Drop rows where either side is NaN (can't compare)
+                valid = stock_df.dropna(subset=[stock_col, reorder_col])
+                low_stock = valid[valid[stock_col] <= valid[reorder_col]]
             else:
-                low_stock = stock_df[stock_df[stock_col] <= threshold]
-            
-            return low_stock
-        
-        return pd.DataFrame()
+                avg = stock_df[stock_col].mean()
+                low_stock = stock_df[stock_df[stock_col] <= avg * 0.1]
+        else:
+            low_stock = stock_df[stock_df[stock_col] <= threshold]
+
+        return low_stock
     
     def get_category_summary(self):
         """Get summary by category"""
