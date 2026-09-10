@@ -344,7 +344,11 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                 return stock, current, low, category_count
 
         except Exception as e:
-            logger.error(f"Inventory loading error: {e}")
+            import traceback
+            logger.error(f"Inventory loading error: {type(e).__name__}: {e}")
+            logger.error(traceback.format_exc())
+            st.error(f"❌ REAL ERROR: {type(e).__name__}: {e}")
+            st.code(traceback.format_exc())
 
         cached = st.session_state.get('_ai_inventory_cache')
         if cached:
