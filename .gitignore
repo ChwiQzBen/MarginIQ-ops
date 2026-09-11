@@ -170,3 +170,9 @@ users.json
 .streamlit/secrets.toml
 *.bak
 fix_reconciliation.sh
+
+# Local backups and one-off fix scripts
+*.bak
+*.bak.*
+fix_*.sh
+revert_*.sh

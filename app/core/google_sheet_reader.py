@@ -49,8 +49,6 @@ class GoogleSheetReader:
             data = worksheet.get_all_records()
             df = pd.DataFrame(data)
             df = df.dropna(how='all')
-            # DEBUG: show what we actually read
-            st.caption(f"📋 '{worksheet_name}' — {len(df)} rows, columns: {list(df.columns)}")
             return df
         except Exception as e:
             available = [ws.title for ws in self.sheet.worksheets()]
@@ -162,9 +160,12 @@ class GoogleSheetReader:
         if stock_df.empty:
             return stock_df
         
-        # If no pricing data, return stock without prices
+        # No separate pricing tab -- keep whatever price STOCK_LIST itself
+        # already provided (via get_stock_listing()'s own UNIT_PRICE rename),
+        # don't null it out.
         if pricing_df.empty:
-            stock_df['UNIT PRICE'] = None
+            if 'UNIT PRICE' not in stock_df.columns:
+                stock_df['UNIT PRICE'] = None
             return stock_df
         
         # Clean column names
