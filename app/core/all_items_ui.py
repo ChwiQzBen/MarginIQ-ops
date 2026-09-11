@@ -562,11 +562,13 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                         class_label = row['ABC_CLASS']
                         stock = row.get('QUANTITY', 0)
 
-                        # Get reorder level (if available, otherwise use 50% of stock)
-                        if 'REORDER LEVEL' in row and pd.notna(row['REORDER LEVEL']):
-                            reorder = row['REORDER LEVEL']
-                        else:
-                            reorder = stock * 0.5
+                        # Get reorder level (if available and numeric, otherwise
+                        # use 50% of stock) -- a blank cell reads from the sheet
+                        # as an empty string, not NaN, so pd.notna() alone
+                        # doesn't catch it and the multiply below crashes with
+                        # a TypeError trying to multiply a string.
+                        reorder_raw = pd.to_numeric(row.get('REORDER LEVEL'), errors='coerce')
+                        reorder = reorder_raw if pd.notna(reorder_raw) else stock * 0.5
 
                         # Set safety stock multiplier based on ABC class
                         if '🔴 A' in class_label:
