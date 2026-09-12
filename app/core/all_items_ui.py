@@ -218,19 +218,30 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
 
     st.divider()
 
-    with st.expander("➕ Add / Edit Item (new item master — not yet live elsewhere)", expanded=False):
+    with st.expander("➕ Add / Edit Item", expanded=False):
         st.caption(
-            "Adds to the new in-app item list. Until Check-In/Check-Out and this "
-            "tab's display are switched over, items added here won't show up "
-            "anywhere else yet -- safe to test, not yet the production way to add items."
+            "Add a new item, or edit any item — including ones from the Stock sheet. "
+            "Editing a sheet-sourced item creates an override here that takes "
+            "precedence over the sheet from now on."
         )
         existing_items = _cached_active_items(_supabase_client=ctx.supabase_client)
-        existing_names = [i['item_name'] for i in existing_items]
+        item_master_by_name = {i['item_name']: i for i in existing_items}
+        all_item_names = sorted((ctx.inventory_items or {}).keys())
 
         edit_mode = st.checkbox("Editing an existing item", key="item_master_edit_mode")
-        if edit_mode and existing_names:
-            selected_name = st.selectbox("Item to edit", existing_names, key="item_master_edit_select")
-            current = next((i for i in existing_items if i['item_name'] == selected_name), {})
+        if edit_mode and all_item_names:
+            selected_name = st.selectbox("Item to edit", all_item_names, key="item_master_edit_select")
+            if selected_name in item_master_by_name:
+                current = item_master_by_name[selected_name]
+            else:
+                sheet_details = (ctx.inventory_items or {}).get(selected_name, {})
+                current = {
+                    'item_name': selected_name, 'item_serial': '',
+                    'item_category': sheet_details.get('category', ''),
+                    'unit_of_measure': sheet_details.get('unit', 'kg'),
+                    'unit_price': sheet_details.get('price', 0.0),
+                    'reorder_level': sheet_details.get('reorder', 0.0),
+                }
         else:
             selected_name = None
             current = {}
@@ -248,13 +259,13 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
             )
             im_created_by = st.text_input("Your Name")
 
-            submit_label = "💾 Update Item" if edit_mode else "➕ Add Item"
+            submit_label = "💾 Save" if edit_mode else "➕ Add Item"
             if st.form_submit_button(submit_label, type="primary"):
                 if not im_name.strip():
                     st.error("Item name is required.")
                 elif not im_created_by.strip():
                     st.error("Enter your name.")
-                elif edit_mode:
+                elif edit_mode and selected_name in item_master_by_name:
                     ok = update_item(
                         selected_name,
                         {
@@ -270,6 +281,19 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                         st.rerun()
                     else:
                         st.error("Could not update -- check the logs.")
+                elif edit_mode:
+                    try:
+                        create_item(
+                            item_name=selected_name, item_serial=im_serial, item_category=im_category,
+                            unit_of_measure=im_unit, unit_price=im_price, reorder_level=im_reorder,
+                            created_by=im_created_by.strip(),
+                            supabase_client=ctx.supabase_client,
+                        )
+                        st.success(f"✅ {selected_name} now overrides the sheet.")
+                        _cached_active_items.clear()
+                        st.rerun()
+                    except Exception:
+                        st.error(f"Could not save '{selected_name}'.")
                 else:
                     try:
                         create_item(
@@ -284,7 +308,7 @@ def _render_inventory_tab(ctx: AllItemsContext) -> None:
                     except Exception:
                         st.error(f"Could not add '{im_name}' -- it may already exist.")
 
-        if edit_mode and selected_name:
+        if edit_mode and selected_name in item_master_by_name:
             if st.button(f"🚫 Deactivate {selected_name}", key="item_master_deactivate_btn"):
                 if deactivate_item(selected_name, supabase_client=ctx.supabase_client):
                     st.success(f"✅ {selected_name} deactivated.")
@@ -971,34 +995,31 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
     st.divider()
 
     @st.cache_data(ttl=300, show_spinner=False)
-    def load_movement_data():
-        """Same three-layer fallback (session_state, then Supabase
-        snapshot via inventory_cache) as load_full_inventory_details."""
+    def load_current_stock_data():
+        """Trimmed from the old load_movement_data(): Check-In/Check-Out no
+        longer need fetching here -- both are fully app-only (Phase 4a),
+        and nothing in this function displays the sheet's copies of them
+        anymore. Only Current Stock still reads the sheet."""
         try:
             gsheet = GoogleSheetReader()
             if gsheet.authenticate():
-                check_in = gsheet.get_check_in()
-                check_out = gsheet.get_check_out()
                 current_stock = gsheet.get_current_stock()
-                if not (check_in.empty and check_out.empty and current_stock.empty):
-                    st.session_state['_ai_movement_cache'] = (
-                        check_in, check_out, current_stock, datetime.now()
-                    )
+                if not current_stock.empty:
+                    st.session_state['_ai_movement_cache'] = (current_stock, datetime.now())
                     save_snapshot(
-                        "movement_data",
-                        {"check_in": check_in, "check_out": check_out, "current_stock": current_stock},
+                        "movement_data", {"current_stock": current_stock},
                         supabase_client=ctx.supabase_client,
                     )
-                return check_in, check_out, current_stock
+                return current_stock
         except Exception as e:
             logger.error(f"Movement data loading error: {e}")
 
         cached = st.session_state.get('_ai_movement_cache')
         if cached:
-            check_in, check_out, current_stock, cached_at = cached
+            current_stock, cached_at = cached
             st.warning(f"⚠️ Could not refresh movement data just now — showing the last "
                        f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')}.")
-            return check_in, check_out, current_stock
+            return current_stock
 
         snapshot = load_snapshot("movement_data", supabase_client=ctx.supabase_client)
         if snapshot:
@@ -1006,12 +1027,12 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
             st.warning(f"⚠️ Could not reach the movement data source — showing the last "
                        f"successful load from {cached_at.strftime('%Y-%m-%d %H:%M')} "
                        f"(from before the app last restarted).")
-            return frames["check_in"], frames["check_out"], frames["current_stock"]
+            return frames["current_stock"]
 
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
     with st.spinner("📊 Please wait..."):
-        check_in_df, check_out_df, current_stock_df = load_movement_data()
+        current_stock_df = load_current_stock_data()
 
     col1, col2, col3 = st.columns(3)
     with col1:

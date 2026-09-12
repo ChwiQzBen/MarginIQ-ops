@@ -802,18 +802,26 @@ def main():
                 item_master_items = get_all_items(active_only=True, supabase_client=_supabase_client)
                 for im_item in item_master_items:
                     im_name = im_item.get('item_name')
-                    if not im_name or im_name in parsed_rows:
+                    if not im_name:
                         continue
                     im_category = im_item.get('item_category') or 'Default'
+                    # item_master now OVERRIDES the sheet when both have the
+                    # same item, not just fills gaps -- sheet_stock is kept
+                    # from whatever the sheet already had, since the ledger's
+                    # fallback logic still needs it; only identity/attributes
+                    # (category/unit/price/reorder) get overridden.
+                    is_new = im_name not in parsed_rows
+                    existing_sheet_stock = parsed_rows.get(im_name, {}).get('sheet_stock', 0)
                     parsed_rows[im_name] = {
                         'icon': icon_map.get(im_category, icon_map['Default']),
-                        'sheet_stock': 0,
+                        'sheet_stock': existing_sheet_stock,
                         'reorder': im_item.get('reorder_level') or 0,
                         'unit': im_item.get('unit_of_measure') or 'kg',
                         'category': im_category,
                         'price': im_item.get('unit_price') or 0,
                     }
-                    processed_count += 1
+                    if is_new:
+                        processed_count += 1
             except Exception as e:
                 logger.warning(f"Could not merge item_master items into inventory: {e}")
             
