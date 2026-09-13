@@ -86,6 +86,7 @@ from app.core.demand_utils import (
 )
 from app.core.item_master import get_all_items, create_item, update_item, deactivate_item
 from app.core.checkin_records import record_checkin, get_checkins, delete_checkin
+from app.core.supplier_utils import derive_item_supplier_links_from_check_in
 from app.core.stock_ledger import (
     sum_check_in_window, sum_check_out_window, transfer_total,
     _sum_check_out_from_records, _transfer_total_from_records, get_all_current_stock,
@@ -2205,24 +2206,19 @@ def _get_flagged_variance_checkouts(location, supabase_client=None):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _distinct_check_in_suppliers(_supabase_client=None) -> list:
-    """Known suppliers, pulled from Check-In history (sheet) plus anything
-    recorded in the app -- self-populating instead of a separately
-    managed list. Leading underscore on the client param tells
-    st.cache_data not to try to hash an unhashable Supabase client."""
-    suppliers = set()
-    try:
-        gsheet = GoogleSheetReader()
-        if gsheet.authenticate():
-            check_in_df = gsheet.get_check_in()
-            supplier_col = next((c for c in check_in_df.columns if 'supplier' in c.lower()), None)
-            if supplier_col:
-                suppliers.update(check_in_df[supplier_col].dropna().astype(str).str.strip().tolist())
-    except Exception as e:
-        logger.warning(f"Could not load supplier history from Check-In sheet: {e}")
-    for r in get_checkins(supabase_client=_supabase_client):
-        if r.get('supplier'):
-            suppliers.add(str(r['supplier']).strip())
-    return sorted(s for s in suppliers if s and s.lower() != 'nan')
+    """Known suppliers, derived from the app's own Check-In history via
+    supplier_utils.py's derive_item_supplier_links_from_check_in -- reuses
+    its junk-value filtering and grouping instead of a separate, simpler
+    version of the same thing. No Google Sheets read needed: stock_checkins
+    already holds everything, including the full pre-cutover history
+    imported in Phase 4a, so this is app-only like the rest of Check-In."""
+    checkins = get_checkins(supabase_client=_supabase_client)
+    if not checkins:
+        return []
+    links_df = derive_item_supplier_links_from_check_in(pd.DataFrame(checkins))
+    if links_df.empty:
+        return []
+    return sorted(links_df['Supplier'].dropna().astype(str).str.strip().unique().tolist())
 
 
 @st.cache_data(ttl=300, show_spinner=False)
