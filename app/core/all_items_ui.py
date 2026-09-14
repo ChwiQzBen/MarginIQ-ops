@@ -90,6 +90,7 @@ from app.core.supplier_utils import derive_item_supplier_links_from_check_in
 from app.core.stock_ledger import (
     sum_check_in_window, sum_check_out_window, transfer_total,
     _sum_check_out_from_records, _transfer_total_from_records, get_all_current_stock,
+    sum_check_in_from_sheet, sum_check_out_from_sheet, _fetch_check_in_df, _fetch_check_out_df,
 )
 from app.core.visual_inventory import (
     ai_powered_recommendations,
@@ -1059,38 +1060,66 @@ def _render_stock_movements_tab(ctx: AllItemsContext) -> None:
     if active_subtab == "📥 Check-Ins":
         st.markdown("### 📥 Check-In Records")
 
-        with st.expander("📋 View Check-In Records", expanded=False):
+        with st.expander("📄 Google Sheet Records", expanded=False):
+            sheet_checkins = _cached_sheet_checkins()
+            if not sheet_checkins.empty:
+                st.dataframe(sheet_checkins, use_container_width=True, height=400)
+                csv = sheet_checkins.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Sheet Check-Ins CSV",
+                    data=csv,
+                    file_name=f"check_ins_sheet_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime='text/csv'
+                )
+            else:
+                st.info("No Google Sheet check-in records found.")
+
+        with st.expander("📱 App Records", expanded=False):
             all_checkins = _cached_checkins(_supabase_client=ctx.supabase_client)
             if all_checkins:
                 checkins_df = pd.DataFrame(all_checkins)
                 st.dataframe(checkins_df, use_container_width=True, height=400)
                 csv = checkins_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Download Check-Ins CSV",
+                    label="📥 Download App Check-Ins CSV",
                     data=csv,
-                    file_name=f"check_ins_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"check_ins_app_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime='text/csv'
                 )
             else:
-                st.info("No check-in records found.")
+                st.info("No check-in records found in the app.")
 
     elif active_subtab == "📤 Check-Outs":
         st.markdown("### 📤 Check-Out Records")
 
-        with st.expander("📋 View Check-Out Records", expanded=False):
+        with st.expander("📄 Google Sheet Records", expanded=False):
+            sheet_checkouts = _cached_sheet_checkouts()
+            if not sheet_checkouts.empty:
+                st.dataframe(sheet_checkouts, use_container_width=True, height=400)
+                csv = sheet_checkouts.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Sheet Check-Outs CSV",
+                    data=csv,
+                    file_name=f"check_outs_sheet_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime='text/csv'
+                )
+            else:
+                st.info("No Google Sheet check-out records found.")
+
+        with st.expander("📱 App Records", expanded=False):
             recorded_checkouts = _cached_checkouts(_supabase_client=supabase_client)
             if recorded_checkouts:
                 checkout_df_display = pd.DataFrame(recorded_checkouts)
                 st.dataframe(checkout_df_display, use_container_width=True, height=400)
                 csv = checkout_df_display.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Download Check-Outs CSV",
+                    label="📥 Download App Check-Outs CSV",
                     data=csv,
-                    file_name=f"check_outs_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"check_outs_app_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime='text/csv'
                 )
             else:
-                st.info("No check-out records found.")
+                st.info("No check-out records found in the app.")
 
     elif active_subtab == "📊 Current Stock":
         st.markdown("### 📊 Current Stock Levels")
@@ -1982,9 +2011,13 @@ def _compute_stock_variance(location: str, supabase_client=None):
     check-in/check-out/transfers/stock takes all happen at every location,
     not just one.
 
-    Fully app-only as of Phase 4a: Check-In's full history was imported
-    into stock_checkins, so this no longer reads Google Sheets at all --
-    doing so would double-count every pre-import event."""
+    Check-In and Check-Out both sum the app's own tables PLUS the live
+    Google Sheet, added together -- confirmed the current sheet has real
+    entries never entered in the app, so both sources are genuinely
+    additive here, not duplicates. IMPORTANT: if this sheet's history is
+    ever bulk-imported into stock_checkins/stock_checkouts, remove the
+    sheet-summing calls below immediately after, or every imported event
+    gets counted twice -- the exact bug already found and fixed once."""
     completed = [
         c for c in st.session_state.get('stock_takes', {}).values()
         if c['status'] == 'Completed' and c.get('warehouse') == location
@@ -2006,14 +2039,25 @@ def _compute_stock_variance(location: str, supabase_client=None):
     all_transfers = get_transfers(supabase_client=supabase_client)
     all_app_checkins = get_checkins(supabase_client=supabase_client)
 
+    check_in_df = _fetch_check_in_df()
+    check_in_loc_col = detect_column(check_in_df, LOCATION_KEYWORDS) if not check_in_df.empty else None
+    check_out_df = _fetch_check_out_df()
+    check_out_loc_col = detect_column(check_out_df, LOCATION_KEYWORDS) if not check_out_df.empty else None
+
     rows = []
     for item_name, latest_details in latest['items'].items():
         physical = latest_details.get('counted_qty', 0)
         prev_details = previous['items'].get(item_name)
         opening = prev_details.get('counted_qty', 0) if prev_details else latest_details.get('system_qty', 0)
 
-        check_in = sum_check_in_window(all_app_checkins, item_name, location, window_start, window_end)
-        check_out = _sum_check_out_from_records(all_checkouts, item_name, location, window_start, window_end)
+        check_in = (
+            sum_check_in_window(all_app_checkins, item_name, location, window_start, window_end)
+            + sum_check_in_from_sheet(check_in_df, check_in_loc_col, item_name, location, window_start, window_end)
+        )
+        check_out = (
+            _sum_check_out_from_records(all_checkouts, item_name, location, window_start, window_end)
+            + sum_check_out_from_sheet(check_out_df, check_out_loc_col, item_name, location, window_start, window_end)
+        )
         transfers_in = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'in')
         transfers_out = _transfer_total_from_records(all_transfers, item_name, location, window_start, window_end, 'out')
 
@@ -2269,6 +2313,28 @@ def _cached_checkins(_supabase_client=None):
 @st.cache_data(ttl=60, show_spinner=False)
 def _cached_checkouts(_supabase_client=None):
     return get_checkouts(supabase_client=_supabase_client)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _cached_sheet_checkins():
+    """Google Sheet's live CHECK_IN tab, read-only. Short TTL since this
+    sheet may still be getting real entries directly, not just old history."""
+    try:
+        gsheet = GoogleSheetReader()
+        return gsheet.get_check_in() if gsheet.authenticate() else pd.DataFrame()
+    except Exception as e:
+        logger.warning(f"Could not load Check-In sheet for display: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _cached_sheet_checkouts():
+    try:
+        gsheet = GoogleSheetReader()
+        return gsheet.get_check_out() if gsheet.authenticate() else pd.DataFrame()
+    except Exception as e:
+        logger.warning(f"Could not load Check-Out sheet for display: {e}")
+        return pd.DataFrame()
 
 
 def _render_checkin_checkout_tab(ctx: AllItemsContext) -> None:
